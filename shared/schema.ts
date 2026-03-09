@@ -1,18 +1,76 @@
+import { pgTable, text, serial, timestamp, integer, boolean } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
+export const dummyTable = pgTable("dummy", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+});
+
+export const channels = pgTable("channels", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  isPrivate: boolean("is_private").default(false),
+  allowedUsers: text("allowed_users").array().default(sql`'{}'::text[]`),
+});
+
+export const roles = pgTable("roles", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  color: text("color").default("#9ca3af"),
+  permissions: text("permissions").array().default(sql`'{}'::text[]`),
+  displayOnBoard: boolean("display_on_board").default(true),
+});
+
+export const messages = pgTable("messages", {
+  id: serial("id").primaryKey(),
+  channelId: integer("channel_id").notNull(),
+  username: text("username").notNull(),
+  content: text("content").notNull(),
+  role: text("role").default("User"),
+  roleColor: text("role_color").default("#9ca3af"),
+  font: text("font").default("sans"),
+  animation: text("animation").default("none"),
+  timestamp: timestamp("timestamp").defaultNow(),
+});
+
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  password: text("password"), // Only for admin
+  role: text("role").default("User"),
+  roleColor: text("role_color").default("#9ca3af"),
+  roles: text("roles").array().default(sql`'{}'::text[]`),
+  animation: text("animation").default("none"),
+  font: text("font").default("sans"),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+export const proxies = pgTable("proxies", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  url: text("url").notNull(),
+  useWebview: boolean("use_webview").default(true),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export const pages = pgTable("pages", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull().unique(),
+  content: text("content").default(""),
+  fontSize: integer("font_size").default(16),
+  animation: text("animation").default("none"),
+  fontFamily: text("font_family").default("Playfair Display"),
+});
+
+export const insertProxySchema = createInsertSchema(proxies).omit({ id: true });
+export const insertPageSchema = createInsertSchema(pages).omit({ id: true });
+export type Proxy = typeof proxies.$inferSelect;
+export type Page = typeof pages.$inferSelect;
+export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, timestamp: true });
+export const insertUserSchema = createInsertSchema(users).omit({ id: true });
+export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
+
+export type Channel = typeof channels.$inferSelect;
+export type Message = typeof messages.$inferSelect;
 export type User = typeof users.$inferSelect;
+export type Role = typeof roles.$inferSelect;

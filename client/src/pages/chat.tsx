@@ -1,0 +1,763 @@
+import { useState, useEffect, useRef } from "react";
+import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { motion, AnimatePresence } from "framer-motion";
+import { useToast } from "@/hooks/use-toast";
+import { queryClient } from "@/lib/queryClient";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+
+const FONTS = [
+  "Adios Script Pro", "Affair", "Aphrodite Pro", "Belluccia Pro", "Burges Script",
+  "Cantoni Pro", "Carolyna Pro Black", "Feel Script", "Melany Lane", "Parfumerie Script",
+  "Vunder Script™", "Halo Handletter", "Parisienne", "Nickainley", "Samantha Brandon Handwritten Font",
+  "Canva", "Canva +3", "Sophisticated Serif & Display Fonts", "Instrument Serif", "Playfair Display",
+  "Bodoni Moda", "Didot", "Cormorant", "EB Garamond", "Libre Baskerville", "Royalis",
+  "Royal Affair", "Bauer Bodoni", "Alberobello Serif", "Ginetta Marriage Serif Font",
+  "Stardust Celestina Modern Serif Font", "Le Murmure", "Mazius Display"
+];
+
+const COLORS = [
+  { name: "Cool Blue", hex: "#D7EFFF", desc: "A frosty, icy blue." },
+  { name: "Jade", hex: "#AEB8A0", desc: "A serene, moody mint-moss green." },
+  { name: "Plum Noir", hex: "#351E28", desc: "A deep, decadent dark purple." },
+  { name: "Wasabi", hex: "#E9F056", desc: "An electric chartreuse neon." },
+  { name: "Persimmon", hex: "#E2725B", desc: "A vibrant, warm orange-red." },
+  { name: "Transformative Teal", hex: "#008080", desc: "A deep, eco-conscious teal." },
+  { name: "Electric Fuchsia", hex: "#FD4FFF", desc: "A fluorescent, high-energy pink." },
+  { name: "Blue Aura", hex: "#A0B0C0", desc: "A soft, hazy, pastel-gray blue." },
+  { name: "Amber Haze", hex: "#FFBF00", desc: "A glowing, warm yellow-amber." },
+  { name: "Jelly Mint", hex: "#A0E6DA", desc: "A bright, fresh, minty green." },
+  { name: "Mocha Mousse", hex: "#A47864", desc: "A rich, warm, earthy brown." },
+  { name: "Cloud Dancer", hex: "#F0EFE9", desc: "A warm, airy, off-white." },
+  { name: "Universal Khaki", hex: "#C2B280", desc: "A versatile, mid-tone tan." },
+  { name: "Cocoa Powder", hex: "#4B3621", desc: "A deep, dark brown alternative to black." },
+  { name: "Sage Green", hex: "#9CACA0", desc: "A soft, natural, calming green." },
+  { name: "Terracotta Red", hex: "#E2725B", desc: "A sun-baked, clay-like, rust color." },
+  { name: "Warm Taupe", hex: "#A09080", desc: "A gentle, grounded gray-brown." },
+  { name: "Almond", hex: "#EFDECD", desc: "A warm, soft, neutral cream." },
+  { name: "Dusty Rose", hex: "#D58D8D", desc: "A muted, mature, pink-beige." },
+  { name: "Burnt Sienna", hex: "#E97451", desc: "A rusty, earthy red-brown." },
+  { name: "Digital Lavender", hex: "#A78BFA", desc: "A serene, tech-inspired purple." },
+  { name: "Verdant Green", hex: "#4CAF50", desc: "A vibrant, emerald-like green." },
+  { name: "Sunny Yellow", hex: "#FFDD44", desc: "A bold, high-contrast, nostalgic yellow." },
+  { name: "Neon Magenta", hex: "#FF00FF", desc: "A high-voltage, digital pop color." },
+  { name: "Cyber Blue", hex: "#0000FF", desc: "A standard, high-contrast blue screen color." },
+  { name: "Midnight Blue", hex: "#101585", desc: "A deep, luxurious navy." },
+  { name: "Charcoal", hex: "#333333", desc: "A dark, soft alternative to absolute black." },
+  { name: "Pearlescent Purple", hex: "#C3B1E1", desc: "An iridescent, dreamy shade." },
+  { name: "Mineral Blue", hex: "#48AAAD", desc: "A clear, saturated, ocean blue." },
+  { name: "Burnished Lilac", hex: "#A295C1", desc: "A smoky, vintage-modern lavender." }
+];
+
+const ANIMATIONS = [
+  "Kinetic Type", "Handwriting Signature", "Glitch Reveal", "Morphing Shape", "3D Pop-up",
+  "Gradient Stroke", "Neon Glow", "Slide & Fade", "Liquid Morph", "Typewriter Effect",
+  "Paper Plane Reveal", "Rotating Cube", "Particles/Dust Formation", "Draw-on (SVG)",
+  "Layered 3D Extrusion", "Stop-Motion Effect", "Zoom-In/Zoom-Out", "Scan Line Reveal",
+  "Elastic/Bounce", "Wave/Wavy Movement"
+];
+
+const GRADIENTS = [
+  "Electric Magenta to Deep Blue", "Incandescent Red to Electric Orange", "Neon Cyan to Deep Purple",
+  "Acid Yellow (Wasabi) to Charcoal", "Neon Green on Black", "Pearlescent Purple to Soft Teal",
+  "Iridescent Aqua to Silver", "Mint Green to Dusty Rose", "Lavender Blue to Icy White",
+  "Cyan to Soft Magenta", "Tangerine Orange to Warm Rust", "Butter Yellow to Deep Mocha",
+  "Dusty Pink to Warm Gray", "Cream to Dark Cocoa", "Terracotta to Sand",
+  "Emerald Green to Deep Teal", "Deep Sapphire to Royal Purple", "Ocean Blue to Deep Aqua",
+  "Magenta to Hot Pink", "White to Light Gray (with neon glow)"
+];
+
+type Message = {
+  id: number;
+  channelId: number;
+  username: string;
+  content: string;
+  role: string;
+  roleColor: string;
+  timestamp: string;
+};
+
+type Channel = {
+  id: number;
+  name: string;
+};
+
+export default function Chat() {
+  const [user, setUser] = useState<{ username: string; role: string; isAdmin: boolean } | null>(null);
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [newMessage, setNewMessage] = useState("");
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [showChannelsPanel, setShowChannelsPanel] = useState(false);
+  const [showRolesPanel, setShowRolesPanel] = useState(false);
+  const [newChannelName, setNewChannelName] = useState("");
+  const [isPrivate, setIsPrivate] = useState(false);
+  const [allowedUsers, setAllowedUsers] = useState("");
+  const [roles, setRoles] = useState<any[]>([]);
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleColor, setNewRoleColor] = useState("#9ca3af");
+  const [rolePermissions, setRolePermissions] = useState<string[]>([]);
+  const [assignUsername, setAssignUsername] = useState("");
+  const [selectedRolesForUser, setSelectedRolesForUser] = useState<string[]>([]);
+  const [rolesByName, setRolesByName] = useState<{ [key: string]: any[] }>({});
+  const [showRoleSidebar, setShowRoleSidebar] = useState(true);
+  const { toast } = useToast();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isUserScrolling, setIsUserScrolling] = useState(false);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("horizon_chat_user");
+    if (saved) setUser(JSON.parse(saved));
+    // Fetch channels immediately, even if not logged in yet
+    fetchChannels();
+  }, []);
+
+  useEffect(() => {
+    if (activeChannel) fetchMessages(activeChannel.id);
+  }, [activeChannel]);
+
+  useEffect(() => {
+    if (scrollRef.current && !isUserScrolling) {
+      setTimeout(() => {
+        scrollRef.current!.scrollTop = scrollRef.current!.scrollHeight;
+      }, 0);
+    }
+  }, [messages, isUserScrolling]);
+
+  // Real-time polling for new messages
+  useEffect(() => {
+    if (!activeChannel) return;
+    const interval = setInterval(() => {
+      fetchMessages(activeChannel.id);
+    }, 2000); // Poll every 2 seconds
+    return () => clearInterval(interval);
+  }, [activeChannel]);
+
+  // Fetch users by role for sidebar
+  useEffect(() => {
+    const fetchRoleUsers = async () => {
+      const roleMap: { [key: string]: any[] } = {};
+      for (const role of roles) {
+        const res = await fetch(`/api/chat/roles/${role.name}/users`);
+        if (res.ok) {
+          const users = await res.json();
+          roleMap[role.name] = users;
+        }
+      }
+      setRolesByName(roleMap);
+    };
+    if (roles.length > 0) fetchRoleUsers();
+  }, [roles]);
+
+  const fetchChannels = async () => {
+    const usernameParam = user ? `?username=${user.username}` : "";
+    const res = await fetch(`/api/chat/channels${usernameParam}`);
+    const data = await res.json();
+    setChannels(data);
+    if (data.length > 0 && !activeChannel) setActiveChannel(data[0]);
+  };
+
+  const handleUpdateUser = async (updates: any) => {
+    if (!user) return;
+    const res = await fetch(`/api/chat/users/${user.username}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      const updatedUser = await res.json();
+      setUser({ ...user, ...updatedUser });
+      localStorage.setItem("horizon_chat_user", JSON.stringify({ ...user, ...updatedUser }));
+      toast({ title: "Customization updated" });
+    }
+  };
+
+  useEffect(() => {
+    if (user?.isAdmin) fetchRoles();
+  }, [user]);
+
+  const fetchRoles = async () => {
+    const res = await fetch("/api/chat/roles");
+    const data = await res.json();
+    setRoles(data);
+  };
+
+  const handleCreateChannel = async () => {
+    const res = await fetch("/api/chat/channels", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ 
+        name: newChannelName, 
+        isPrivate, 
+        allowedUsers: allowedUsers.split(",").map(u => u.trim()).filter(u => u) 
+      }),
+    });
+    if (res.ok) {
+      toast({ title: "Channel created" });
+      setNewChannelName("");
+      setIsPrivate(false);
+      setAllowedUsers("");
+      fetchChannels();
+    }
+  };
+
+  const handleDeleteChannel = async (id: number) => {
+    const res = await fetch(`/api/chat/channels/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      toast({ title: "Channel deleted" });
+      fetchChannels();
+    }
+  };
+
+  const handleCreateRole = async () => {
+    const res = await fetch("/api/chat/roles", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: newRoleName, color: newRoleColor, permissions: rolePermissions }),
+    });
+    if (res.ok) {
+      toast({ title: "Role created" });
+      setNewRoleName("");
+      setRolePermissions([]);
+      fetchRoles();
+    }
+  };
+
+  const handleAssignRolesToUser = async () => {
+    if (!assignUsername || selectedRolesForUser.length === 0) {
+      toast({ title: "Please enter username and select roles", variant: "destructive" });
+      return;
+    }
+    const res = await fetch(`/api/chat/users/${assignUsername}/roles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ roles: selectedRolesForUser }),
+    });
+    if (res.ok) {
+      toast({ title: `Roles assigned to ${assignUsername}` });
+      setAssignUsername("");
+      setSelectedRolesForUser([]);
+    } else {
+      toast({ title: "Failed to assign roles", variant: "destructive" });
+    }
+  };
+
+  const fetchMessages = async (channelId: number) => {
+    const res = await fetch(`/api/chat/channels/${channelId}/messages`);
+    const data = await res.json();
+    setMessages(data);
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const res = await fetch("/api/chat/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setUser(data);
+      localStorage.setItem("horizon_chat_user", JSON.stringify(data));
+      toast({ title: "Welcome to HORIZON CHAT" });
+    } else {
+      toast({ title: data.message, variant: "destructive" });
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !user || !activeChannel) return;
+
+    const res = await fetch(`/api/chat/channels/${activeChannel.id}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: newMessage, username: user.username }),
+    });
+    if (res.ok) {
+      setNewMessage("");
+      fetchMessages(activeChannel.id);
+    }
+  };
+
+  if (!user) {
+    return (
+      <div className="flex h-full bg-black">
+        {/* Channels Sidebar (Visible even when not logged in) */}
+        <div className="w-64 border-r border-white/5 bg-black/50 flex flex-col hidden md:flex">
+          <div className="p-4 border-b border-white/5 flex items-center justify-between">
+            <h2 className="font-display font-bold text-lg tracking-widest text-gradient-animated uppercase">CHANNELS</h2>
+          </div>
+          <ScrollArea className="flex-1">
+            <div className="p-2 space-y-1">
+              {channels.map((ch) => (
+                <button 
+                  key={ch.id} 
+                  onClick={() => setActiveChannel(ch)} 
+                  className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${activeChannel?.id === ch.id ? 'bg-primary/10 text-primary border border-primary/20' : 'text-muted-foreground hover:bg-white/5 hover:text-white'}`}
+                >
+                  <Hash className="w-4 h-4" />
+                  <span className="font-medium">{ch.name}</span>
+                </button>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
+
+        {/* Login Area */}
+        <div className="flex-1 flex flex-col items-center justify-center p-6 relative">
+          {/* Channel Preview in Background */}
+          {activeChannel && (
+            <div className="absolute inset-0 opacity-10 pointer-events-none overflow-hidden">
+               <div className="p-6 space-y-4">
+                 <h2 className="text-4xl font-black opacity-20">#{activeChannel.name}</h2>
+                 <div className="space-y-2">
+                   <div className="h-4 w-3/4 bg-white/20 rounded" />
+                   <div className="h-4 w-1/2 bg-white/20 rounded" />
+                   <div className="h-4 w-2/3 bg-white/20 rounded" />
+                 </div>
+               </div>
+            </div>
+          )}
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="w-full max-w-md bg-white/[0.02] border border-white/10 rounded-3xl p-8 backdrop-blur-xl z-10">
+            <h1 className="text-4xl font-display font-black text-center mb-8 text-gradient-animated tracking-widest uppercase">HORIZON CHAT</h1>
+            <form onSubmit={handleLogin} className="space-y-6">
+              <Input placeholder="Username" value={username} onChange={(e) => setUsername(e.target.value)} className="bg-black/50 border-white/10 h-12" required />
+              <Input type="password" placeholder="Password (Optional for Users)" value={password} onChange={(e) => setPassword(e.target.value)} className="bg-black/50 border-white/10 h-12" />
+              <Button type="submit" className="w-full h-12 bg-primary hover:bg-primary/90 text-white font-display text-lg rounded-xl">SIGN IN</Button>
+            </form>
+          </motion.div>
+        </div>
+      </div>
+    );
+  }
+
+  const getFontClass = (fontName: string) => {
+    switch (fontName) {
+      case "Adios Script Pro": case "Affair": case "Aphrodite Pro": case "Parisienne": return "font-adios";
+      case "Architects Daughter": case "Samantha Brandon Handwritten Font": return "font-architects";
+      case "Playfair Display": return "font-playfair";
+      case "EB Garamond": return "font-garamond";
+      case "Libre Baskerville": return "font-baskerville";
+      case "Bodoni Moda": case "Didot": return "font-bodoni";
+      case "Cormorant": return "font-cormorant";
+      case "Instrument Serif": return "font-instrument";
+      default: return "font-sans";
+    }
+  };
+
+  const getAnimationClass = (animName: string) => {
+    if (animName.startsWith("gradient-")) {
+      const idx = parseInt(animName.split("-")[1]);
+      const gradients = ["grad-magenta-blue", "grad-red-orange", "grad-cyan-purple", "grad-wasabi-charcoal"];
+      return gradients[idx % gradients.length];
+    }
+    switch (animName) {
+      case "Glitch Reveal": return "anim-glitch";
+      case "Neon Glow": return "anim-neon";
+      case "Wave/Wavy Movement": return "anim-wavy";
+      default: return "";
+    }
+  };
+
+  return (
+    <div className="flex h-full bg-black text-white overflow-hidden">
+      {/* Channels Sidebar */}
+      <div className="w-64 border-r border-white/5 bg-black/50 flex flex-col hidden md:flex">
+        <div className="p-4 border-b border-white/5 flex items-center justify-between">
+          <h2 className="font-display font-bold text-lg tracking-widest text-gradient-animated">CHANNELS</h2>
+          {user.isAdmin && (
+            <Dialog open={showChannelsPanel} onOpenChange={setShowChannelsPanel}>
+              <DialogTrigger asChild>
+                <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white"><Plus className="w-4 h-4" /></Button>
+              </DialogTrigger>
+              <DialogContent className="bg-black border-white/10">
+                <DialogHeader><DialogTitle className="text-white">Manage Channels</DialogTitle></DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Input placeholder="Channel Name" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} className="bg-white/5 border-white/10" />
+                    <div className="flex items-center gap-2">
+                      <input type="checkbox" id="private" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+                      <label htmlFor="private" className="text-sm text-white">Private Channel</label>
+                    </div>
+                    {isPrivate && (
+                      <Input placeholder="Allowed Users (comma separated)" value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} className="bg-white/5 border-white/10" />
+                    )}
+                    <Button onClick={handleCreateChannel} className="w-full">Create Channel</Button>
+                  </div>
+                  <div className="border-t border-white/10 pt-4 space-y-2">
+                    {channels.map(ch => (
+                      <div key={ch.id} className="flex items-center justify-between p-2 rounded bg-white/5">
+                        <span className="text-white">#{ch.name}</span>
+                        <Button variant="ghost" size="icon" onClick={() => handleDeleteChannel(ch.id)} className="text-red-500 hover:text-red-400 h-8 w-8"><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </DialogContent>
+            </Dialog>
+          )}
+        </div>
+        <ScrollArea className="flex-1">
+          <div className="p-2 space-y-1">
+            {channels.map((ch) => (
+              <button key={ch.id} onClick={() => setActiveChannel(ch)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${activeChannel?.id === ch.id ? 'bg-primary/10 text-primary border border-primary/20' : 'text-muted-foreground hover:bg-white/5 hover:text-white'}`}>
+                <Hash className="w-4 h-4" />
+                <span className="font-medium">{ch.name}</span>
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+        <div className="p-4 border-t border-white/5 bg-black/80">
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center bg-primary/20 border border-primary/30 ${user.isAdmin ? 'animate-pulse' : ''}`}>
+              <User className="w-5 h-5 text-primary" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className={`font-bold truncate ${user.isAdmin ? 'text-gradient-animated' : 'text-white'}`}>{user.username}</p>
+              <p className="text-xs text-muted-foreground truncate">{user.role}</p>
+            </div>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white" onClick={() => { setUser(null); localStorage.removeItem("horizon_chat_user"); }}><LogOut className="w-4 h-4" /></Button>
+          </div>
+          {user.isAdmin && (
+            <Button variant="outline" className="w-full mt-4 border-primary/30 hover:bg-primary/10 text-primary gap-2" onClick={() => setShowAdminPanel(!showAdminPanel)}>
+              <Shield className="w-4 h-4" /> Admin Panel
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col bg-black relative">
+        <header className="h-16 border-b border-white/5 flex items-center px-6 justify-between bg-black/50 backdrop-blur-md z-10">
+          <div className="flex items-center gap-2">
+            <Hash className="w-5 h-5 text-muted-foreground" />
+            <h2 className="font-bold text-xl">{activeChannel?.name || "Select a channel"}</h2>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/5">
+              <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+              <span className="text-xs font-mono text-muted-foreground">LIVE</span>
+            </div>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white" onClick={() => setShowRoleSidebar(!showRoleSidebar)}>
+              <Shield className="w-4 h-4" />
+            </Button>
+          </div>
+        </header>
+
+        <div className="flex-1 relative overflow-hidden flex">
+          {/* Roles Sidebar - Right Panel */}
+          {showRoleSidebar && (
+            <div className="w-72 border-l border-white/5 bg-black/50 flex flex-col hidden lg:flex">
+              <div className="p-4 border-b border-white/5">
+                <h2 className="font-display font-bold text-lg tracking-widest text-gradient-animated uppercase">ROLES</h2>
+              </div>
+              <ScrollArea className="flex-1">
+                <div className="p-4 space-y-6">
+                  {roles
+                    .filter(role => role.displayOnBoard)
+                    .sort((a, b) => {
+                      const orderMap: { [key: string]: number } = {
+                        "Owner": 0,
+                        "Admin": 1,
+                        "Server Settings": 2,
+                        "Manage Channels": 3,
+                        "Manage Roles": 4,
+                      };
+                      return (orderMap[a.name] ?? 99) - (orderMap[b.name] ?? 99);
+                    })
+                    .map(role => (
+                      <div key={role.id} className="space-y-2">
+                        <div className="flex items-center justify-between">
+                          <h3 className="font-bold text-sm uppercase tracking-widest" style={{ color: role.color }}>
+                            {role.name}
+                          </h3>
+                          <span className="text-xs text-muted-foreground bg-white/5 px-2 py-1 rounded">
+                            {rolesByName[role.name]?.length || 0}
+                          </span>
+                        </div>
+                        <div className="space-y-1 bg-white/[0.02] rounded p-2">
+                          {(rolesByName[role.name] || []).map(u => (
+                            <div key={u.username} className="text-xs text-white/70 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/5">
+                              {u.username}
+                            </div>
+                          ))}
+                          {(!rolesByName[role.name] || rolesByName[role.name].length === 0) && (
+                            <div className="text-xs text-muted-foreground/50 px-2 py-1 italic">No users</div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+
+          <ScrollArea className="flex-1 px-6 py-4" ref={scrollRef} onScroll={() => {
+            if (scrollRef.current) {
+              const isAtBottom = scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 50;
+              setIsUserScrolling(!isAtBottom);
+            }
+          }}>
+            <div className="space-y-6">
+              {messages.map((msg) => (
+                <div key={msg.id} className="group flex flex-col gap-1 hover:bg-white/[0.02] -mx-6 px-6 py-2 transition-all">
+                  <div className="flex items-baseline gap-3 flex-wrap">
+                    <span 
+                      className={`font-black tracking-wide ${msg.username === "RandomIX" ? 'text-gradient-animated text-lg' : ''} ${getFontClass(msg.font || "")} ${getAnimationClass(msg.animation || "")}`} 
+                      style={{ color: msg.roleColor !== "gradient" ? msg.roleColor : undefined }}
+                      data-text={msg.username}
+                    >
+                      {msg.username}
+                    </span>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      {(msg.roles && msg.roles.length > 0) ? (
+                        msg.roles.map((roleName: string) => {
+                          const roleData = roles.find(r => r.name === roleName);
+                          return (
+                            <span 
+                              key={roleName}
+                              className="text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/5 uppercase tracking-widest whitespace-nowrap"
+                              style={{ borderColor: roleData?.color + '40', color: roleData?.color || '#9ca3af' }}
+                            >
+                              {roleName}
+                            </span>
+                          );
+                        })
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/5 text-muted-foreground uppercase tracking-widest">User</span>
+                      )}
+                    </div>
+                    <span className="text-[10px] text-muted-foreground/50 font-mono ml-auto">{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                  </div>
+                  <p className="text-white/90 leading-relaxed font-sans break-words whitespace-pre-wrap max-w-2xl word-break overflow-hidden" style={{ wordBreak: 'break-word' }}>{msg.content}</p>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+
+          {/* Admin Tools Drawer (if shown) */}
+          <AnimatePresence>
+            {showAdminPanel && (
+              <motion.div initial={{ x: 300 }} animate={{ x: 0 }} exit={{ x: 300 }} className="w-80 border-l border-white/5 bg-black/90 backdrop-blur-xl absolute right-0 inset-y-0 z-20 shadow-2xl p-6">
+                <h3 className="font-display font-black text-xl mb-6 text-gradient-animated tracking-widest">MASTER CONTROL</h3>
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Management</label>
+                    <Dialog open={showChannelsPanel} onOpenChange={setShowChannelsPanel}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><MessageSquare className="w-4 h-4" /> Manage Channels</Button>
+                      </DialogTrigger>
+                    </Dialog>
+                    <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Settings className="w-4 h-4" /> Server Settings</Button>
+                    <Dialog open={showRolesPanel} onOpenChange={setShowRolesPanel}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Shield className="w-4 h-4" /> Roles & Permissions</Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-black border-white/10 max-h-[90vh] overflow-y-auto">
+                        <DialogHeader><DialogTitle className="text-white">Roles & Permissions</DialogTitle></DialogHeader>
+                        <div className="space-y-4 py-4">
+                          {/* Create Role Section */}
+                          <div className="space-y-2">
+                            <h4 className="text-white text-sm font-bold">Create New Role</h4>
+                            <Input placeholder="Role Name" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} className="bg-white/5 border-white/10" />
+                            <Input type="color" value={newRoleColor} onChange={(e) => setNewRoleColor(e.target.value)} className="h-10 w-full bg-transparent p-0 border-none" />
+                            <div className="grid grid-cols-2 gap-2 text-white text-xs">
+                              {["admin_panel", "manage_channels", "server_settings", "manage_roles"].map(perm => (
+                                <div key={perm} className="flex items-center gap-2">
+                                  <input type="checkbox" checked={rolePermissions.includes(perm)} onChange={(e) => {
+                                    if (e.target.checked) setRolePermissions([...rolePermissions, perm]);
+                                    else setRolePermissions(rolePermissions.filter(p => p !== perm));
+                                  }} />
+                                  <label>{perm.replace("_", " ")}</label>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input type="checkbox" id="displayOnBoard" defaultChecked={true} onChange={(e) => {}} className="w-4 h-4" />
+                              <label htmlFor="displayOnBoard" className="text-white text-xs cursor-pointer">Display on Board</label>
+                            </div>
+                            <Button onClick={async () => {
+                              const displayOnBoard = (document.getElementById("displayOnBoard") as HTMLInputElement)?.checked ?? true;
+                              await fetch("/api/chat/roles", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ name: newRoleName, color: newRoleColor, permissions: rolePermissions, displayOnBoard }),
+                              });
+                              setNewRoleName("");
+                              setNewRoleColor("#9ca3af");
+                              setRolePermissions([]);
+                              fetchRoles();
+                            }} className="w-full">Create Role</Button>
+                          </div>
+
+                          {/* Assign Roles Section */}
+                          <div className="border-t border-white/10 pt-4 space-y-2">
+                            <h4 className="text-white text-sm font-bold">Assign Roles to User</h4>
+                            <Input placeholder="Username" value={assignUsername} onChange={(e) => setAssignUsername(e.target.value)} className="bg-white/5 border-white/10" />
+                            <div className="space-y-2 bg-white/5 p-3 rounded border border-white/10 max-h-48 overflow-y-auto">
+                              {roles.map(role => (
+                                <div key={role.id} className="flex items-center gap-2">
+                                  <input 
+                                    type="checkbox" 
+                                    id={`role-${role.id}`}
+                                    checked={selectedRolesForUser.includes(role.name)} 
+                                    onChange={(e) => {
+                                      if (e.target.checked) setSelectedRolesForUser([...selectedRolesForUser, role.name]);
+                                      else setSelectedRolesForUser(selectedRolesForUser.filter(r => r !== role.name));
+                                    }} 
+                                  />
+                                  <label htmlFor={`role-${role.id}`} className="text-white text-sm cursor-pointer flex-1" style={{ color: role.color }}>
+                                    {role.name}
+                                  </label>
+                                </div>
+                              ))}
+                            </div>
+                            <Button onClick={handleAssignRolesToUser} className="w-full bg-primary hover:bg-primary/90">Assign Roles</Button>
+                          </div>
+
+                          {/* Roles List Section */}
+                          <div className="border-t border-white/10 pt-4 space-y-2">
+                            <h4 className="text-white text-sm font-bold">All Roles</h4>
+                            {roles.map(role => (
+                              <div key={role.id} className="flex items-center justify-between p-2 rounded bg-white/5">
+                                <div className="flex-1 space-y-1">
+                                  <div className="flex items-center gap-2">
+                                    <span style={{ color: role.color }} className="font-bold text-xs">{role.name}</span>
+                                    {role.displayOnBoard && (
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/20 text-primary">PUBLIC</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <Button variant="ghost" size="icon" onClick={async () => {
+                                  const newDisplay = !role.displayOnBoard;
+                                  await fetch(`/api/chat/roles/${role.id}`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ displayOnBoard: newDisplay }),
+                                  });
+                                  fetchRoles();
+                                }} className="text-white/50 hover:text-white h-8 w-8" title="Toggle display">
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={async () => {
+                                  await fetch(`/api/chat/roles/${role.id}`, { method: "DELETE" });
+                                  fetchRoles();
+                                }} className="text-red-500 hover:text-red-400 h-8 w-8"><Trash2 className="w-4 h-4" /></Button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  <div className="space-y-4">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Customization</label>
+                    <div className="grid grid-cols-1 gap-2">
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Type className="w-4 h-4" /> 30 Fanciest Fonts</Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
+                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">THE FANCIEST FONTS</DialogTitle></DialogHeader>
+                          <ScrollArea className="h-full pr-4">
+                            <div className="grid grid-cols-2 gap-2 p-1">
+                              {FONTS.map((font, i) => (
+                                <Button key={i} variant="ghost" className="justify-start h-auto py-3 text-white/70 hover:text-white hover:bg-white/5 font-sans" onClick={() => handleUpdateUser({ font })}>
+                                  {i + 1}. {font}
+                                </Button>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </DialogContent>
+                      </Dialog>
+
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Palette className="w-4 h-4" /> 30 Master Colors</Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
+                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">MASTER COLORS</DialogTitle></DialogHeader>
+                          <ScrollArea className="h-full pr-4">
+                            <div className="grid grid-cols-1 gap-2 p-1">
+                              {COLORS.map((color, i) => (
+                                <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-white/5 border border-white/5 group hover:border-primary/50 transition-all cursor-pointer" onClick={() => handleUpdateUser({ roleColor: color.hex })}>
+                                  <div className="w-10 h-10 rounded-lg shadow-lg" style={{ backgroundColor: color.hex }} />
+                                  <div>
+                                    <p className="font-bold text-white">{color.name} <span className="text-xs font-mono text-muted-foreground ml-2">{color.hex}</span></p>
+                                    <p className="text-xs text-muted-foreground italic">{color.desc}</p>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </DialogContent>
+                      </Dialog>
+
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Sparkles className="w-4 h-4" /> 20 Elite Animations</Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
+                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">ELITE ANIMATIONS</DialogTitle></DialogHeader>
+                          <ScrollArea className="h-full pr-4">
+                            <div className="grid grid-cols-1 gap-2 p-1">
+                              {ANIMATIONS.map((anim, i) => (
+                                <Button key={i} variant="ghost" className="justify-start h-12 text-white/70 hover:text-white hover:bg-white/5 px-4 rounded-xl border border-white/5" onClick={() => handleUpdateUser({ animation: anim })}>
+                                  <span className="w-6 text-primary font-mono text-xs">{i + 1}</span> {anim}
+                                </Button>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </DialogContent>
+                      </Dialog>
+
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Paintbrush className="w-4 h-4" /> 20 Color through Color</Button>
+                        </DialogTrigger>
+                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
+                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">COLOR THROUGH COLOR</DialogTitle></DialogHeader>
+                          <ScrollArea className="h-full pr-4">
+                            <div className="grid grid-cols-1 gap-2 p-1">
+                              {GRADIENTS.map((grad, i) => (
+                                <Button key={i} variant="ghost" className="justify-start h-14 text-white/70 hover:text-white hover:bg-white/5 px-4 rounded-xl border border-white/5 group" onClick={() => handleUpdateUser({ animation: "gradient-" + i, roleColor: "gradient" })}>
+                                  <span className="w-6 text-primary font-mono text-xs">{i + 1}</span> 
+                                  <span className="text-gradient-animated font-bold tracking-tight">{grad}</span>
+                                </Button>
+                              ))}
+                            </div>
+                          </ScrollArea>
+                        </DialogContent>
+                      </Dialog>
+                    </div>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        <div className="p-6 bg-black border-t border-white/5">
+          <form onSubmit={handleSendMessage} className="relative group">
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur opacity-25 group-focus-within:opacity-50 transition duration-500" />
+            <div className="relative flex items-center gap-3">
+              <Input value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Message #${activeChannel?.name || 'chat'}`} className="flex-1 bg-black/50 border-white/10 h-14 rounded-2xl text-white placeholder:text-muted-foreground focus-visible:ring-primary transition-all pr-12 resize-none" />
+              <Button type="submit" size="icon" className="absolute right-2 h-10 w-10 bg-primary hover:bg-primary-hover rounded-xl text-white transition-all">
+                <Send className="w-5 h-5" />
+              </Button>
+            </div>
+          </form>
+          <p className="mt-3 text-[10px] text-muted-foreground font-mono uppercase tracking-[0.2em] text-center">HORIZON ENCRYPTED BROADCAST PROTOCOL</p>
+        </div>
+      </div>
+    </div>
+  );
+}
