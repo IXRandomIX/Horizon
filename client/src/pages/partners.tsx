@@ -47,12 +47,18 @@ export default function Partners() {
 
   const handleSave = async () => {
     try {
-      const method = sections.length > 0 ? "PATCH" : "POST";
-      const res = await fetch("/api/pages/partners", {
-        method,
+      let res = await fetch("/api/pages/partners", {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: "partners", content: JSON.stringify(sections), fontSize, fontFamily, animation }),
       });
+      if (res.status === 404) {
+        res = await fetch("/api/pages", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: "partners", content: JSON.stringify(sections), fontSize, fontFamily, animation }),
+        });
+      }
       if (res.ok) {
         toast({ title: "Partners page saved" });
         setIsEditing(false);

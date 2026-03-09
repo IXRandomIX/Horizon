@@ -139,6 +139,15 @@ export default function Chat() {
     return () => clearInterval(interval);
   }, [activeChannel]);
 
+  // Real-time polling for roles
+  useEffect(() => {
+    if (!user) return;
+    const interval = setInterval(() => {
+      fetchRoles();
+    }, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
+  }, [user]);
+
   // Fetch users by role for sidebar
   useEffect(() => {
     const fetchRoleUsers = async () => {
@@ -178,15 +187,19 @@ export default function Chat() {
     }
   };
 
+  // Real-time polling for roles
   useEffect(() => {
-    if (user?.isAdmin) fetchRoles();
-  }, [user]);
-
-  const fetchRoles = async () => {
-    const res = await fetch("/api/chat/roles");
-    const data = await res.json();
-    setRoles(data);
-  };
+    const fetchRoles = async () => {
+      const res = await fetch("/api/chat/roles");
+      const data = await res.json();
+      setRoles(data);
+    };
+    fetchRoles();
+    const interval = setInterval(() => {
+      fetchRoles();
+    }, 5000); // Poll every 5 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   const handleCreateChannel = async () => {
     const res = await fetch("/api/chat/channels", {
@@ -485,7 +498,7 @@ export default function Chat() {
                         </div>
                         <div className="space-y-1 bg-white/[0.02] rounded p-2">
                           {(rolesByName[role.name] || []).map(u => (
-                            <div key={u.username} className="text-xs text-white/70 hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/5">
+                            <div key={u.username} className="text-xs hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/5" style={{ color: role.color }}>
                               {u.username}
                             </div>
                           ))}

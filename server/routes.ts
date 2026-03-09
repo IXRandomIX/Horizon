@@ -195,7 +195,12 @@ export async function registerRoutes(
   });
 
   app.patch("/api/pages/:name", async (req, res) => {
-    const page = await storage.updatePage(req.params.name, req.body);
+    let page = await storage.getPage(req.params.name);
+    if (!page) {
+      page = await storage.createPage({ ...req.body, name: req.params.name });
+    } else {
+      page = await storage.updatePage(req.params.name, req.body);
+    }
     res.json(page);
   });
 
