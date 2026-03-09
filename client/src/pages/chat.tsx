@@ -107,6 +107,16 @@ export default function Chat() {
   const [rolesByName, setRolesByName] = useState<{ [key: string]: any[] }>({});
   const [showRoleSidebar, setShowRoleSidebar] = useState(true);
   const { toast } = useToast();
+
+  const AVAILABLE_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "proxy_helper"];
+
+  const userHasPermission = (permission: string): boolean => {
+    if (!user) return false;
+    if (user.isAdmin || user.username === "RandomIX") return true; // Admin/Owner have all permissions
+    if (!user.roles || user.roles.length === 0) return false;
+    const userRoles = roles.filter(r => user.roles.includes(r.name));
+    return userRoles.some(r => r.permissions && r.permissions.includes(permission));
+  };
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
@@ -439,7 +449,7 @@ export default function Chat() {
             </div>
             <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white" onClick={() => { setUser(null); localStorage.removeItem("horizon_chat_user"); }}><LogOut className="w-4 h-4" /></Button>
           </div>
-          {user.isAdmin && (
+          {userHasPermission("admin_panel") && (
             <Button variant="outline" className="w-full mt-4 border-primary/30 hover:bg-primary/10 text-primary gap-2" onClick={() => setShowAdminPanel(!showAdminPanel)}>
               <Shield className="w-4 h-4" /> Admin Panel
             </Button>
@@ -564,12 +574,17 @@ export default function Chat() {
                 <div className="space-y-6">
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Management</label>
+                    {userHasPermission("manage_channels") && (
                     <Dialog open={showChannelsPanel} onOpenChange={setShowChannelsPanel}>
                       <DialogTrigger asChild>
                         <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><MessageSquare className="w-4 h-4" /> Manage Channels</Button>
                       </DialogTrigger>
                     </Dialog>
+                    )}
+                    {userHasPermission("server_settings") && (
                     <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Settings className="w-4 h-4" /> Server Settings</Button>
+                    )}
+                    {userHasPermission("manage_roles") && (
                     <Dialog open={showRolesPanel} onOpenChange={setShowRolesPanel}>
                       <DialogTrigger asChild>
                         <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Shield className="w-4 h-4" /> Roles & Permissions</Button>
@@ -583,13 +598,13 @@ export default function Chat() {
                             <Input placeholder="Role Name" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} className="bg-white/5 border-white/10" />
                             <Input type="color" value={newRoleColor} onChange={(e) => setNewRoleColor(e.target.value)} className="h-10 w-full bg-transparent p-0 border-none" />
                             <div className="grid grid-cols-2 gap-2 text-white text-xs">
-                              {["admin_panel", "manage_channels", "server_settings", "manage_roles"].map(perm => (
+                              {AVAILABLE_PERMISSIONS.map(perm => (
                                 <div key={perm} className="flex items-center gap-2">
                                   <input type="checkbox" checked={rolePermissions.includes(perm)} onChange={(e) => {
                                     if (e.target.checked) setRolePermissions([...rolePermissions, perm]);
                                     else setRolePermissions(rolePermissions.filter(p => p !== perm));
                                   }} />
-                                  <label>{perm.replace("_", " ")}</label>
+                                  <label>{perm === "proxy_helper" ? "Proxy Helper" : perm.replace("_", " ")}</label>
                                 </div>
                               ))}
                             </div>
@@ -670,7 +685,43 @@ export default function Chat() {
                         </div>
                       </DialogContent>
                     </Dialog>
+                    )}
                   </div>
+                  {userHasPermission("proxy_helper") && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Proxies</label>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Settings className="w-4 h-4" /> Manage Proxies</Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-black border-white/10">
+                        <DialogHeader><DialogTitle className="text-white">Manage Proxies</DialogTitle></DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-2">
+                            <Input placeholder="Proxy Name" id="proxyName" className="bg-white/5 border-white/10" />
+                            <Input placeholder="Proxy URL" id="proxyUrl" className="bg-white/5 border-white/10" />
+                            <Button onClick={async () => {
+                              const name = (document.getElementById("proxyName") as HTMLInputElement)?.value;
+                              const url = (document.getElementById("proxyUrl") as HTMLInputElement)?.value;
+                              if (!name || !url) {
+                                toast({ title: "Please fill in all fields", variant: "destructive" });
+                                return;
+                              }
+                              await fetch("/api/chat/proxies", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ name, url, useWebview: true }),
+                              });
+                              toast({ title: "Proxy added" });
+                              (document.getElementById("proxyName") as HTMLInputElement).value = "";
+                              (document.getElementById("proxyUrl") as HTMLInputElement).value = "";
+                            }} className="w-full">Add Proxy</Button>
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  )}
                   <div className="space-y-4">
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Customization</label>
                     <div className="grid grid-cols-1 gap-2">
