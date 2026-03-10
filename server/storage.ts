@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, type Channel, type Message, type User, type Role, type Proxy, type Page, type InsertDummy } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction } from "@shared/schema";
 import { eq, and, or, sql } from "drizzle-orm";
 
 export interface IStorage {
@@ -11,8 +11,10 @@ export interface IStorage {
   updateChannel(id: number, data: any): Promise<Channel>;
   deleteChannel(id: number): Promise<void>;
   
-  getMessages(channelId: number): Promise<Message[]>;
+  getMessages(channelId: number): Promise<any[]>;
   createMessage(msg: any): Promise<Message>;
+  updateMessage(id: number, content: string): Promise<Message>;
+  deleteMessage(id: number): Promise<void>;
   
   getUser(username: string): Promise<User | undefined>;
   createUser(user: any): Promise<User>;
@@ -34,6 +36,10 @@ export interface IStorage {
 
   assignRolesToUser(username: string, roleNames: string[]): Promise<User>;
   getUsersByRole(roleName: string): Promise<User[]>;
+
+  getReactions(messageId: number): Promise<Reaction[]>;
+  addReaction(messageId: number, username: string, emoji: string): Promise<Reaction>;
+  removeReaction(messageId: number, username: string, emoji: string): Promise<void>;
 }
 
 
@@ -109,7 +115,8 @@ export class DatabaseStorage implements IStorage {
     const msgs = await db.select().from(messages).where(eq(messages.channelId, channelId));
     const enriched = await Promise.all(msgs.map(async (msg) => {
       const user = await this.getUser(msg.username);
-      return { ...msg, roles: user?.roles || [] };
+      const reactList = await this.getReactions(msg.id);
+      return { ...msg, roles: user?.roles || [], reactions: reactList };
     }));
     return enriched;
   }
@@ -117,6 +124,16 @@ export class DatabaseStorage implements IStorage {
   async createMessage(msg: any): Promise<Message> {
     const [inserted] = await db.insert(messages).values(msg).returning();
     return inserted;
+  }
+
+  async updateMessage(id: number, content: string): Promise<Message> {
+    const [updated] = await db.update(messages).set({ content, isEdited: true }).where(eq(messages.id, id)).returning();
+    return updated;
+  }
+
+  async deleteMessage(id: number): Promise<void> {
+    await db.delete(messages).where(eq(messages.id, id));
+    await db.delete(reactions).where(eq(reactions.messageId, id));
   }
 
   async getUser(username: string): Promise<User | undefined> {
@@ -159,6 +176,21 @@ export class DatabaseStorage implements IStorage {
 
   async getUsersByRole(roleName: string): Promise<User[]> {
     return await db.select().from(users).where(sql`${roleName} = ANY(${users.roles})`);
+  }
+
+  async getReactions(messageId: number): Promise<Reaction[]> {
+    return await db.select().from(reactions).where(eq(reactions.messageId, messageId));
+  }
+
+  async addReaction(messageId: number, username: string, emoji: string): Promise<Reaction> {
+    const [existing] = await db.select().from(reactions).where(and(eq(reactions.messageId, messageId), eq(reactions.username, username), eq(reactions.emoji, emoji)));
+    if (existing) return existing;
+    const [inserted] = await db.insert(reactions).values({ messageId, username, emoji }).returning();
+    return inserted;
+  }
+
+  async removeReaction(messageId: number, username: string, emoji: string): Promise<void> {
+    await db.delete(reactions).where(and(eq(reactions.messageId, messageId), eq(reactions.username, username), eq(reactions.emoji, emoji)));
   }
 }
 

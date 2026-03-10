@@ -33,6 +33,17 @@ export const messages = pgTable("messages", {
   font: text("font").default("sans"),
   animation: text("animation").default("none"),
   timestamp: timestamp("timestamp").defaultNow(),
+  isEdited: boolean("is_edited").default(false),
+  replyToId: integer("reply_to_id"),
+  replyToUsername: text("reply_to_username"),
+  replyToContent: text("reply_to_content"),
+});
+
+export const reactions = pgTable("reactions", {
+  id: serial("id").primaryKey(),
+  messageId: integer("message_id").notNull(),
+  username: text("username").notNull(),
+  emoji: text("emoji").notNull(),
 });
 
 export const users = pgTable("users", {
@@ -69,8 +80,10 @@ export type Page = typeof pages.$inferSelect;
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, timestamp: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
+export const insertReactionSchema = createInsertSchema(reactions).omit({ id: true });
 
 export type Channel = typeof channels.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Role = typeof roles.$inferSelect;
+export type Reaction = typeof reactions.$inferSelect;

@@ -149,7 +149,7 @@ export async function registerRoutes(
   });
 
   app.post("/api/chat/channels/:channelId/messages", async (req, res) => {
-    const { content, username } = req.body;
+    const { content, username, replyToId, replyToUsername, replyToContent } = req.body;
     const user = await storage.getUser(username);
     const msg = await storage.createMessage({
       channelId: Number(req.params.channelId),
@@ -158,9 +158,35 @@ export async function registerRoutes(
       role: user?.role || "User",
       roleColor: user?.roleColor || "#9ca3af",
       font: user?.font || "sans",
-      animation: user?.animation || "none"
+      animation: user?.animation || "none",
+      replyToId,
+      replyToUsername,
+      replyToContent
     });
     res.status(201).json(msg);
+  });
+
+  app.patch("/api/chat/messages/:id", async (req, res) => {
+    const { content } = req.body;
+    const msg = await storage.updateMessage(Number(req.params.id), content);
+    res.json(msg);
+  });
+
+  app.delete("/api/chat/messages/:id", async (req, res) => {
+    await storage.deleteMessage(Number(req.params.id));
+    res.status(204).end();
+  });
+
+  app.post("/api/chat/messages/:id/reactions", async (req, res) => {
+    const { username, emoji } = req.body;
+    const reaction = await storage.addReaction(Number(req.params.id), username, emoji);
+    res.json(reaction);
+  });
+
+  app.delete("/api/chat/messages/:id/reactions", async (req, res) => {
+    const { username, emoji } = req.body;
+    await storage.removeReaction(Number(req.params.id), username, emoji);
+    res.status(204).end();
   });
 
   app.get("/api/proxies", async (req, res) => {

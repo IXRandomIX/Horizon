@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye } from "lucide-react";
+import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -7,6 +7,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useToast } from "@/hooks/use-toast";
 import { queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+
+const COMMON_EMOJIS = ["😀", "😂", "😍", "🤣", "😊", "🙏", "😭", "😘", "👍", "✨", "🔥", "❤️", "💀", "💀", "💯", "🎉", "✅", "❌", "🤔", "👀"];
 
 const FONTS = [
   "Adios Script Pro", "Affair", "Aphrodite Pro", "Belluccia Pro", "Burges Script",
@@ -77,6 +81,11 @@ type Message = {
   role: string;
   roleColor: string;
   timestamp: string;
+  isEdited?: boolean;
+  replyToId?: number;
+  replyToUsername?: string;
+  replyToContent?: string;
+  reactions?: any[];
 };
 
 type Channel = {
@@ -92,6 +101,11 @@ export default function Chat() {
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
+  const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<number | null>(null);
+  const [diesInCoolWay, setDiesInCoolWay] = useState(false);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [showChannelsPanel, setShowChannelsPanel] = useState(false);
   const [showRolesPanel, setShowRolesPanel] = useState(false);
@@ -301,12 +315,68 @@ export default function Chat() {
     const res = await fetch(`/api/chat/channels/${activeChannel.id}/messages`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: newMessage, username: user.username }),
+      body: JSON.stringify({ 
+        content: newMessage, 
+        username: user.username,
+        replyToId: replyingTo?.id,
+        replyToUsername: replyingTo?.username,
+        replyToContent: replyingTo?.content
+      }),
     });
     if (res.ok) {
       setNewMessage("");
+      setReplyingTo(null);
       fetchMessages(activeChannel.id);
     }
+  };
+
+  const handleEditMessage = async (id: number) => {
+    const res = await fetch(`/api/chat/messages/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: editContent }),
+    });
+    if (res.ok) {
+      setEditingMessageId(null);
+      setEditContent("");
+      if (activeChannel) fetchMessages(activeChannel.id);
+    }
+  };
+
+  const handleDeleteMessage = async (id: number) => {
+    const res = await fetch(`/api/chat/messages/${id}`, {
+      method: "DELETE",
+    });
+    if (res.ok) {
+      setDeleteConfirmId(null);
+      if (activeChannel) fetchMessages(activeChannel.id);
+    }
+  };
+
+  const handleAddReaction = async (messageId: number, emoji: string) => {
+    if (!user) return;
+    const res = await fetch(`/api/chat/messages/${messageId}/reactions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username: user.username, emoji }),
+    });
+    if (res.ok) {
+      if (activeChannel) fetchMessages(activeChannel.id);
+    }
+  };
+
+  const renderContent = (content: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = content.split(urlRegex);
+    return parts.map((part, i) => {
+      if (part.match(urlRegex)) {
+        if (part.match(/\.(jpeg|jpg|gif|png|webp)$/i) || part.includes("giphy.com") || part.includes("tenor.com")) {
+          return <img key={i} src={part} alt="chat" className="max-w-xs rounded-lg mt-2 border border-white/10" />;
+        }
+        return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">{part}</a>;
+      }
+      return part;
+    });
   };
 
   if (!user) {
@@ -531,7 +601,14 @@ export default function Chat() {
           }}>
             <div className="space-y-6">
               {messages.map((msg) => (
-                <div key={msg.id} className="group flex flex-col gap-1 hover:bg-white/[0.02] -mx-6 px-6 py-2 transition-all">
+                <div key={msg.id} className="group flex flex-col gap-1 hover:bg-white/[0.02] -mx-6 px-6 py-2 transition-all relative">
+                  {msg.replyToUsername && (
+                    <div className="flex items-center gap-2 text-[10px] text-muted-foreground/60 mb-1 ml-4 border-l-2 border-white/10 pl-2">
+                      <Reply className="w-3 h-3" />
+                      <span>replied to <span className="font-bold">{msg.replyToUsername}</span>:</span>
+                      <span className="truncate max-w-[200px] italic">"{msg.replyToContent}"</span>
+                    </div>
+                  )}
                   <div className="flex items-baseline gap-3 flex-wrap">
                     <span 
                       className={`font-black tracking-wide ${msg.username === "RandomIX" ? 'text-gradient-animated text-lg' : ''} ${getFontClass(msg.font || "")} ${getAnimationClass(msg.animation || "")}`} 
@@ -559,14 +636,137 @@ export default function Chat() {
                       )}
                     </div>
                     <span className="text-[10px] text-muted-foreground/50 font-mono ml-auto">{new Date(msg.timestamp).toLocaleTimeString()}</span>
+                    
+                    <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-6 w-6"><MoreVertical className="w-3 h-3" /></Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent className="bg-black border-white/10 text-white">
+                          <DropdownMenuItem className="focus:bg-white/10 cursor-pointer" onClick={() => setReplyingTo(msg)}><Reply className="w-4 h-4 mr-2" /> Reply</DropdownMenuItem>
+                          {user && msg.username === user.username && (
+                            <DropdownMenuItem className="focus:bg-white/10 cursor-pointer" onClick={() => { setEditingMessageId(msg.id); setEditContent(msg.content); }}><Edit2 className="w-4 h-4 mr-2" /> Edit</DropdownMenuItem>
+                          )}
+                          {user && (msg.username === user.username || user.username === "RandomIX") && (
+                            <DropdownMenuItem className="focus:bg-white/10 cursor-pointer text-red-500 focus:text-red-400" onClick={() => setDeleteConfirmId(msg.id)}><Trash2 className="w-4 h-4 mr-2" /> Delete Message</DropdownMenuItem>
+                          )}
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <div className="flex items-center w-full px-2 py-1.5 text-sm hover:bg-white/10 cursor-pointer rounded-sm">
+                                <Smile className="w-4 h-4 mr-2" /> React
+                              </div>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-2 bg-black border-white/10 grid grid-cols-5 gap-1">
+                              {COMMON_EMOJIS.map(emoji => (
+                                <button key={emoji} className="p-2 hover:bg-white/10 rounded transition-colors" onClick={() => handleAddReaction(msg.id, emoji)}>{emoji}</button>
+                              ))}
+                            </PopoverContent>
+                          </Popover>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
                   </div>
-                  <p className="text-white/90 leading-relaxed font-sans break-words whitespace-pre-wrap max-w-2xl word-break overflow-hidden" style={{ wordBreak: 'break-word' }}>{msg.content}</p>
+
+                  {editingMessageId === msg.id ? (
+                    <div className="space-y-2 mt-2">
+                      <textarea
+                        value={editContent}
+                        onChange={(e) => setEditContent(e.target.value)}
+                        className="w-full bg-white/5 border border-white/10 rounded p-2 text-sm focus:outline-none focus:border-primary/50 text-white"
+                      />
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => handleEditMessage(msg.id)}>Save</Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingMessageId(null)}>Cancel</Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="text-white/90 leading-relaxed font-sans break-words whitespace-pre-wrap max-w-2xl word-break overflow-hidden" style={{ wordBreak: 'break-word' }}>
+                      {renderContent(msg.content)}
+                      {msg.isEdited && <span className="text-[10px] text-muted-foreground/40 ml-2">(message edited)</span>}
+                    </div>
+                  )}
+
+                  {msg.reactions && msg.reactions.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-1 ml-4">
+                      {Object.entries(
+                        msg.reactions.reduce((acc: any, curr: any) => {
+                          acc[curr.emoji] = (acc[curr.emoji] || 0) + 1;
+                          return acc;
+                        }, {})
+                      ).map(([emoji, count]: [string, any]) => (
+                        <button
+                          key={emoji}
+                          onClick={() => handleAddReaction(msg.id, emoji)}
+                          className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] border border-white/5 bg-white/5 hover:border-primary/50 transition-all ${
+                            user && msg.reactions?.some(r => r.username === user.username && r.emoji === emoji) ? 'bg-primary/20 border-primary/50' : ''
+                          }`}
+                        >
+                          <span>{emoji}</span>
+                          <span>{count}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  <AnimatePresence>
+                    {deleteConfirmId === msg.id && (
+                      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 z-10 bg-black/80 flex items-center justify-center rounded-lg border border-red-500/20">
+                        <div className="text-center p-4">
+                          <p className="text-sm font-bold mb-4">are you sure you want to delete this message, this can't be undone</p>
+                          <div className="flex gap-4 justify-center">
+                            <Button variant="destructive" size="sm" onClick={() => handleDeleteMessage(msg.id)}>Yes</Button>
+                            <Button variant="outline" size="sm" onClick={() => {
+                              setDiesInCoolWay(true);
+                              setTimeout(() => {
+                                setDiesInCoolWay(false);
+                                setDeleteConfirmId(null);
+                              }, 2000);
+                            }}>No</Button>
+                          </div>
+                          {diesInCoolWay && <p className="mt-2 text-xs italic text-red-400 animate-pulse">*dies in a cool way*</p>}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               ))}
             </div>
           </ScrollArea>
 
-          {/* Admin Tools Drawer (if shown) */}
+          {/* Message Input */}
+          <div className="p-6 border-t border-white/5 bg-black/50 backdrop-blur-md">
+            {replyingTo && (
+              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-t-xl px-4 py-2 text-xs text-muted-foreground animate-in slide-in-from-bottom-1">
+                <div className="flex items-center gap-2">
+                  <Reply className="w-3 h-3" />
+                  <span>replying to <span className="text-white font-bold">{replyingTo.username}</span>: <span className="truncate max-w-[300px] italic">"{replyingTo.content}"</span></span>
+                </div>
+                <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => setReplyingTo(null)}><X className="w-3 h-3" /></Button>
+              </div>
+            )}
+            <form onSubmit={handleSendMessage} className={`flex gap-3 ${replyingTo ? 'rounded-b-xl border-t-0' : 'rounded-xl'} bg-white/[0.02] border border-white/10 p-2 focus-within:border-primary/50 transition-all`}>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white"><Smile className="w-5 h-5" /></Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-2 bg-black border-white/10 grid grid-cols-6 gap-1">
+                  {COMMON_EMOJIS.map(emoji => (
+                    <button type="button" key={emoji} className="p-2 hover:bg-white/10 rounded transition-colors text-xl" onClick={() => setNewMessage(prev => prev + emoji)}>{emoji}</button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+              <Input 
+                placeholder={activeChannel ? `Message #${activeChannel.name}` : "Select a channel"} 
+                value={newMessage} 
+                onChange={(e) => setNewMessage(e.target.value)}
+                className="bg-transparent border-none focus-visible:ring-0 text-lg h-10"
+                disabled={!activeChannel}
+              />
+              <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel}>
+                <Send className="w-5 h-5" />
+              </Button>
+            </form>
+          </div>
           <AnimatePresence>
             {showAdminPanel && (
               <motion.div initial={{ x: 300 }} animate={{ x: 0 }} exit={{ x: 300 }} className="w-80 border-l border-white/5 bg-black/90 backdrop-blur-xl absolute right-0 inset-y-0 z-20 shadow-2xl p-6">
