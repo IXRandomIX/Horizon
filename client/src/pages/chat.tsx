@@ -120,9 +120,12 @@ export default function Chat() {
   const [selectedRolesForUser, setSelectedRolesForUser] = useState<string[]>([]);
   const [rolesByName, setRolesByName] = useState<{ [key: string]: any[] }>({});
   const [showRoleSidebar, setShowRoleSidebar] = useState(true);
+  const [showImageUpload, setShowImageUpload] = useState(false);
+  const [imageUrl, setImageUrl] = useState("");
   const { toast } = useToast();
 
   const AVAILABLE_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "proxy_helper"];
+  const READ_ONLY_CHANNELS = ["announcements", "rules"];
 
   const userHasPermission = (permission: string): boolean => {
     if (!user) return false;
@@ -140,7 +143,32 @@ export default function Chat() {
     if (saved) setUser(JSON.parse(saved));
     // Fetch channels immediately, even if not logged in yet
     fetchChannels();
+    // Initialize read-only channels if not logged in yet
+    initializeReadOnlyChannels();
   }, []);
+
+  const initializeReadOnlyChannels = async () => {
+    // Ensure announcements and rules channels exist
+    const res = await fetch("/api/chat/channels");
+    const channels = await res.json();
+    const hasAnnouncements = channels.some((ch: any) => ch.name === "announcements");
+    const hasRules = channels.some((ch: any) => ch.name === "rules");
+    
+    if (!hasAnnouncements) {
+      await fetch("/api/chat/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "announcements", isPrivate: false, allowedUsers: [] }),
+      });
+    }
+    if (!hasRules) {
+      await fetch("/api/chat/channels", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: "rules", isPrivate: false, allowedUsers: [] }),
+      });
+    }
+  };
 
   useEffect(() => {
     if (activeChannel) fetchMessages(activeChannel.id);
@@ -747,7 +775,7 @@ export default function Chat() {
             <form onSubmit={handleSendMessage} className={`flex gap-3 ${replyingTo ? 'rounded-b-xl border-t-0' : 'rounded-xl'} bg-white/[0.02] border border-white/10 p-2 focus-within:border-primary/50 transition-all`}>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white"><Smile className="w-5 h-5" /></Button>
+                  <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><Smile className="w-5 h-5" /></Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-2 bg-black border-white/10 grid grid-cols-6 gap-1">
                   {COMMON_EMOJIS.map(emoji => (
@@ -755,14 +783,50 @@ export default function Chat() {
                   ))}
                 </PopoverContent>
               </Popover>
+
+              <Dialog open={showImageUpload} onOpenChange={setShowImageUpload}>
+                <DialogTrigger asChild>
+                  <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><ImageIcon className="w-5 h-5" /></Button>
+                </DialogTrigger>
+                <DialogContent className="bg-black border-white/10">
+                  <DialogHeader><DialogTitle className="text-white">Send Image or GIF</DialogTitle></DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <Input 
+                      placeholder="Paste image or GIF URL (jpg, png, gif, webp)" 
+                      value={imageUrl} 
+                      onChange={(e) => setImageUrl(e.target.value)}
+                      className="bg-white/5 border-white/10"
+                    />
+                    {imageUrl && (
+                      <div className="rounded-lg overflow-hidden border border-white/10">
+                        <img src={imageUrl} alt="preview" className="max-w-sm max-h-64 object-contain" onError={() => toast({ title: "Failed to load image", variant: "destructive" })} />
+                      </div>
+                    )}
+                    <Button 
+                      onClick={() => {
+                        if (imageUrl.trim()) {
+                          setNewMessage(prev => prev + (prev ? ' ' : '') + imageUrl);
+                          setImageUrl("");
+                          setShowImageUpload(false);
+                          toast({ title: "Image URL added to message" });
+                        }
+                      }}
+                      className="w-full"
+                    >
+                      Add to Message
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
+
               <Input 
-                placeholder={activeChannel ? `Message #${activeChannel.name}` : "Select a channel"} 
+                placeholder={activeChannel ? (READ_ONLY_CHANNELS.includes(activeChannel.name) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`) : "Select a channel"} 
                 value={newMessage} 
                 onChange={(e) => setNewMessage(e.target.value)}
                 className="bg-transparent border-none focus-visible:ring-0 text-lg h-10"
-                disabled={!activeChannel}
+                disabled={!activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}
               />
-              <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel}>
+              <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}>
                 <Send className="w-5 h-5" />
               </Button>
             </form>
@@ -1009,18 +1073,6 @@ export default function Chat() {
           </AnimatePresence>
         </div>
 
-        <div className="p-6 bg-black border-t border-white/5">
-          <form onSubmit={handleSendMessage} className="relative group">
-            <div className="absolute -inset-1 bg-gradient-to-r from-blue-600/20 to-purple-600/20 rounded-2xl blur opacity-25 group-focus-within:opacity-50 transition duration-500" />
-            <div className="relative flex items-center gap-3">
-              <Input value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={`Message #${activeChannel?.name || 'chat'}`} className="flex-1 bg-black/50 border-white/10 h-14 rounded-2xl text-white placeholder:text-muted-foreground focus-visible:ring-primary transition-all pr-12 resize-none" />
-              <Button type="submit" size="icon" className="absolute right-2 h-10 w-10 bg-primary hover:bg-primary-hover rounded-xl text-white transition-all">
-                <Send className="w-5 h-5" />
-              </Button>
-            </div>
-          </form>
-          <p className="mt-3 text-[10px] text-muted-foreground font-mono uppercase tracking-[0.2em] text-center">HORIZON ENCRYPTED BROADCAST PROTOCOL</p>
-        </div>
       </div>
     </div>
   );
