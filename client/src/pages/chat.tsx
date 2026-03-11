@@ -224,6 +224,12 @@ export default function Chat() {
     if (data.length > 0 && !activeChannel) setActiveChannel(data[0]);
   };
 
+  const fetchRoles = async () => {
+    const res = await fetch("/api/chat/roles");
+    const data = await res.json();
+    setRoles(data);
+  };
+
   const handleUpdateUser = async (updates: any) => {
     if (!user) return;
     const res = await fetch(`/api/chat/users/${user.username}`, {
@@ -241,11 +247,6 @@ export default function Chat() {
 
   // Real-time polling for roles
   useEffect(() => {
-    const fetchRoles = async () => {
-      const res = await fetch("/api/chat/roles");
-      const data = await res.json();
-      setRoles(data);
-    };
     fetchRoles();
     const interval = setInterval(() => {
       fetchRoles();
@@ -760,77 +761,77 @@ export default function Chat() {
               ))}
             </div>
           </ScrollArea>
+        </div>
 
-          {/* Message Input */}
-          <div className="p-6 border-t border-white/5 bg-black/50 backdrop-blur-md">
-            {replyingTo && (
-              <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-t-xl px-4 py-2 text-xs text-muted-foreground animate-in slide-in-from-bottom-1">
-                <div className="flex items-center gap-2">
-                  <Reply className="w-3 h-3" />
-                  <span>replying to <span className="text-white font-bold">{replyingTo.username}</span>: <span className="truncate max-w-[300px] italic">"{replyingTo.content}"</span></span>
-                </div>
-                <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => setReplyingTo(null)}><X className="w-3 h-3" /></Button>
+        {/* Message Input - Fixed at Bottom */}
+        <div className="border-t border-white/5 bg-black/50 backdrop-blur-md p-6">
+          {replyingTo && (
+            <div className="flex items-center justify-between bg-white/5 border border-white/10 rounded-t-xl px-4 py-2 text-xs text-muted-foreground animate-in slide-in-from-bottom-1 mb-2">
+              <div className="flex items-center gap-2">
+                <Reply className="w-3 h-3" />
+                <span>replying to <span className="text-white font-bold">{replyingTo.username}</span>: <span className="truncate max-w-[300px] italic">"{replyingTo.content}"</span></span>
               </div>
-            )}
-            <form onSubmit={handleSendMessage} className={`flex gap-3 ${replyingTo ? 'rounded-b-xl border-t-0' : 'rounded-xl'} bg-white/[0.02] border border-white/10 p-2 focus-within:border-primary/50 transition-all`}>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><Smile className="w-5 h-5" /></Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-64 p-2 bg-black border-white/10 grid grid-cols-6 gap-1">
-                  {COMMON_EMOJIS.map(emoji => (
-                    <button type="button" key={emoji} className="p-2 hover:bg-white/10 rounded transition-colors text-xl" onClick={() => setNewMessage(prev => prev + emoji)}>{emoji}</button>
-                  ))}
-                </PopoverContent>
-              </Popover>
+              <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => setReplyingTo(null)}><X className="w-3 h-3" /></Button>
+            </div>
+          )}
+          <form onSubmit={handleSendMessage} className={`flex gap-3 ${replyingTo ? 'rounded-b-xl' : 'rounded-xl'} bg-white/[0.02] border border-white/10 p-2 focus-within:border-primary/50 transition-all`}>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><Smile className="w-5 h-5" /></Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-64 p-2 bg-black border-white/10 grid grid-cols-6 gap-1">
+                {COMMON_EMOJIS.map(emoji => (
+                  <button type="button" key={emoji} className="p-2 hover:bg-white/10 rounded transition-colors text-xl" onClick={() => setNewMessage(prev => prev + emoji)}>{emoji}</button>
+                ))}
+              </PopoverContent>
+            </Popover>
 
-              <Dialog open={showImageUpload} onOpenChange={setShowImageUpload}>
-                <DialogTrigger asChild>
-                  <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><ImageIcon className="w-5 h-5" /></Button>
-                </DialogTrigger>
-                <DialogContent className="bg-black border-white/10">
-                  <DialogHeader><DialogTitle className="text-white">Send Image or GIF</DialogTitle></DialogHeader>
-                  <div className="space-y-4 py-4">
-                    <Input 
-                      placeholder="Paste image or GIF URL (jpg, png, gif, webp)" 
-                      value={imageUrl} 
-                      onChange={(e) => setImageUrl(e.target.value)}
-                      className="bg-white/5 border-white/10"
-                    />
-                    {imageUrl && (
-                      <div className="rounded-lg overflow-hidden border border-white/10">
-                        <img src={imageUrl} alt="preview" className="max-w-sm max-h-64 object-contain" onError={() => toast({ title: "Failed to load image", variant: "destructive" })} />
-                      </div>
-                    )}
-                    <Button 
-                      onClick={() => {
-                        if (imageUrl.trim()) {
-                          setNewMessage(prev => prev + (prev ? ' ' : '') + imageUrl);
-                          setImageUrl("");
-                          setShowImageUpload(false);
-                          toast({ title: "Image URL added to message" });
-                        }
-                      }}
-                      className="w-full"
-                    >
-                      Add to Message
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+            <Dialog open={showImageUpload} onOpenChange={setShowImageUpload}>
+              <DialogTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><ImageIcon className="w-5 h-5" /></Button>
+              </DialogTrigger>
+              <DialogContent className="bg-black border-white/10">
+                <DialogHeader><DialogTitle className="text-white">Send Image or GIF</DialogTitle></DialogHeader>
+                <div className="space-y-4 py-4">
+                  <Input 
+                    placeholder="Paste image or GIF URL (jpg, png, gif, webp)" 
+                    value={imageUrl} 
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    className="bg-white/5 border-white/10"
+                  />
+                  {imageUrl && (
+                    <div className="rounded-lg overflow-hidden border border-white/10">
+                      <img src={imageUrl} alt="preview" className="max-w-sm max-h-64 object-contain" onError={() => toast({ title: "Failed to load image", variant: "destructive" })} />
+                    </div>
+                  )}
+                  <Button 
+                    onClick={() => {
+                      if (imageUrl.trim()) {
+                        setNewMessage(prev => prev + (prev ? ' ' : '') + imageUrl);
+                        setImageUrl("");
+                        setShowImageUpload(false);
+                        toast({ title: "Image URL added to message" });
+                      }
+                    }}
+                    className="w-full"
+                  >
+                    Add to Message
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
 
-              <Input 
-                placeholder={activeChannel ? (READ_ONLY_CHANNELS.includes(activeChannel.name) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`) : "Select a channel"} 
-                value={newMessage} 
-                onChange={(e) => setNewMessage(e.target.value)}
-                className="bg-transparent border-none focus-visible:ring-0 text-lg h-10"
-                disabled={!activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}
-              />
-              <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}>
-                <Send className="w-5 h-5" />
-              </Button>
-            </form>
-          </div>
+            <Input 
+              placeholder={activeChannel ? (READ_ONLY_CHANNELS.includes(activeChannel.name) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`) : "Select a channel"} 
+              value={newMessage} 
+              onChange={(e) => setNewMessage(e.target.value)}
+              className="bg-transparent border-none focus-visible:ring-0 text-lg h-10"
+              disabled={!activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}
+            />
+            <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}>
+              <Send className="w-5 h-5" />
+            </Button>
+          </form>
           <AnimatePresence>
             {showAdminPanel && (
               <motion.div initial={{ x: 300 }} animate={{ x: 0 }} exit={{ x: 300 }} className="w-80 border-l border-white/5 bg-black/90 backdrop-blur-xl absolute right-0 inset-y-0 z-20 shadow-2xl p-6">
