@@ -312,7 +312,7 @@ export async function registerRoutes(
 
     try {
       const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite-preview-06-17" });
+      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
       const systemPrompt = `You are Horizon AI — an advanced AI assistant that combines the intelligence of the best AI systems. You excel at:
 - Answering complex questions with clear, detailed explanations
