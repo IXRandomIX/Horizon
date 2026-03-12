@@ -832,9 +832,11 @@ export default function Chat() {
               <Send className="w-5 h-5" />
             </Button>
           </form>
-          <AnimatePresence>
-            {showAdminPanel && (
-              <motion.div initial={{ x: 300 }} animate={{ x: 0 }} exit={{ x: 300 }} className="w-80 border-l border-white/5 bg-black/90 backdrop-blur-xl absolute right-0 inset-y-0 z-20 shadow-2xl p-6">
+        </div>
+
+        <AnimatePresence>
+          {showAdminPanel && (
+            <motion.div initial={{ x: 300 }} animate={{ x: 0 }} exit={{ x: 300 }} className="w-80 border-l border-white/5 bg-black/90 backdrop-blur-xl absolute right-0 inset-y-0 z-20 shadow-2xl p-6 overflow-y-auto">
                 <h3 className="font-display font-black text-xl mb-6 text-gradient-animated tracking-widest">MASTER CONTROL</h3>
                 <div className="space-y-6">
                   <div className="space-y-2">
@@ -1072,7 +1074,6 @@ export default function Chat() {
               </motion.div>
             )}
           </AnimatePresence>
-        </div>
 
       </div>
     </div>

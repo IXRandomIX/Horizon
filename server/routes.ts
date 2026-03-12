@@ -2,6 +2,27 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { api } from "@shared/routes";
 import { storage } from "./storage";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+const uploadsDir = path.join(process.cwd(), "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, unique + path.extname(file.originalname));
+    },
+  }),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = /jpeg|jpg|png|gif|webp|svg|bmp|ico/i;
+    cb(null, allowed.test(path.extname(file.originalname)));
+  },
+});
 
 // Define a basic caching mechanism to avoid excessive fetching
 let cachedGames: any[] = [];
@@ -264,6 +285,14 @@ export async function registerRoutes(
       user = await storage.createUser({ username, role: "User", roleColor: "#9ca3af" });
     }
     res.json({ username: user.username, role: user.role, isAdmin: false });
+  });
+
+  app.post("/api/upload", upload.single("file"), (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+    const host = req.headers.host || "localhost:5000";
+    const protocol = req.headers["x-forwarded-proto"] || "http";
+    const url = `${protocol}://${host}/uploads/${req.file.filename}`;
+    res.json({ url, filename: req.file.filename, originalName: req.file.originalname });
   });
 
   return httpServer;
