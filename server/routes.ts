@@ -341,7 +341,16 @@ When analyzing images or files, describe what you see in detail before answering
       res.json({ response });
     } catch (err: any) {
       console.error("Gemini error:", err);
-      res.status(500).json({ message: err.message || "AI generation failed" });
+      const raw = err.message || "";
+      let friendly = "AI generation failed. Please try again.";
+      if (raw.includes("quota") || raw.includes("429") || raw.includes("RESOURCE_EXHAUSTED") || raw.includes("Too Many Requests")) {
+        friendly = "Rate limit reached. You've exceeded your API quota for today — please try again later or check your Google AI plan.";
+      } else if (raw.includes("API_KEY_INVALID") || raw.includes("API key")) {
+        friendly = "Invalid API key. Please check your Gemini API key in the secrets panel.";
+      } else if (raw.includes("404") || raw.includes("not found")) {
+        friendly = "AI model not found. Please contact the administrator.";
+      }
+      res.status(500).json({ message: friendly });
     }
   });
 
