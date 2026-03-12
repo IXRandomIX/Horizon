@@ -14,6 +14,7 @@ import Announcements from "@/pages/announcements";
 import Chat from "@/pages/chat";
 import Partners from "@/pages/partners";
 import AIPage from "@/pages/ai";
+import TheWall from "@/pages/the-wall";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 
 function Router() {
@@ -32,6 +33,7 @@ function Router() {
       <Route path="/chat" component={Chat} />
       <Route path="/partners" component={Partners} />
       <Route path="/ai" component={AIPage} />
+      <Route path="/the-wall" component={TheWall} />
       
       {/* Fallback */}
       <Route component={NotFound} />

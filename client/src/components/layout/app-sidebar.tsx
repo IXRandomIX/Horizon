@@ -1,5 +1,5 @@
 import { useLocation, Link } from "wouter";
-import { Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle, Users, Sparkles } from "lucide-react";
+import { Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle, Users, Sparkles, BrickWall } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -21,6 +21,7 @@ const navItems = [
   { name: "Proxies", path: "/proxies", icon: ShieldCheck },
   { name: "Media / Tools", path: "/tools", icon: Wrench },
   { name: "Gatekeep OS", path: "/gatekeep-os", icon: Lock },
+  { name: "THE WALL", path: "/the-wall", icon: BrickWall, wall: true },
 ];
 
 export function AppSidebar() {
@@ -42,23 +43,31 @@ export function AppSidebar() {
               {navItems.map((item) => {
                 const isActive = location === item.path;
                 const isHighlight = (item as any).highlight;
+                const isWall = (item as any).wall;
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton asChild tooltip={item.name} isActive={isActive}>
                       <Link 
                         href={item.path} 
                         className={`flex items-center gap-4 px-4 py-4 rounded-xl transition-all duration-300 ${
-                          isActive 
+                          isActive && isWall
+                            ? 'bg-red-950/30 text-red-400 shadow-[inset_0_0_20px_rgba(220,38,38,0.15)] border border-red-800/40'
+                            : isWall
+                            ? 'text-red-500/70 hover:text-red-400 hover:bg-red-950/20 border border-red-900/20'
+                            : isActive 
                             ? 'bg-primary/10 text-primary shadow-[inset_0_0_20px_rgba(124,58,237,0.15)] border border-primary/20' 
                             : isHighlight
                             ? 'text-primary/80 hover:text-primary hover:bg-primary/5 border border-primary/10'
                             : 'text-muted-foreground hover:text-white hover:bg-white/5'
                         }`}
                       >
-                        <item.icon className={`w-5 h-5 transition-colors ${isActive || isHighlight ? 'text-primary' : ''}`} />
-                        <span className="font-medium text-base tracking-wide">{item.name}</span>
+                        <item.icon className={`w-5 h-5 transition-colors ${isWall ? 'text-red-500/70' : isActive || isHighlight ? 'text-primary' : ''}`} />
+                        <span className={`font-medium text-base tracking-wide ${isWall ? 'font-black tracking-widest' : ''}`}>{item.name}</span>
                         {isHighlight && !isActive && (
                           <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-primary/20 text-primary border border-primary/30 rounded-md px-1.5 py-0.5">AI</span>
+                        )}
+                        {isWall && !isActive && (
+                          <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-red-950/40 text-red-500/70 border border-red-900/30 rounded-md px-1.5 py-0.5">???</span>
                         )}
                       </Link>
                     </SidebarMenuButton>

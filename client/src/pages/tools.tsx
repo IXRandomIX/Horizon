@@ -1,11 +1,10 @@
 import { useState, useRef, useCallback } from "react";
-import { Cpu, Wand2, ImageIcon, Copy, Check, Upload, X, Link, ExternalLink } from "lucide-react";
+import { Cpu, Wand2, ImageIcon, Copy, Check, Upload, X, Link } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 
-const LINK_CREATOR_SRC = atob("aHR0cHM6Ly9kb21haW4tbGlua2VyLS16YWNoYXJ5Z291bGRlbi5yZXBsaXQuYXBw");
 
 interface UploadedImage {
   id: string;
@@ -273,38 +272,6 @@ export default function Tools() {
           </Card>
         </motion.div>
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <Card className="bg-white/[0.03] border-white/10 overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 to-transparent pointer-events-none" />
-            <CardHeader>
-              <div className="flex items-center gap-4">
-                <div className="w-14 h-14 rounded-2xl bg-primary/10 flex items-center justify-center border border-primary/20">
-                  <ExternalLink className="w-8 h-8 text-primary" />
-                </div>
-                <div>
-                  <CardTitle className="text-3xl text-white font-display tracking-widest">Link Creator</CardTitle>
-                  <CardDescription className="text-lg text-muted-foreground">Create and manage custom domain links</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent className="pt-2 pb-0">
-              <div className="rounded-2xl overflow-hidden border border-white/10" style={{ height: "640px" }}>
-                <iframe
-                  src={LINK_CREATOR_SRC}
-                  className="w-full h-full"
-                  sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-                  referrerPolicy="no-referrer"
-                  title="Link Creator"
-                  data-testid="iframe-link-creator"
-                />
-              </div>
-            </CardContent>
-          </Card>
-        </motion.div>
       </div>
     </div>
   );
