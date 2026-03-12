@@ -13,6 +13,7 @@ import GatekeepOS from "@/pages/gatekeep-os";
 import Announcements from "@/pages/announcements";
 import Chat from "@/pages/chat";
 import Partners from "@/pages/partners";
+import AIPage from "@/pages/ai";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 
 function Router() {
@@ -30,6 +31,7 @@ function Router() {
       <Route path="/announcements" component={Announcements} />
       <Route path="/chat" component={Chat} />
       <Route path="/partners" component={Partners} />
+      <Route path="/ai" component={AIPage} />
       
       {/* Fallback */}
       <Route component={NotFound} />

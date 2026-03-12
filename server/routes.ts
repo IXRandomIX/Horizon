@@ -5,6 +5,7 @@ import { storage } from "./storage";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -22,6 +23,11 @@ const upload = multer({
     const allowed = /jpeg|jpg|png|gif|webp|svg|bmp|ico/i;
     cb(null, allowed.test(path.extname(file.originalname)));
   },
+});
+
+const aiUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024, files: 20 },
 });
 
 // Define a basic caching mechanism to avoid excessive fetching
@@ -293,6 +299,50 @@ export async function registerRoutes(
     const protocol = req.headers["x-forwarded-proto"] || "http";
     const url = `${protocol}://${host}/uploads/${req.file.filename}`;
     res.json({ url, filename: req.file.filename, originalName: req.file.originalname });
+  });
+
+  app.post("/api/ai/chat", aiUpload.array("files", 20), async (req, res) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ message: "Horizon AI is not configured yet. Please add your GEMINI_API_KEY in the Secrets panel." });
+    }
+
+    const message = (req.body.message as string) || "";
+    const files = (req.files as Express.Multer.File[]) || [];
+
+    try {
+      const genAI = new GoogleGenerativeAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+      const systemPrompt = `You are Horizon AI — an advanced AI assistant that combines the intelligence of the best AI systems. You excel at:
+- Answering complex questions with clear, detailed explanations
+- Analyzing images, photos, and documents
+- Solving math problems step-by-step (showing all work)
+- Explaining science, code, and technical topics
+- Being helpful, accurate, and friendly
+
+When analyzing images or files, describe what you see in detail before answering the question. Format responses clearly with markdown when appropriate.`;
+
+      const parts: any[] = [{ text: systemPrompt + "\n\nUser: " + (message || "Please analyze the attached file(s) and describe what you see.") }];
+
+      for (const file of files) {
+        const mime = file.mimetype;
+        const b64 = file.buffer.toString("base64");
+        if (mime.startsWith("image/") || mime === "application/pdf") {
+          parts.push({ inlineData: { mimeType: mime, data: b64 } });
+        } else {
+          const text = file.buffer.toString("utf-8");
+          parts.push({ text: `\n[File: ${file.originalname}]\n${text.slice(0, 8000)}` });
+        }
+      }
+
+      const result = await model.generateContent(parts);
+      const response = result.response.text();
+      res.json({ response });
+    } catch (err: any) {
+      console.error("Gemini error:", err);
+      res.status(500).json({ message: err.message || "AI generation failed" });
+    }
   });
 
   return httpServer;
