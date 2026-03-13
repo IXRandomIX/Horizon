@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 
-const KIMI_SRC = atob("aHR0cHM6Ly93d3cua2ltaS5jb20v");
 
 interface AttachedFile {
   id: string;
@@ -303,18 +302,184 @@ function ChatTab() {
   );
 }
 
+interface HaicMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: Date;
+  isStreaming?: boolean;
+}
+
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(code);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  return (
+    <div className="my-3 rounded-xl overflow-hidden border border-white/10 bg-black/60">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-white/[0.02]">
+        <span className="text-xs text-white/40 uppercase tracking-widest font-mono">{lang || "code"}</span>
+        <button onClick={copy} className="text-xs text-white/40 hover:text-white transition-colors flex items-center gap-1">
+          {copied ? "Copied!" : "Copy"}
+        </button>
+      </div>
+      <pre className="p-4 text-sm font-mono text-green-300 overflow-x-auto">{code}</pre>
+    </div>
+  );
+}
+
+function HaicBubble({ msg }: { msg: HaicMessage }) {
+  const isUser = msg.role === "user";
+
+  const renderContent = (content: string) => {
+    const parts = content.split(/(```[\s\S]*?```)/g);
+    return parts.map((part, i) => {
+      if (part.startsWith("```") && part.endsWith("```")) {
+        const inner = part.slice(3, -3);
+        const nl = inner.indexOf("\n");
+        const lang = nl !== -1 ? inner.slice(0, nl).trim() : "";
+        const code = nl !== -1 ? inner.slice(nl + 1) : inner;
+        return <CodeBlock key={i} lang={lang} code={code} />;
+      }
+      const inlineParts = part.split(/(`[^`]+`|\*\*[^*]+\*\*|\*[^*]+\*)/g);
+      return (
+        <span key={i}>
+          {inlineParts.map((p, j) => {
+            if (p.startsWith("`") && p.endsWith("`")) return <code key={j} className="px-1.5 py-0.5 rounded bg-white/10 text-emerald-400 text-sm font-mono">{p.slice(1,-1)}</code>;
+            if (p.startsWith("**") && p.endsWith("**")) return <strong key={j} className="font-bold text-white">{p.slice(2,-2)}</strong>;
+            if (p.startsWith("*") && p.endsWith("*")) return <em key={j} className="italic text-white/80">{p.slice(1,-1)}</em>;
+            return <span key={j}>{p}</span>;
+          })}
+        </span>
+      );
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className={`flex gap-3 ${isUser ? "flex-row-reverse" : "flex-row"}`}
+    >
+      <div className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 border ${
+        isUser ? "bg-primary/20 border-primary/30" : "bg-emerald-900/30 border-emerald-700/40"
+      }`}>
+        {isUser ? <User className="w-4 h-4 text-primary" /> : <Code2 className="w-4 h-4 text-emerald-400" />}
+      </div>
+      <div className={`flex flex-col gap-1.5 max-w-[80%] ${isUser ? "items-end" : "items-start"}`}>
+        <div className={`rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+          isUser
+            ? "bg-primary/15 border border-primary/20 text-white"
+            : "bg-white/[0.04] border border-white/10 text-white/90"
+        }`}>
+          {msg.isStreaming ? (
+            <div className="flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-emerald-400" />
+              <span className="text-white/50 text-xs">HAIC is thinking...</span>
+            </div>
+          ) : (
+            <div className="whitespace-pre-wrap">{renderContent(msg.content)}</div>
+          )}
+        </div>
+        <span className="text-[10px] text-white/20 px-1">
+          {msg.timestamp.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+        </span>
+      </div>
+    </motion.div>
+  );
+}
+
 function CodeTab() {
+  const [messages, setMessages] = useState<HaicMessage[]>([
+    {
+      id: "welcome",
+      role: "assistant",
+      content: "Hi! I'm **HAIC** — Horizon AI Code, powered by Kimi.\n\nI specialize in writing, reviewing, debugging, and explaining code in any language. Ask me to:\n- Write a function or full program\n- Debug your code\n- Explain how something works\n- Review your code for improvements\n\nWhat would you like to build?",
+      timestamp: new Date(),
+    }
+  ]);
+  const [history, setHistory] = useState<{ role: string; content: string }[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { toast } = useToast();
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = async () => {
+    if (!input.trim() || loading) return;
+    const text = input.trim();
+
+    const userMsg: HaicMessage = { id: Math.random().toString(36).slice(2), role: "user", content: text, timestamp: new Date() };
+    const thinking: HaicMessage = { id: "thinking-" + Date.now(), role: "assistant", content: "", timestamp: new Date(), isStreaming: true };
+
+    setMessages(prev => [...prev, userMsg, thinking]);
+    setInput("");
+    setLoading(true);
+
+    const newHistory = [...history, { role: "user", content: text }];
+
+    try {
+      const res = await fetch("/api/haic/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: newHistory }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "HAIC request failed");
+
+      setHistory([...newHistory, { role: "assistant", content: data.response }]);
+      setMessages(prev => prev.map(m => m.id === thinking.id ? { ...m, content: data.response, isStreaming: false } : m));
+    } catch (err: any) {
+      setMessages(prev => prev.filter(m => m.id !== thinking.id));
+      toast({ title: err.message || "HAIC failed to respond", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+  };
+
   return (
     <div className="flex flex-col h-full">
-      <div className="flex-1 rounded-2xl overflow-hidden border border-white/10 m-4">
-        <iframe
-          src={KIMI_SRC}
-          className="w-full h-full"
-          sandbox="allow-scripts allow-forms allow-same-origin allow-popups allow-modals"
-          referrerPolicy="no-referrer"
-          title="Horizon AI Code"
-          data-testid="iframe-kimi"
-        />
+      <div className="flex-1 overflow-y-auto custom-scrollbar px-4 py-6 space-y-6">
+        {messages.map(msg => <HaicBubble key={msg.id} msg={msg} />)}
+        <div ref={messagesEndRef} />
+      </div>
+      <div className="border-t border-white/5 p-4 space-y-3">
+        <div className="flex gap-3 items-end bg-white/[0.03] border border-white/10 rounded-2xl p-2 focus-within:border-emerald-700/50 transition-all">
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder="Ask HAIC to write, debug, or explain code..."
+            className="bg-transparent border-none focus-visible:ring-0 resize-none min-h-[44px] max-h-36 text-base text-white placeholder:text-white/30"
+            rows={1}
+            disabled={loading}
+            data-testid="input-haic-message"
+          />
+          <Button
+            type="button"
+            size="icon"
+            className="bg-emerald-700 hover:bg-emerald-600 text-white shadow-lg shadow-emerald-900/30 shrink-0 h-9 w-9"
+            onClick={sendMessage}
+            disabled={loading || !input.trim()}
+            data-testid="button-send-haic"
+          >
+            {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          </Button>
+        </div>
+        <p className="text-center text-[10px] text-white/20">
+          HAIC · Powered by Kimi · Press Enter to send
+        </p>
       </div>
     </div>
   );
@@ -325,7 +490,7 @@ export default function AIPage() {
 
   const tabs = [
     { id: "chat" as Tab, label: "Horizon AI", icon: Brain, description: "Chat · Vision · Math · Files" },
-    { id: "code" as Tab, label: "Horizon AI Code", icon: Code2, description: "Powered by Kimi" },
+    { id: "code" as Tab, label: "HAIC", icon: Code2, description: "Horizon AI Code · Powered by Kimi" },
   ];
 
   return (

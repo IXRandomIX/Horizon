@@ -354,5 +354,52 @@ When analyzing images or files, describe what you see in detail before answering
     }
   });
 
+  // HAIC - Kimi 2.5 Instant code assistant
+  app.post("/api/haic/chat", async (req, res) => {
+    const apiKey = process.env.KIMI_API_KEY;
+    if (!apiKey) {
+      return res.status(503).json({ message: "HAIC is not configured yet. Please add your KIMI_API_KEY in the Secrets panel." });
+    }
+
+    const { messages } = req.body as { messages: { role: string; content: string }[] };
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ message: "Invalid request body." });
+    }
+
+    try {
+      const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({
+          model: "kimi-latest",
+          messages: [
+            {
+              role: "system",
+              content: "You are HAIC — Horizon AI Code, an elite coding assistant powered by Kimi. You specialize in writing, reviewing, debugging, and explaining code across all languages. You are precise, fast, and give clean, production-quality code with clear explanations. Format all code with proper markdown code blocks including the language identifier."
+            },
+            ...messages
+          ],
+          temperature: 0.3,
+          max_tokens: 4096,
+        }),
+      });
+
+      const data = await response.json() as any;
+      if (!response.ok) {
+        const errMsg = data?.error?.message || "HAIC request failed.";
+        return res.status(500).json({ message: errMsg });
+      }
+
+      const reply = data?.choices?.[0]?.message?.content || "";
+      res.json({ response: reply });
+    } catch (err: any) {
+      console.error("HAIC error:", err);
+      res.status(500).json({ message: err.message || "HAIC generation failed." });
+    }
+  });
+
   return httpServer;
 }
