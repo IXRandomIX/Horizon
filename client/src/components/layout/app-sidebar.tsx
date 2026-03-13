@@ -1,7 +1,8 @@
 import { useLocation, Link } from "wouter";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
-  Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare, LogOut, UsersRound
+  Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
+  LogOut, UsersRound, MailOpen
 } from "lucide-react";
 import {
   Sidebar,
@@ -15,6 +16,7 @@ import {
   SidebarFooter,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/context/auth";
+import { useNotifications } from "@/context/notifications";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,19 +25,6 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-const navItems = [
-  { name: "Announcements", path: "/announcements", icon: Megaphone },
-  { name: "HORIZON CHAT", path: "/chat", icon: MessageCircle },
-  { name: "Horizon AI", path: "/ai", icon: Sparkles, highlight: true },
-  { name: "Partners", path: "/partners", icon: Users },
-  { name: "Games Portal", path: "/games", icon: Gamepad2 },
-  { name: "Proxy Browser", path: "/browser", icon: Globe },
-  { name: "Proxies", path: "/proxies", icon: ShieldCheck },
-  { name: "Media / Tools", path: "/tools", icon: Wrench },
-  { name: "Gatekeep OS", path: "/gatekeep-os", icon: Lock },
-  { name: "THE WALL", path: "/the-wall", icon: BrickWall, wall: true },
-];
-
 const socialItems = [
   { name: "Friends", path: "/friends", icon: Heart },
   { name: "Inbox", path: "/inbox", icon: Inbox },
@@ -43,9 +32,19 @@ const socialItems = [
   { name: "Users", path: "/users", icon: UsersRound },
 ];
 
+function Badge({ count }: { count: number }) {
+  if (!count) return null;
+  return (
+    <span className="ml-auto min-w-[1.25rem] h-5 px-1.5 rounded-full bg-primary text-white text-[10px] font-black flex items-center justify-center shadow-lg shadow-primary/30">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
+  const { globalInboxUnread, chatUnread, markGlobalInboxRead, markChatRead } = useNotifications();
 
   const FONT_CLASSES: Record<string, string> = {
     "Playfair Display": "font-playfair",
@@ -59,6 +58,20 @@ export function AppSidebar() {
 
   const displayName = user?.displayName || user?.username || "";
   const fontClass = FONT_CLASSES[user?.displayFont || "sans"] || "font-sans";
+
+  const navItems = [
+    { name: "Announcements", path: "/announcements", icon: Megaphone },
+    { name: "HORIZON CHAT", path: "/chat", icon: MessageCircle, badge: chatUnread, onNavigate: markChatRead },
+    { name: "Horizon AI", path: "/ai", icon: Sparkles, highlight: true },
+    { name: "Global Inbox", path: "/global-inbox", icon: MailOpen, badge: globalInboxUnread, onNavigate: markGlobalInboxRead },
+    { name: "Partners", path: "/partners", icon: Users },
+    { name: "Games Portal", path: "/games", icon: Gamepad2 },
+    { name: "Proxy Browser", path: "/browser", icon: Globe },
+    { name: "Proxies", path: "/proxies", icon: ShieldCheck },
+    { name: "Media / Tools", path: "/tools", icon: Wrench },
+    { name: "Gatekeep OS", path: "/gatekeep-os", icon: Lock },
+    { name: "THE WALL", path: "/the-wall", icon: BrickWall, wall: true },
+  ];
 
   return (
     <Sidebar className="border-r border-white/5 bg-black">
@@ -78,11 +91,15 @@ export function AppSidebar() {
                 const isActive = location === item.path;
                 const isHighlight = (item as any).highlight;
                 const isWall = (item as any).wall;
+                const badge = (item as any).badge as number | undefined;
+                const onNavigate = (item as any).onNavigate as (() => void) | undefined;
+
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton asChild tooltip={item.name} isActive={isActive}>
                       <Link
                         href={item.path}
+                        onClick={onNavigate}
                         className={`flex items-center gap-4 px-4 py-4 rounded-xl transition-all duration-300 ${
                           isActive && isWall
                             ? "bg-red-950/30 text-red-400 shadow-[inset_0_0_20px_rgba(220,38,38,0.15)] border border-red-800/40"
@@ -95,14 +112,17 @@ export function AppSidebar() {
                             : "text-muted-foreground hover:text-white hover:bg-white/5"
                         }`}
                       >
-                        <item.icon className={`w-5 h-5 transition-colors ${isWall ? "text-red-500/70" : isActive || isHighlight ? "text-primary" : ""}`} />
-                        <span className={`font-medium text-base tracking-wide ${isWall ? "font-black tracking-widest" : ""}`}>{item.name}</span>
-                        {isHighlight && !isActive && (
-                          <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-primary/20 text-primary border border-primary/30 rounded-md px-1.5 py-0.5">AI</span>
-                        )}
-                        {isWall && !isActive && (
-                          <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-red-950/40 text-red-500/70 border border-red-900/30 rounded-md px-1.5 py-0.5">???</span>
-                        )}
+                        <item.icon className={`w-5 h-5 flex-shrink-0 transition-colors ${isWall ? "text-red-500/70" : isActive || isHighlight ? "text-primary" : ""}`} />
+                        <span className={`font-medium text-base tracking-wide flex-1 min-w-0 truncate ${isWall ? "font-black tracking-widest" : ""}`}>{item.name}</span>
+
+                        {/* Notification badge (takes priority over other right-side tags) */}
+                        {badge && badge > 0 && !isActive ? (
+                          <Badge count={badge} />
+                        ) : isHighlight && !isActive ? (
+                          <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-primary/20 text-primary border border-primary/30 rounded-md px-1.5 py-0.5 flex-shrink-0">AI</span>
+                        ) : isWall && !isActive ? (
+                          <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-red-950/40 text-red-500/70 border border-red-900/30 rounded-md px-1.5 py-0.5 flex-shrink-0">???</span>
+                        ) : null}
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>

@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider, useAuth } from "@/context/auth";
+import { NotificationsProvider } from "@/context/notifications";
 import NotFound from "@/pages/not-found";
 import Games from "@/pages/games";
 import Browser from "@/pages/browser";
@@ -22,6 +23,7 @@ import FriendsPage from "@/pages/friends";
 import InboxPage from "@/pages/inbox";
 import DMsPage from "@/pages/dms";
 import UsersPage from "@/pages/users";
+import GlobalInboxPage from "@/pages/global-inbox";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 
 function Router() {
@@ -46,6 +48,7 @@ function Router() {
       <Route path="/dms/:username" component={DMsPage} />
       <Route path="/dms" component={DMsPage} />
       <Route path="/users" component={UsersPage} />
+      <Route path="/global-inbox" component={GlobalInboxPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -64,24 +67,26 @@ function AuthGate() {
   } as React.CSSProperties;
 
   return (
-    <SidebarProvider style={style}>
-      <div className="flex h-screen w-full bg-black text-white overflow-hidden">
-        <AppSidebar />
-        <div className="flex flex-col flex-1 overflow-hidden bg-black relative w-full border-l border-white/5 shadow-2xl">
-          <header className="md:hidden flex items-center p-4 border-b border-white/5 bg-black/90 backdrop-blur-xl z-50 shrink-0">
-            <SidebarTrigger className="text-white hover:bg-white/10 transition-colors rounded-lg" />
-            <div className="flex-1 flex justify-center pr-10">
-              <span className="font-display text-2xl font-black text-gradient-animated tracking-widest uppercase">
-                HORIZON
-              </span>
-            </div>
-          </header>
-          <main className="flex-1 overflow-hidden h-full relative">
-            <Router />
-          </main>
+    <NotificationsProvider>
+      <SidebarProvider style={style}>
+        <div className="flex h-screen w-full bg-black text-white overflow-hidden">
+          <AppSidebar />
+          <div className="flex flex-col flex-1 overflow-hidden bg-black relative w-full border-l border-white/5 shadow-2xl">
+            <header className="md:hidden flex items-center p-4 border-b border-white/5 bg-black/90 backdrop-blur-xl z-50 shrink-0">
+              <SidebarTrigger className="text-white hover:bg-white/10 transition-colors rounded-lg" />
+              <div className="flex-1 flex justify-center pr-10">
+                <span className="font-display text-2xl font-black text-gradient-animated tracking-widest uppercase">
+                  HORIZON
+                </span>
+              </div>
+            </header>
+            <main className="flex-1 overflow-hidden h-full relative">
+              <Router />
+            </main>
+          </div>
         </div>
-      </div>
-    </SidebarProvider>
+      </SidebarProvider>
+    </NotificationsProvider>
   );
 }
 

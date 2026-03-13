@@ -102,6 +102,15 @@ export const directMessages = pgTable("direct_messages", {
   isRead: boolean("is_read").default(false),
 });
 
+export const globalMessages = pgTable("global_messages", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull(),
+  author: text("author").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type GlobalMessage = typeof globalMessages.$inferSelect;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true });
 export const insertPageSchema = createInsertSchema(pages).omit({ id: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, timestamp: true });

@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useAuth } from "@/context/auth";
+import { useNotifications } from "@/context/notifications";
 import { ProfileModal } from "@/components/profile-modal";
 
 const COMMON_EMOJIS = ["😀", "😂", "😍", "🤣", "😊", "🙏", "😭", "😘", "👍", "✨", "🔥", "❤️", "💀", "💀", "💯", "🎉", "✅", "❌", "🤔", "👀"];
@@ -125,6 +126,7 @@ export default function Chat() {
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
   const { toast } = useToast();
+  const { markChatRead } = useNotifications();
 
   const AVAILABLE_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "proxy_helper"];
   const READ_ONLY_CHANNELS = ["announcements", "rules"];
@@ -147,6 +149,8 @@ export default function Chat() {
     fetchChannels();
     // Initialize read-only channels if not logged in yet
     initializeReadOnlyChannels();
+    // Clear chat notification badge
+    markChatRead();
   }, []);
 
   const initializeReadOnlyChannels = async () => {

@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage } from "@shared/schema";
 import { eq, and, or, sql, ne, desc } from "drizzle-orm";
 
 export interface IStorage {
@@ -62,6 +62,11 @@ export interface IStorage {
   getDMConversations(username: string): Promise<{ username: string; lastMessage: DirectMessage }[]>;
   markDMsRead(from: string, to: string): Promise<void>;
   getUnreadDMCount(username: string): Promise<number>;
+
+  // Global Inbox
+  getGlobalMessages(): Promise<GlobalMessage[]>;
+  createGlobalMessage(content: string, author: string): Promise<GlobalMessage>;
+  getGlobalMessagesAfter(timestamp: string): Promise<GlobalMessage[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -287,6 +292,20 @@ export class DatabaseStorage implements IStorage {
       and(eq(directMessages.toUsername, username), eq(directMessages.isRead, false))
     );
     return rows.length;
+  }
+
+  // --- Global Inbox ---
+  async getGlobalMessages(): Promise<GlobalMessage[]> {
+    return await db.select().from(globalMessages).orderBy(globalMessages.createdAt);
+  }
+  async createGlobalMessage(content: string, author: string): Promise<GlobalMessage> {
+    const [inserted] = await db.insert(globalMessages).values({ content, author }).returning();
+    return inserted;
+  }
+  async getGlobalMessagesAfter(timestamp: string): Promise<GlobalMessage[]> {
+    return await db.select().from(globalMessages).where(
+      sql`${globalMessages.createdAt} > ${timestamp}::timestamptz`
+    ).orderBy(globalMessages.createdAt);
   }
 }
 

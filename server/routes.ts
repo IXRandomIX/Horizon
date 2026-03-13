@@ -237,6 +237,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ ok: true });
   });
 
+  // ─── Global Inbox ─────────────────────────────────────────────────────────
+  app.get("/api/global-inbox", async (_req, res) => {
+    const msgs = await storage.getGlobalMessages();
+    res.json(msgs);
+  });
+
+  app.get("/api/global-inbox/after", async (req, res) => {
+    const { since } = req.query as { since: string };
+    if (!since) return res.json([]);
+    const msgs = await storage.getGlobalMessagesAfter(since);
+    res.json(msgs);
+  });
+
+  app.post("/api/global-inbox", async (req, res) => {
+    const caller = req.headers["x-username"] as string;
+    if (caller !== ADMIN_USER) return res.status(403).json({ message: "Only the owner can post to Global Inbox." });
+    const { content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ message: "Content required" });
+    const msg = await storage.createGlobalMessage(content.trim(), caller);
+    res.json(msg);
+  });
+
+  // ─── Chat unread count for notification badges ────────────────────────────
+  app.get("/api/messages/unread-count", async (req, res) => {
+    const { since, username } = req.query as { since: string; username: string };
+    if (!since || !username) return res.json({ count: 0 });
+    try {
+      const allChannels = await storage.getChannels(username);
+      let count = 0;
+      for (const ch of allChannels) {
+        const msgs = await storage.getMessages(ch.id);
+        count += msgs.filter(m => m.username !== username && new Date(m.timestamp) > new Date(since)).length;
+      }
+      res.json({ count });
+    } catch {
+      res.json({ count: 0 });
+    }
+  });
+
   // ─── Legacy chat auth (kept for backward compat) ──────────────────────────
   app.post("/api/chat/auth/login", async (req, res) => {
     const { username, password } = req.body;
