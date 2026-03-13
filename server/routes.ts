@@ -443,39 +443,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ─── HAIC (Gemini) ────────────────────────────────────────────────────────
-  app.post("/api/haic/chat", async (req, res) => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) return res.status(503).json({ message: "HAIC is not configured yet." });
-    const { messages } = req.body as { messages: { role: string; content: string }[] };
-    if (!messages || !Array.isArray(messages)) return res.status(400).json({ message: "Invalid request body." });
-    try {
-      const contents = messages.map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      }));
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: {
-              parts: [{ text: "You are HAIC — Horizon AI Code, an elite coding assistant. You specialize in writing, reviewing, debugging, and explaining code across all languages. You are precise, fast, and give clean, production-quality code with clear explanations. Format all code with proper markdown code blocks including the language identifier." }],
-            },
-            contents,
-            generationConfig: { temperature: 0.3, maxOutputTokens: 4096 },
-          }),
-        }
-      );
-      const data = await response.json() as any;
-      if (!response.ok) return res.status(500).json({ message: data?.error?.message || "HAIC request failed." });
-      const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || "";
-      res.json({ response: text });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message || "HAIC generation failed." });
-    }
-  });
 
   app.get(api.games.list.path, async (_req, res) => {
     try {
