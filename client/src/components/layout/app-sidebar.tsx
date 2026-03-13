@@ -1,5 +1,8 @@
 import { useLocation, Link } from "wouter";
-import { Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle, Users, Sparkles, BrickWall } from "lucide-react";
+import {
+  Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
+  Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare, LogOut, UsersRound
+} from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -8,8 +11,17 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarHeader
+  SidebarHeader,
+  SidebarFooter,
 } from "@/components/ui/sidebar";
+import { useAuth } from "@/context/auth";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 
 const navItems = [
   { name: "Announcements", path: "/announcements", icon: Megaphone },
@@ -24,8 +36,29 @@ const navItems = [
   { name: "THE WALL", path: "/the-wall", icon: BrickWall, wall: true },
 ];
 
+const socialItems = [
+  { name: "Friends", path: "/friends", icon: Heart },
+  { name: "Inbox", path: "/inbox", icon: Inbox },
+  { name: "DMs", path: "/dms", icon: MessageSquare },
+  { name: "Users", path: "/users", icon: UsersRound },
+];
+
 export function AppSidebar() {
   const [location] = useLocation();
+  const { user, logout } = useAuth();
+
+  const FONT_CLASSES: Record<string, string> = {
+    "Playfair Display": "font-playfair",
+    "EB Garamond": "font-garamond",
+    "Bodoni Moda": "font-bodoni",
+    "Cormorant": "font-cormorant",
+    "Instrument Serif": "font-instrument",
+    "Parisienne": "font-adios",
+    "sans": "font-sans",
+  };
+
+  const displayName = user?.displayName || user?.username || "";
+  const fontClass = FONT_CLASSES[user?.displayFont || "sans"] || "font-sans";
 
   return (
     <Sidebar className="border-r border-white/5 bg-black">
@@ -35,8 +68,9 @@ export function AppSidebar() {
         </h1>
         <div className="w-16 h-1 bg-gradient-to-r from-blue-600 via-purple-500 to-blue-600 mt-6 rounded-full opacity-60 shadow-[0_0_15px_rgba(168,85,247,0.5)]" />
       </SidebarHeader>
-      
+
       <SidebarContent className="px-4">
+        {/* Main Navigation */}
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu className="gap-3">
@@ -47,22 +81,22 @@ export function AppSidebar() {
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton asChild tooltip={item.name} isActive={isActive}>
-                      <Link 
-                        href={item.path} 
+                      <Link
+                        href={item.path}
                         className={`flex items-center gap-4 px-4 py-4 rounded-xl transition-all duration-300 ${
                           isActive && isWall
-                            ? 'bg-red-950/30 text-red-400 shadow-[inset_0_0_20px_rgba(220,38,38,0.15)] border border-red-800/40'
+                            ? "bg-red-950/30 text-red-400 shadow-[inset_0_0_20px_rgba(220,38,38,0.15)] border border-red-800/40"
                             : isWall
-                            ? 'text-red-500/70 hover:text-red-400 hover:bg-red-950/20 border border-red-900/20'
-                            : isActive 
-                            ? 'bg-primary/10 text-primary shadow-[inset_0_0_20px_rgba(124,58,237,0.15)] border border-primary/20' 
+                            ? "text-red-500/70 hover:text-red-400 hover:bg-red-950/20 border border-red-900/20"
+                            : isActive
+                            ? "bg-primary/10 text-primary shadow-[inset_0_0_20px_rgba(124,58,237,0.15)] border border-primary/20"
                             : isHighlight
-                            ? 'text-primary/80 hover:text-primary hover:bg-primary/5 border border-primary/10'
-                            : 'text-muted-foreground hover:text-white hover:bg-white/5'
+                            ? "text-primary/80 hover:text-primary hover:bg-primary/5 border border-primary/10"
+                            : "text-muted-foreground hover:text-white hover:bg-white/5"
                         }`}
                       >
-                        <item.icon className={`w-5 h-5 transition-colors ${isWall ? 'text-red-500/70' : isActive || isHighlight ? 'text-primary' : ''}`} />
-                        <span className={`font-medium text-base tracking-wide ${isWall ? 'font-black tracking-widest' : ''}`}>{item.name}</span>
+                        <item.icon className={`w-5 h-5 transition-colors ${isWall ? "text-red-500/70" : isActive || isHighlight ? "text-primary" : ""}`} />
+                        <span className={`font-medium text-base tracking-wide ${isWall ? "font-black tracking-widest" : ""}`}>{item.name}</span>
                         {isHighlight && !isActive && (
                           <span className="ml-auto text-[9px] font-bold uppercase tracking-widest bg-primary/20 text-primary border border-primary/30 rounded-md px-1.5 py-0.5">AI</span>
                         )}
@@ -77,7 +111,87 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Social Section */}
+        <SidebarGroup className="mt-2">
+          <div className="px-4 mb-2">
+            <p className="text-[10px] text-white/20 uppercase tracking-widest font-bold">Social</p>
+          </div>
+          <SidebarGroupContent>
+            <SidebarMenu className="gap-1.5">
+              {socialItems.map((item) => {
+                const isActive = location === item.path || location.startsWith(item.path + "/");
+                return (
+                  <SidebarMenuItem key={item.path}>
+                    <SidebarMenuButton asChild tooltip={item.name} isActive={isActive}>
+                      <Link
+                        href={item.path}
+                        className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
+                          isActive
+                            ? "bg-primary/10 text-primary border border-primary/20"
+                            : "text-muted-foreground hover:text-white hover:bg-white/5"
+                        }`}
+                      >
+                        <item.icon className={`w-4 h-4 ${isActive ? "text-primary" : ""}`} />
+                        <span className="font-medium text-sm tracking-wide">{item.name}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
       </SidebarContent>
+
+      {/* User Profile Footer */}
+      <SidebarFooter className="border-t border-white/5 p-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              data-testid="button-user-menu"
+              className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-white/5 transition-all group"
+            >
+              <div className="w-9 h-9 rounded-xl bg-white/10 border border-white/10 flex items-center justify-center text-sm font-black text-white/50 overflow-hidden flex-shrink-0">
+                {user?.avatar
+                  ? <img src={user.avatar} alt={user.username} className="w-full h-full object-cover" />
+                  : <span>{user?.username?.[0]?.toUpperCase()}</span>
+                }
+              </div>
+              <div className="min-w-0 flex-1 text-left">
+                <p className={`text-sm font-bold text-white truncate ${fontClass}`}>{displayName}</p>
+                <p className="text-xs text-white/30 truncate">@{user?.username}</p>
+              </div>
+              {user?.role && user.role !== "User" && (
+                <span className="text-[9px] font-bold text-primary/70 bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 flex-shrink-0 uppercase tracking-wider">
+                  {user.role}
+                </span>
+              )}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent
+            side="top"
+            align="start"
+            className="w-52 bg-[#0e0e14] border border-white/10 rounded-xl"
+          >
+            <DropdownMenuItem asChild>
+              <Link href="/profile" className="flex items-center gap-2 cursor-pointer text-white/70 hover:text-white">
+                <UserCircle className="w-4 h-4" />
+                Edit Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator className="bg-white/5" />
+            <DropdownMenuItem
+              onClick={logout}
+              className="text-red-400 hover:text-red-300 focus:text-red-300 cursor-pointer"
+              data-testid="button-logout"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </SidebarFooter>
     </Sidebar>
   );
 }
