@@ -33,7 +33,7 @@ export default function Proxies() {
     try {
       const res = await fetch("/api/proxies");
       const data = await res.json();
-      setProxies(data);
+      setProxies(Array.isArray(data) ? data : []);
     } catch (err) {
       console.error("Failed to fetch proxies");
     }

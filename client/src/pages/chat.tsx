@@ -153,8 +153,9 @@ export default function Chat() {
     // Ensure announcements and rules channels exist
     const res = await fetch("/api/chat/channels");
     const channels = await res.json();
-    const hasAnnouncements = channels.some((ch: any) => ch.name === "announcements");
-    const hasRules = channels.some((ch: any) => ch.name === "rules");
+    const channelArr = Array.isArray(channels) ? channels : [];
+    const hasAnnouncements = channelArr.some((ch: any) => ch.name === "announcements");
+    const hasRules = channelArr.some((ch: any) => ch.name === "rules");
     
     if (!hasAnnouncements) {
       await fetch("/api/chat/channels", {
