@@ -1,0 +1,92 @@
+﻿Getting Started
+Goal: go from zero to a first working chat with minimal setup.
+Fastest chat: open the Control UI (no channel setup needed). Run openclaw dashboard and chat in the browser, or open http://127.0.0.1:18789/ on the gateway host. Docs: Dashboard and Control UI.
+​
+Prereqs
+* Node 24 recommended (Node 22 LTS, currently 22.16+, still supported for compatibility)
+Check your Node version with node --version if you are unsure.
+curl -fsSL https://openclaw.ai/install.sh | bash
+Run the onboarding wizard
+openclaw onboard --install-daemon
+The wizard configures auth, gateway settings, and optional channels. See Onboarding Wizard for details.
+3
+Check the Gateway
+If you installed the service, it should already be running:
+openclaw gateway status
+Open the Control UI
+openclaw dashboard
+If the Control UI loads, your Gateway is ready for use.
+​
+Optional checks and extras
+Run the Gateway in the foreground
+Useful for quick tests or troubleshooting.
+openclaw gateway --port 18789
+Send a test message
+Requires a configured channel.
+openclaw message send --target +15555550123 --message "Hello from OpenClaw"
+Useful environment variables
+If you run OpenClaw as a service account or want custom config/state locations:
+* OPENCLAW_HOME sets the home directory used for internal path resolution.
+* OPENCLAW_STATE_DIR overrides the state directory.
+* OPENCLAW_CONFIG_PATH overrides the config file path.
+Full environment variable reference: Environment vars.
+​
+Go deeper
+Onboarding Wizard (details)
+Full CLI wizard reference and advanced options.
+macOS app onboarding
+First run flow for the macOS app.
+​
+What you will have
+* A running Gateway
+* Auth configured
+* Control UI access or a connected channel
+​
+Next steps
+* DM safety and approvals: Pairing
+* Connect more channels: Channels
+* Advanced workflows and from source: Setup
+
+
+
+
+
+
+
+
+
+
+Moonshot provides the Kimi API with OpenAI-compatible endpoints. Configure the provider and set the default model to moonshot/kimi-k2.5, or use Kimi Coding with kimi-coding/k2p5.
+Current Kimi K2 model IDs:
+* kimi-k2.5
+* kimi-k2-0905-preview
+* kimi-k2-turbo-preview
+* kimi-k2-thinking
+* kimi-k2-thinking-turbo
+
+
+openclaw onboard --auth-choice moonshot-api-key
+Kimi Coding:
+openclaw onboard --auth-choice kimi-code-api-key
+Note: Moonshot and Kimi Coding are separate providers. Keys are not interchangeable, endpoints differ, and model refs differ (Moonshot uses moonshot/..., Kimi Coding uses kimi-coding/...).
+So might as well use Kimi.
+
+
+{
+  env: { KIMI_API_KEY: "sk-..." },
+  agents: {
+    defaults: {
+      model: { primary: "kimi-coding/k2p5" },
+      models: {
+        "kimi-coding/k2p5": { alias: "Kimi K2.5" },
+      },
+    },
+  },
+}
+
+
+Notes
+* Moonshot model refs use moonshot/<modelId>. Kimi Coding model refs use kimi-coding/<modelId>.
+* Override pricing and context metadata in models.providers if needed.
+* If Moonshot publishes different context limits for a model, adjust contextWindow accordingly.
+* Use https://api.moonshot.ai/v1 for the international endpoint, and https://api.moonshot.cn/v1 for the China endpoint.

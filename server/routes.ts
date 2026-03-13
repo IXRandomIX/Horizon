@@ -367,14 +367,14 @@ When analyzing images or files, describe what you see in detail before answering
     }
 
     try {
-      const response = await fetch("https://api.moonshot.cn/v1/chat/completions", {
+      const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "moonshot-v1-8k",
+          model: "kimi-k2.5",
           messages: [
             {
               role: "system",
