@@ -374,7 +374,7 @@ When analyzing images or files, describe what you see in detail before answering
           "Authorization": `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-          model: "kimi-latest",
+          model: "moonshot-v1-8k",
           messages: [
             {
               role: "system",
