@@ -443,19 +443,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ─── HAIC (Kimi) ──────────────────────────────────────────────────────────
+  // ─── HAIC (OpenAI) ────────────────────────────────────────────────────────
   app.post("/api/haic/chat", async (req, res) => {
-    const apiKey = process.env.KIMI_API_KEY;
+    const apiKey = process.env.OPENAI_API_KEY;
     if (!apiKey) return res.status(503).json({ message: "HAIC is not configured yet." });
     const { messages } = req.body as { messages: { role: string; content: string }[] };
     if (!messages || !Array.isArray(messages)) return res.status(400).json({ message: "Invalid request body." });
     try {
-      const response = await fetch("https://api.moonshot.ai/v1/chat/completions", {
+      const response = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
         body: JSON.stringify({
-          model: "kimi-k2.5",
-          messages: [{ role: "system", content: "You are HAIC — Horizon AI Code, an elite coding assistant powered by Kimi. You specialize in writing, reviewing, debugging, and explaining code across all languages. You are precise, fast, and give clean, production-quality code with clear explanations. Format all code with proper markdown code blocks including the language identifier." }, ...messages],
+          model: "gpt-4o",
+          messages: [{ role: "system", content: "You are HAIC — Horizon AI Code, an elite coding assistant. You specialize in writing, reviewing, debugging, and explaining code across all languages. You are precise, fast, and give clean, production-quality code with clear explanations. Format all code with proper markdown code blocks including the language identifier." }, ...messages],
           temperature: 0.3,
           max_tokens: 4096,
         }),
