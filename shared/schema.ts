@@ -49,12 +49,18 @@ export const reactions = pgTable("reactions", {
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   username: text("username").notNull().unique(),
-  password: text("password"), // Only for admin
+  password: text("password"),
   role: text("role").default("User"),
   roleColor: text("role_color").default("#9ca3af"),
   roles: text("roles").array().default(sql`'{}'::text[]`),
   animation: text("animation").default("none"),
   font: text("font").default("sans"),
+  displayName: text("display_name"),
+  displayFont: text("display_font").default("sans"),
+  bio: text("bio").default(""),
+  avatar: text("avatar").default(""),
+  banner: text("banner").default(""),
+  bannerColor: text("banner_color").default("#1a1a2e"),
 });
 
 export const proxies = pgTable("proxies", {
@@ -73,17 +79,43 @@ export const pages = pgTable("pages", {
   fontFamily: text("font_family").default("Playfair Display"),
 });
 
+export const friendships = pgTable("friendships", {
+  id: serial("id").primaryKey(),
+  fromUsername: text("from_username").notNull(),
+  toUsername: text("to_username").notNull(),
+  status: text("status").default("pending"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const blockedUsers = pgTable("blocked_users", {
+  id: serial("id").primaryKey(),
+  blocker: text("blocker").notNull(),
+  blocked: text("blocked").notNull(),
+});
+
+export const directMessages = pgTable("direct_messages", {
+  id: serial("id").primaryKey(),
+  fromUsername: text("from_username").notNull(),
+  toUsername: text("to_username").notNull(),
+  content: text("content").notNull(),
+  timestamp: timestamp("timestamp").defaultNow(),
+  isRead: boolean("is_read").default(false),
+});
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true });
 export const insertPageSchema = createInsertSchema(pages).omit({ id: true });
-export type Proxy = typeof proxies.$inferSelect;
-export type Page = typeof pages.$inferSelect;
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, timestamp: true });
 export const insertUserSchema = createInsertSchema(users).omit({ id: true });
 export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
 export const insertReactionSchema = createInsertSchema(reactions).omit({ id: true });
 
+export type Proxy = typeof proxies.$inferSelect;
+export type Page = typeof pages.$inferSelect;
 export type Channel = typeof channels.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type User = typeof users.$inferSelect;
 export type Role = typeof roles.$inferSelect;
 export type Reaction = typeof reactions.$inferSelect;
+export type Friendship = typeof friendships.$inferSelect;
+export type BlockedUser = typeof blockedUsers.$inferSelect;
+export type DirectMessage = typeof directMessages.$inferSelect;

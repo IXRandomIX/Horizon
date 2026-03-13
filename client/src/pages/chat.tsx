@@ -9,6 +9,8 @@ import { queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useAuth } from "@/context/auth";
+import { ProfileModal } from "@/components/profile-modal";
 
 const COMMON_EMOJIS = ["😀", "😂", "😍", "🤣", "😊", "🙏", "😭", "😘", "👍", "✨", "🔥", "❤️", "💀", "💀", "💯", "🎉", "✅", "❌", "🤔", "👀"];
 
