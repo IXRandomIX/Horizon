@@ -222,8 +222,9 @@ export default function Chat() {
     const usernameParam = user ? `?username=${user.username}` : "";
     const res = await fetch(`/api/chat/channels${usernameParam}`);
     const data = await res.json();
-    setChannels(data);
-    if (data.length > 0 && !activeChannel) setActiveChannel(data[0]);
+    const channelList = Array.isArray(data) ? data : [];
+    setChannels(channelList);
+    if (channelList.length > 0 && !activeChannel) setActiveChannel(channelList[0]);
   };
 
   const fetchRoles = async () => {
