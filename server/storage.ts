@@ -68,6 +68,8 @@ export interface IStorage {
   getGlobalMessages(): Promise<GlobalMessage[]>;
   createGlobalMessage(content: string, author: string): Promise<GlobalMessage>;
   getGlobalMessagesAfter(timestamp: string): Promise<GlobalMessage[]>;
+  updateGlobalMessage(id: number, content: string): Promise<GlobalMessage>;
+  deleteGlobalMessage(id: number): Promise<void>;
 
   // Sessions
   createSession(username: string): Promise<string>;
@@ -327,6 +329,13 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(globalMessages).where(
       sql`${globalMessages.createdAt} > ${timestamp}::timestamptz`
     ).orderBy(globalMessages.createdAt);
+  }
+  async updateGlobalMessage(id: number, content: string): Promise<GlobalMessage> {
+    const [updated] = await db.update(globalMessages).set({ content }).where(eq(globalMessages.id, id)).returning();
+    return updated;
+  }
+  async deleteGlobalMessage(id: number): Promise<void> {
+    await db.delete(globalMessages).where(eq(globalMessages.id, id));
   }
 
   // --- Sessions ---

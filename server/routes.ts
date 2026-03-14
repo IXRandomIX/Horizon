@@ -307,6 +307,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(msg);
   });
 
+  app.patch("/api/global-inbox/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
+    const { content } = req.body;
+    if (!content?.trim()) return res.status(400).json({ message: "Content required" });
+    const msg = await storage.updateGlobalMessage(Number(req.params.id), content.trim());
+    res.json(msg);
+  });
+
+  app.delete("/api/global-inbox/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
+    await storage.deleteGlobalMessage(Number(req.params.id));
+    res.status(204).end();
+  });
+
   // ─── The Wall (server-side verification) ─────────────────────────────────
   app.post("/api/wall/verify", async (req, res) => {
     const auth = req.headers["authorization"] as string;
@@ -778,6 +792,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           allGames.push(game);
         }
       };
+
+      addGame({ id: 99999, name: "Roblox V2", url: "https://howtopullhuzz67.b-cdn.net", cover: "", author: "Horizon", source: "custom", directIframe: true });
 
       if (gnMathRes.status === "fulfilled" && gnMathRes.value.ok) {
         const data = await gnMathRes.value.json();

@@ -9,6 +9,19 @@ import type { Game } from "@shared/routes";
 
 const PAGE_SIZE = 60;
 
+function DirectIframeFrame({ url, title }: { url: string; title: string }) {
+  return (
+    <iframe
+      id="game-iframe"
+      src={url}
+      className="absolute inset-0 w-full h-full border-0 bg-black"
+      allow="fullscreen; autoplay; encrypted-media; gyroscope; picture-in-picture; pointer-lock"
+      title={title}
+      sandbox="allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation allow-top-navigation-by-user-activation"
+    />
+  );
+}
+
 function GameFrame({ url, title }: { url: string; title: string }) {
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -128,6 +141,7 @@ export default function Games() {
 
   if (playingGame) {
     const gameUrl = playingGame.url?.replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/gn-math/html@main') || '';
+    const isDirectIframe = (playingGame as any).directIframe === true;
 
     return (
       <div className="flex flex-col h-full w-full bg-black animate-in fade-in zoom-in-95 duration-500">
@@ -160,7 +174,10 @@ export default function Games() {
         </div>
         
         <div ref={gameContainerRef} className="flex-1 w-full bg-black relative">
-          <GameFrame url={gameUrl} title={playingGame.name} />
+          {isDirectIframe
+            ? <DirectIframeFrame url={gameUrl} title={playingGame.name} />
+            : <GameFrame url={gameUrl} title={playingGame.name} />
+          }
         </div>
       </div>
     );
