@@ -731,5 +731,101 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ─── SoundCloud Music ────────────────────────────────────────────────────────
+  let _scClientId: string | null = null;
+  let _scClientIdTs = 0;
+
+  async function getScClientId(): Promise<string> {
+    if (_scClientId && Date.now() - _scClientIdTs < 12 * 60 * 60 * 1000) return _scClientId;
+    const pageRes = await fetch("https://soundcloud.com/", {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" },
+    });
+    const html = await pageRes.text();
+    const scriptUrls = [...html.matchAll(/src="(https:\/\/a-v2\.sndcdn\.com\/assets\/[^"]+\.js)"/g)].map(m => m[1]);
+    for (const url of scriptUrls.reverse().slice(0, 8)) {
+      try {
+        const scriptRes = await fetch(url, { headers: { "User-Agent": "Mozilla/5.0" } });
+        const text = await scriptRes.text();
+        const match = text.match(/client_id:"([a-zA-Z0-9]{32})"/);
+        if (match) { _scClientId = match[1]; _scClientIdTs = Date.now(); return _scClientId; }
+      } catch {}
+    }
+    throw new Error("Could not obtain SoundCloud client_id");
+  }
+
+  app.get("/api/music/search", async (req, res) => {
+    const q = (req.query.q as string || "").trim();
+    if (!q) return res.json([]);
+    try {
+      const cid = await getScClientId();
+      const r = await fetch(`https://api-v2.soundcloud.com/search/tracks?q=${encodeURIComponent(q)}&client_id=${cid}&limit=30&offset=0`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      const data = await r.json();
+      res.json(data.collection || []);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/music/new", async (_req, res) => {
+    try {
+      const cid = await getScClientId();
+      const r = await fetch(`https://api-v2.soundcloud.com/charts?kind=trending&genre=soundcloud%3Agenres%3Aall-music&client_id=${cid}&limit=30`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      const data = await r.json();
+      const tracks = (data.collection || []).map((item: any) => item.track).filter(Boolean);
+      res.json(tracks);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/music/stream/:trackId", async (req, res) => {
+    try {
+      const cid = await getScClientId();
+      const trackId = req.params.trackId;
+      const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${cid}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      const track = await trackRes.json();
+      const transcodings: any[] = track?.media?.transcodings || [];
+      const progressive = transcodings.find((t: any) => t.format?.protocol === "progressive");
+      if (!progressive) return res.status(404).json({ message: "No stream available" });
+      const streamRes = await fetch(`${progressive.url}?client_id=${cid}`, { headers: { "User-Agent": "Mozilla/5.0" } });
+      const streamData = await streamRes.json();
+      if (!streamData.url) return res.status(404).json({ message: "No stream URL" });
+      res.redirect(streamData.url);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/music/download/:trackId", async (req, res) => {
+    try {
+      const cid = await getScClientId();
+      const trackId = req.params.trackId;
+      const title = ((req.query.title as string) || "track").replace(/[^a-z0-9\s-]/gi, "_");
+      const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${cid}`, {
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      const track = await trackRes.json();
+      const transcodings: any[] = track?.media?.transcodings || [];
+      const progressive = transcodings.find((t: any) => t.format?.protocol === "progressive");
+      if (!progressive) return res.status(404).json({ message: "Download not available for this track" });
+      const streamRes = await fetch(`${progressive.url}?client_id=${cid}`, { headers: { "User-Agent": "Mozilla/5.0" } });
+      const streamData = await streamRes.json();
+      if (!streamData.url) return res.status(404).json({ message: "No stream URL" });
+      const audioRes = await fetch(streamData.url);
+      if (!audioRes.ok || !audioRes.body) return res.status(500).json({ message: "Failed to fetch audio" });
+      res.setHeader("Content-Disposition", `attachment; filename="${title}.mp3"`);
+      res.setHeader("Content-Type", "audio/mpeg");
+      const reader = (audioRes.body as any).getReader();
+      const pump = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) { res.end(); break; }
+          res.write(Buffer.from(value));
+        }
+      };
+      await pump();
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   return httpServer;
 }

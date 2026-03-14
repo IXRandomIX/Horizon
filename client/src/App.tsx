@@ -26,6 +26,7 @@ import UsersPage from "@/pages/users";
 import GlobalInboxPage from "@/pages/global-inbox";
 import MoviesPage from "@/pages/movies";
 import { AppSidebar } from "@/components/layout/app-sidebar";
+import MusicPlayer from "@/components/music-player";
 
 function Router() {
   return (
@@ -95,6 +96,7 @@ function AuthGate() {
             </main>
           </div>
         </div>
+        <MusicPlayer />
       </SidebarProvider>
     </NotificationsProvider>
   );
