@@ -25,6 +25,7 @@ import DMsPage from "@/pages/dms";
 import UsersPage from "@/pages/users";
 import GlobalInboxPage from "@/pages/global-inbox";
 import MoviesPage from "@/pages/movies";
+import EaglerCraft from "@/pages/eaglercraft";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import MusicPlayer from "@/components/music-player";
 
@@ -52,6 +53,7 @@ function Router() {
       <Route path="/users" component={UsersPage} />
       <Route path="/global-inbox" component={GlobalInboxPage} />
       <Route path="/movies" component={MoviesPage} />
+      <Route path="/eaglercraft" component={EaglerCraft} />
       <Route component={NotFound} />
     </Switch>
   );

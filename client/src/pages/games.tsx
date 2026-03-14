@@ -4,7 +4,7 @@ import { GameCard } from "@/components/game-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, ArrowLeft, ExternalLink, Gamepad2, Loader2 } from "lucide-react";
+import { Search, ArrowLeft, Maximize2, Gamepad2, Loader2 } from "lucide-react";
 import type { Game } from "@shared/routes";
 
 const PAGE_SIZE = 60;
@@ -60,9 +60,10 @@ function GameFrame({ url, title }: { url: string; title: string }) {
 
   return (
     <iframe 
+      id="game-iframe"
       srcDoc={content || ""} 
       className="absolute inset-0 w-full h-full border-0 bg-white" 
-      allow="fullscreen; autoplay; encrypted-media; gyroscope; picture-in-picture" 
+      allow="fullscreen; autoplay; encrypted-media; gyroscope; picture-in-picture; pointer-lock" 
       title={title}
       sandbox="allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation allow-top-navigation-by-user-activation"
     />
@@ -76,6 +77,7 @@ export default function Games() {
   const [playingGame, setPlayingGame] = useState<Game | null>(null);
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const loaderRef = useRef<HTMLDivElement>(null);
+  const gameContainerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(search), 250);
@@ -110,6 +112,20 @@ export default function Games() {
     return () => observer.disconnect();
   }, [loadMore]);
 
+  const handleFullscreen = useCallback(() => {
+    const el = gameContainerRef.current;
+    if (!el) return;
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch(() => {});
+    } else {
+      el.requestFullscreen().catch(() => {
+        // Fallback: try the iframe directly
+        const iframe = document.getElementById("game-iframe") as HTMLIFrameElement | null;
+        iframe?.requestFullscreen?.().catch(() => {});
+      });
+    }
+  }, []);
+
   if (playingGame) {
     const gameUrl = playingGame.url?.replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/gn-math/html@main') || '';
 
@@ -134,16 +150,16 @@ export default function Games() {
           </div>
           
           <Button 
-            onClick={() => window.open(gameUrl, '_blank')} 
+            onClick={handleFullscreen}
             variant="outline" 
             className="border-white/10 hover:bg-white/10 hover:border-white/20 text-white gap-2 rounded-xl h-12 px-5 relative z-10"
           >
-            <ExternalLink className="w-4 h-4" /> 
+            <Maximize2 className="w-4 h-4" /> 
             <span className="hidden sm:inline font-medium">Fullscreen</span>
           </Button>
         </div>
         
-        <div className="flex-1 w-full bg-black relative">
+        <div ref={gameContainerRef} className="flex-1 w-full bg-black relative">
           <GameFrame url={gameUrl} title={playingGame.name} />
         </div>
       </div>

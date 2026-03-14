@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
   Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
-  LogOut, UsersRound, MailOpen, Clapperboard
+  LogOut, UsersRound, MailOpen, Clapperboard, Sword
 } from "lucide-react";
 import {
   Sidebar,
@@ -67,6 +67,7 @@ export function AppSidebar() {
     { name: "Partners", path: "/partners", icon: Users },
     { name: "Movies", path: "/movies", icon: Clapperboard },
     { name: "Games Portal", path: "/games", icon: Gamepad2 },
+    { name: "EaglerCraft", path: "/eaglercraft", icon: Sword },
     { name: "Proxy Browser", path: "/browser", icon: Globe },
     { name: "Proxies", path: "/proxies", icon: ShieldCheck },
     { name: "Media / Tools", path: "/tools", icon: Wrench },
