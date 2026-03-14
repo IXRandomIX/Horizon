@@ -795,6 +795,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       };
 
       addGame({ id: 99999, name: "Roblox V2", url: "https://sciencerules.xyz/embed.html#https://68.ip.nowgg.fun/apps/a/19900/b.html", cover: "", author: "sciencerules.xyz", source: "sciencerules", directIframe: true });
+      addGame({ id: 99998, name: "Roblox V3", url: "/nowgg-proxy/", cover: "", author: "now.gg", source: "custom", directIframe: true });
 
       if (gnMathRes.status === "fulfilled" && gnMathRes.value.ok) {
         const data = await gnMathRes.value.json();
@@ -874,6 +875,83 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       res.status(500).json({ message: "Failed to fetch games" });
     }
   });
+
+  // ── now.gg Roblox V3 Reverse Proxy ───────────────────────────────────────
+  // All nowgg traffic is routed through our domain so content blockers see nothing.
+  const NOWGG_ORIGIN = "https://68.ip.nowgg.fun";
+  const PROXY_BASE   = "/nowgg-proxy";
+
+  const NOWGG_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+  // Map each nowgg origin to a short proxy prefix
+  const NOWGG_ORIGIN_MAP: Record<string, string> = {
+    "https://68.ip.nowgg.fun": `${PROXY_BASE}/__o__`,
+    "https://cdn.nowgg.fun":   `${PROXY_BASE}/__cdn1__`,
+    "https://cdn.now.gg":      `${PROXY_BASE}/__cdn2__`,
+    "https://now.gg":          `${PROXY_BASE}/__ngg__`,
+  };
+
+  function rewriteNowGG(text: string): string {
+    for (const [origin, prefix] of Object.entries(NOWGG_ORIGIN_MAP)) {
+      // Plain string replacement
+      text = text.split(origin).join(prefix);
+      // JSON-escaped variant (backslash before each slash)
+      text = text.split(origin.replace(/\//g, "\\/")).join(prefix.replace(/\//g, "\\/"));
+    }
+    // Rewrite root-relative paths (e.g. /2/_next/...) to our proxy
+    text = text.replace(/(["'`])(\/(?!\/)[^"'`\s)]+)/g, (_, q, p) => {
+      if (p.startsWith(PROXY_BASE)) return `${q}${p}`;
+      return `${q}${PROXY_BASE}/__rel__${p}`;
+    });
+    return text;
+  }
+
+  async function proxyNowGGUpstream(targetUrl: string, res: any) {
+    const upstream = await fetch(targetUrl, {
+      headers: { "User-Agent": NOWGG_UA, "Referer": NOWGG_ORIGIN, "Origin": NOWGG_ORIGIN },
+    });
+    const ct = upstream.headers.get("content-type") || "application/octet-stream";
+    res.setHeader("Content-Type", ct);
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
+    res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
+    if (ct.includes("text") || ct.includes("javascript")) {
+      let body = await upstream.text();
+      body = rewriteNowGG(body);
+      res.send(body);
+    } else {
+      const buf = await upstream.arrayBuffer();
+      res.send(Buffer.from(buf));
+    }
+  }
+
+  // Serve the proxied Roblox V3 entry page
+  app.get(`${PROXY_BASE}/`, async (_req, res) => {
+    try {
+      await proxyNowGGUpstream(`${NOWGG_ORIGIN}/apps/a/5349/b.html`, res);
+    } catch (e: any) {
+      res.status(502).send("Proxy error: " + e.message);
+    }
+  });
+
+  function nowggRoute(prefix: string, origin: string) {
+    const re = new RegExp(`^${PROXY_BASE.replace(/\//g, "\\/")}\\/${prefix}\\/?(.*)`);
+    app.get(re, async (req: any, res: any) => {
+      const tail = req.params[0] || "";
+      const qs = req.url.includes("?") ? "?" + req.url.split("?")[1] : "";
+      try {
+        await proxyNowGGUpstream(`${origin}/${tail}${qs}`, res);
+      } catch {
+        res.status(502).send("Proxy error");
+      }
+    });
+  }
+
+  nowggRoute("__rel__",  NOWGG_ORIGIN);
+  nowggRoute("__o__",    "https://68.ip.nowgg.fun");
+  nowggRoute("__cdn1__", "https://cdn.nowgg.fun");
+  nowggRoute("__cdn2__", "https://cdn.now.gg");
+  nowggRoute("__ngg__",  "https://now.gg");
 
   // ── Movies (TMDB proxy + bCine.app) ──────────────────────────────────────
   const TMDB_KEY = "3e20e76d6d210b6cb128d17d233b64dc";
