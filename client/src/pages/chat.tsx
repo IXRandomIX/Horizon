@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,7 +9,7 @@ import { queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useAuth, getSessionToken } from "@/context/auth";
+import { useAuth, getSessionToken, authFetch } from "@/context/auth";
 import { useNotifications } from "@/context/notifications";
 import { ProfileModal } from "@/components/profile-modal";
 
@@ -97,7 +97,8 @@ type Channel = {
 };
 
 export default function Chat() {
-  const [user, setUser] = useState<{ username: string; role: string; isAdmin: boolean } | null>(null);
+  const { user: authUser, updateUser: updateAuthUser } = useAuth();
+  const [user, setUser] = useState<{ username: string; role: string; isAdmin: boolean; roles?: string[]; roleColor?: string; font?: string; animation?: string } | null>(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -138,15 +139,39 @@ export default function Chat() {
     const userRoles = roles.filter(r => user.roles.includes(r.name));
     return userRoles.some(r => r.permissions && r.permissions.includes(permission));
   };
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
   const justSentRef = useRef(false);
 
+  const scrollToBottom = useCallback((force = false) => {
+    if (!messagesContainerRef.current) return;
+    const el = messagesContainerRef.current;
+    const isNearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+    if (force || !isUserScrolling || isNearBottom) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 50);
+    }
+  }, [isUserScrolling]);
+
   useEffect(() => {
-    const saved = localStorage.getItem("horizon_chat_user");
-    if (saved) setUser(JSON.parse(saved));
+    if (authUser) {
+      setUser({
+        username: authUser.username,
+        role: authUser.role,
+        isAdmin: authUser.isAdmin,
+        roles: authUser.roles,
+        roleColor: authUser.roleColor,
+        font: authUser.font,
+        animation: authUser.animation,
+      });
+    } else {
+      setUser(null);
+    }
+  }, [authUser]);
+
+  useEffect(() => {
     fetchChannels();
     initializeReadOnlyChannels();
     markChatRead();
@@ -181,13 +206,13 @@ export default function Chat() {
   }, [activeChannel]);
 
   useEffect(() => {
-    if (!isUserScrolling || justSentRef.current) {
+    if (justSentRef.current) {
       justSentRef.current = false;
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      }, 50);
+      scrollToBottom(true);
+    } else {
+      scrollToBottom(false);
     }
-  }, [messages, isUserScrolling]);
+  }, [messages]);
 
   // Real-time polling for new messages
   useEffect(() => {
@@ -240,15 +265,17 @@ export default function Chat() {
 
   const handleUpdateUser = async (updates: any) => {
     if (!user) return;
-    const res = await fetch(`/api/chat/users/${user.username}`, {
+    const res = await authFetch(`/api/chat/users/${user.username}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(updates),
     });
     if (res.ok) {
       const updatedUser = await res.json();
-      setUser({ ...user, ...updatedUser });
-      localStorage.setItem("horizon_chat_user", JSON.stringify({ ...user, ...updatedUser }));
+      const merged = { ...user, ...updatedUser };
+      setUser(merged);
+      updateAuthUser(updatedUser);
+      localStorage.setItem("horizon_chat_user", JSON.stringify(merged));
       toast({ title: "Customization updated" });
     }
   };
@@ -263,7 +290,7 @@ export default function Chat() {
   }, []);
 
   const handleCreateChannel = async () => {
-    const res = await fetch("/api/chat/channels", {
+    const res = await authFetch("/api/chat/channels", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ 
@@ -310,7 +337,7 @@ export default function Chat() {
   };
 
   const handleCreateRole = async () => {
-    const res = await fetch("/api/chat/roles", {
+    const res = await authFetch("/api/chat/roles", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: newRoleName, color: newRoleColor, permissions: rolePermissions }),
@@ -328,7 +355,7 @@ export default function Chat() {
       toast({ title: "Please enter username and select roles", variant: "destructive" });
       return;
     }
-    const res = await fetch(`/api/chat/users/${assignUsername}/roles`, {
+    const res = await authFetch(`/api/chat/users/${assignUsername}/roles`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ roles: selectedRolesForUser }),
@@ -396,7 +423,7 @@ export default function Chat() {
   };
 
   const handleEditMessage = async (id: number) => {
-    const res = await fetch(`/api/chat/messages/${id}`, {
+    const res = await authFetch(`/api/chat/messages/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ content: editContent }),
@@ -409,7 +436,7 @@ export default function Chat() {
   };
 
   const handleDeleteMessage = async (id: number) => {
-    const res = await fetch(`/api/chat/messages/${id}`, {
+    const res = await authFetch(`/api/chat/messages/${id}`, {
       method: "DELETE",
     });
     if (res.ok) {
@@ -601,7 +628,7 @@ export default function Chat() {
               <p className={`font-bold truncate ${user.isAdmin ? 'text-gradient-animated' : 'text-white'}`}>{user.username}</p>
               <p className="text-xs text-muted-foreground truncate">{user.role}</p>
             </div>
-            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white" onClick={() => { setUser(null); localStorage.removeItem("horizon_chat_user"); }}><LogOut className="w-4 h-4" /></Button>
+            <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white" onClick={() => { authUser && (window.location.href = "/"); }}><LogOut className="w-4 h-4" /></Button>
           </div>
           {userHasPermission("admin_panel") && (
             <Button variant="outline" className="w-full mt-4 border-primary/30 hover:bg-primary/10 text-primary gap-2" onClick={() => setShowAdminPanel(!showAdminPanel)}>
@@ -677,12 +704,17 @@ export default function Chat() {
             </div>
           )}
 
-          <ScrollArea className="flex-1 px-6 py-4" ref={scrollRef} onScroll={() => {
-            if (scrollRef.current) {
-              const isAtBottom = scrollRef.current.scrollHeight - scrollRef.current.scrollTop - scrollRef.current.clientHeight < 50;
-              setIsUserScrolling(!isAtBottom);
-            }
-          }}>
+          <div
+            className="flex-1 px-6 py-4 overflow-y-auto custom-scrollbar"
+            ref={messagesContainerRef}
+            onScroll={() => {
+              const el = messagesContainerRef.current;
+              if (el) {
+                const isAtBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100;
+                setIsUserScrolling(!isAtBottom);
+              }
+            }}
+          >
             <div className="space-y-6">
               {messages.map((msg) => (
                 <div key={msg.id} className="group flex flex-col gap-1 hover:bg-white/[0.02] -mx-6 px-6 py-2 transition-all relative">
@@ -814,8 +846,9 @@ export default function Chat() {
                   </AnimatePresence>
                 </div>
               ))}
+              <div ref={messagesEndRef} />
             </div>
-          </ScrollArea>
+          </div>
         </div>
 
         {/* Message Input - Fixed at Bottom */}
@@ -936,7 +969,7 @@ export default function Chat() {
                             </div>
                             <Button onClick={async () => {
                               const displayOnBoard = (document.getElementById("displayOnBoard") as HTMLInputElement)?.checked ?? true;
-                              await fetch("/api/chat/roles", {
+                              await authFetch("/api/chat/roles", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ name: newRoleName, color: newRoleColor, permissions: rolePermissions, displayOnBoard }),
@@ -988,7 +1021,7 @@ export default function Chat() {
                                 </div>
                                 <Button variant="ghost" size="icon" onClick={async () => {
                                   const newDisplay = !role.displayOnBoard;
-                                  await fetch(`/api/chat/roles/${role.id}`, {
+                                  await authFetch(`/api/chat/roles/${role.id}`, {
                                     method: "PATCH",
                                     headers: { "Content-Type": "application/json" },
                                     body: JSON.stringify({ displayOnBoard: newDisplay }),
@@ -998,7 +1031,7 @@ export default function Chat() {
                                   <Eye className="w-4 h-4" />
                                 </Button>
                                 <Button variant="ghost" size="icon" onClick={async () => {
-                                  await fetch(`/api/chat/roles/${role.id}`, { method: "DELETE" });
+                                  await authFetch(`/api/chat/roles/${role.id}`, { method: "DELETE" });
                                   fetchRoles();
                                 }} className="text-red-500 hover:text-red-400 h-8 w-8"><Trash2 className="w-4 h-4" /></Button>
                               </div>
@@ -1029,7 +1062,7 @@ export default function Chat() {
                                 toast({ title: "Please fill in all fields", variant: "destructive" });
                                 return;
                               }
-                              await fetch("/api/chat/proxies", {
+                              await authFetch("/api/proxies", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ name, url, useWebview: true }),

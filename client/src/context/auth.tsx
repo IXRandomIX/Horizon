@@ -10,10 +10,15 @@ export interface AuthUser {
   bio?: string;
   banner?: string;
   bannerColor?: string;
+  roles?: string[];
+  roleColor?: string;
+  font?: string;
+  animation?: string;
 }
 
 interface AuthContextType {
   user: AuthUser | null;
+  isVerifying: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => void;
@@ -36,12 +41,39 @@ export function authFetch(url: string, opts: RequestInit = {}): Promise<Response
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    try {
-      const saved = localStorage.getItem("horizon_user");
-      return saved ? JSON.parse(saved) : null;
-    } catch { return null; }
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [isVerifying, setIsVerifying] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem("horizon_session_token");
+    if (!token) {
+      setIsVerifying(false);
+      return;
+    }
+    fetch("/api/auth/me", {
+      headers: { "Authorization": `Bearer ${token}` }
+    })
+      .then(async res => {
+        if (!res.ok) {
+          localStorage.removeItem("horizon_session_token");
+          localStorage.removeItem("horizon_user");
+          localStorage.removeItem("horizon_chat_user");
+          setUser(null);
+        } else {
+          const data = await res.json();
+          setUser(data);
+          localStorage.setItem("horizon_user", JSON.stringify(data));
+          localStorage.setItem("horizon_chat_user", JSON.stringify(data));
+        }
+      })
+      .catch(() => {
+        const saved = localStorage.getItem("horizon_user");
+        if (saved) {
+          try { setUser(JSON.parse(saved)); } catch { setUser(null); }
+        }
+      })
+      .finally(() => setIsVerifying(false));
+  }, []);
 
   const login = async (username: string, password: string) => {
     const res = await fetch("/api/auth/login", {
@@ -52,10 +84,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Login failed");
     const { sessionToken, ...userData } = data;
-    setUser(userData);
-    localStorage.setItem("horizon_user", JSON.stringify(userData));
-    localStorage.setItem("horizon_chat_user", JSON.stringify(userData));
     if (sessionToken) localStorage.setItem("horizon_session_token", sessionToken);
+    const verifyRes = await fetch("/api/auth/me", {
+      headers: { "Authorization": `Bearer ${sessionToken}` }
+    });
+    const verified = verifyRes.ok ? await verifyRes.json() : userData;
+    setUser(verified);
+    localStorage.setItem("horizon_user", JSON.stringify(verified));
+    localStorage.setItem("horizon_chat_user", JSON.stringify(verified));
   };
 
   const register = async (username: string, password: string) => {
@@ -67,10 +103,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Registration failed");
     const { sessionToken, ...userData } = data;
-    setUser(userData);
-    localStorage.setItem("horizon_user", JSON.stringify(userData));
-    localStorage.setItem("horizon_chat_user", JSON.stringify(userData));
     if (sessionToken) localStorage.setItem("horizon_session_token", sessionToken);
+    const verifyRes = await fetch("/api/auth/me", {
+      headers: { "Authorization": `Bearer ${sessionToken}` }
+    });
+    const verified = verifyRes.ok ? await verifyRes.json() : userData;
+    setUser(verified);
+    localStorage.setItem("horizon_user", JSON.stringify(verified));
+    localStorage.setItem("horizon_chat_user", JSON.stringify(verified));
   };
 
   const logout = () => {
@@ -93,7 +133,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const getToken = () => getSessionToken();
 
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser, getToken }}>
+    <AuthContext.Provider value={{ user, isVerifying, login, register, logout, updateUser, getToken }}>
       {children}
     </AuthContext.Provider>
   );

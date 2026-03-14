@@ -90,6 +90,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   };
   setupChat();
 
+  // ─── Auth: Me ─────────────────────────────────────────────────────────────
+  app.get("/api/auth/me", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session) return res.status(401).json({ message: "Invalid session" });
+    const user = await storage.getUser(session.username);
+    if (!user) return res.status(401).json({ message: "User not found" });
+    return res.json({
+      username: user.username,
+      role: user.role,
+      isAdmin: user.username === ADMIN_USER,
+      displayName: user.displayName,
+      displayFont: user.displayFont,
+      avatar: user.avatar,
+      bio: user.bio,
+      banner: user.banner,
+      bannerColor: user.bannerColor,
+      roles: user.roles,
+      roleColor: user.roleColor,
+      font: user.font,
+      animation: user.animation,
+    });
+  });
+
   // ─── Site-wide Auth ───────────────────────────────────────────────────────
   app.post("/api/auth/register", async (req, res) => {
     const { username, password } = req.body;
@@ -409,11 +435,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/chat/channels", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     const channel = await storage.createChannel(req.body);
     res.status(201).json(channel);
   });
 
   app.patch("/api/chat/channels/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     const channel = await storage.updateChannel(Number(req.params.id), req.body);
     res.json(channel);
   });
@@ -436,16 +464,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/chat/roles", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     const role = await storage.createRole(req.body);
     res.status(201).json(role);
   });
 
   app.patch("/api/chat/roles/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     const role = await storage.updateRole(Number(req.params.id), req.body);
     res.json(role);
   });
 
   app.delete("/api/chat/roles/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     await storage.deleteRole(Number(req.params.id));
     res.status(204).end();
   });
@@ -462,11 +493,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/chat/users/:username", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    if (caller !== req.params.username && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
     const user = await storage.updateUser(req.params.username, req.body);
     res.json(sanitizeUser(user));
   });
 
   app.post("/api/chat/users/:username/roles", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     const { roles: roleNames } = req.body;
     const user = await storage.assignRolesToUser(req.params.username, roleNames);
     res.json(sanitizeUser(user));
@@ -499,12 +534,35 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/chat/messages/:id", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    const allMessages = await (async () => {
+      const channels = await storage.getChannels();
+      const all: any[] = [];
+      for (const ch of channels) {
+        const msgs = await storage.getMessages(ch.id);
+        all.push(...msgs);
+      }
+      return all;
+    })();
+    const target = allMessages.find((m: any) => m.id === Number(req.params.id));
+    if (target && target.username !== caller && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
     const { content } = req.body;
     const msg = await storage.updateMessage(Number(req.params.id), content);
     res.json(msg);
   });
 
   app.delete("/api/chat/messages/:id", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    const channels = await storage.getChannels();
+    let target: any = null;
+    for (const ch of channels) {
+      const msgs = await storage.getMessages(ch.id);
+      target = msgs.find((m: any) => m.id === Number(req.params.id));
+      if (target) break;
+    }
+    if (target && target.username !== caller && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
     await storage.deleteMessage(Number(req.params.id));
     res.status(204).end();
   });
@@ -528,16 +586,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/proxies", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     const proxy = await storage.createProxy(req.body);
     res.status(201).json(proxy);
   });
 
   app.patch("/api/proxies/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     const proxy = await storage.updateProxy(Number(req.params.id), req.body);
     res.json(proxy);
   });
 
   app.delete("/api/proxies/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     await storage.deleteProxy(Number(req.params.id));
     res.status(204).end();
   });

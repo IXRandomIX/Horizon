@@ -55,7 +55,15 @@ function Router() {
 }
 
 function AuthGate() {
-  const { user } = useAuth();
+  const { user, isVerifying } = useAuth();
+
+  if (isVerifying) {
+    return (
+      <div className="flex h-screen w-full bg-black items-center justify-center">
+        <div className="w-8 h-8 border-2 border-purple-500/40 border-t-purple-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!user) {
     return <LoginPage />;
