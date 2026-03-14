@@ -6,8 +6,7 @@ import { Badge } from "@/components/ui/badge";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p/w342";
 const TMDB_BACKDROP = "https://image.tmdb.org/t/p/w780";
-const BCINE_BASE = "https://bcine.app";
-const STORAGE_KEY = "bcine-continue-watching";
+const STORAGE_KEY = "horizon-continue-watching";
 
 interface Media {
   id: number;
@@ -49,9 +48,11 @@ function getYear(m: Media) {
   return d ? d.substring(0, 4) : "";
 }
 
-function getBcineUrl(m: Media) {
-  const slug = getTitle(m).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `${BCINE_BASE}/${m.media_type}/${m.id}-${slug}`;
+function getEmbedUrl(m: Media) {
+  if (m.media_type === "tv") {
+    return `https://vidsrc.to/embed/tv/${m.id}`;
+  }
+  return `https://vidsrc.to/embed/movie/${m.id}`;
 }
 
 function saveToHistory(m: Media) {
@@ -125,7 +126,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const url = getBcineUrl(media);
+  const url = getEmbedUrl(media);
 
   useEffect(() => {
     saveToHistory(media);
@@ -207,6 +208,8 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
             allow="fullscreen; autoplay; encrypted-media"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-fullscreen"
+            referrerPolicy="no-referrer"
             data-testid="iframe-player"
           />
         </div>
@@ -232,7 +235,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by bCine.app</span>
+              <span className="text-[10px] text-white/30">Powered by VidSrc</span>
             </div>
           </div>
         </div>
@@ -290,7 +293,7 @@ export default function MoviesPage() {
             <Film className="w-6 h-6 text-primary flex-shrink-0" />
             <div>
               <h1 className="text-xl font-black tracking-wide text-white">Movies</h1>
-              <p className="text-[11px] text-white/30 tracking-wider">Powered by bCine.app</p>
+              <p className="text-[11px] text-white/30 tracking-wider">Powered by VidSrc</p>
             </div>
           </div>
           <div className="relative flex-1 max-w-md">
