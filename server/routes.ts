@@ -776,10 +776,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const hydraUrl = "https://cdn.jsdelivr.net/gh/Hydra-Network/hydra-assets@main";
       const ckvUrl = "https://cdn.jsdelivr.net/gh/WanoCapy/ChickenKingsVault@main";
 
-      const [gnMathRes, hydraRes, ckvRes] = await Promise.allSettled([
+      const [gnMathRes, hydraRes, ckvRes, srRes] = await Promise.allSettled([
         fetch("https://cdn.jsdelivr.net/gh/gn-math/assets@main/zones.json"),
         fetch(`${hydraUrl}/gmes.json`),
         fetch("https://raw.githubusercontent.com/carbonicality/ChickenKingsVault/main/games.json"),
+        fetch("https://sciencerules.xyz/scripts/games.json"),
       ]);
 
       const allGames: any[] = [];
@@ -793,7 +794,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         }
       };
 
-      addGame({ id: 99999, name: "Roblox V2", url: "https://howtopullhuzz67.b-cdn.net", cover: "", author: "Horizon", source: "custom", directIframe: true });
+      addGame({ id: 99999, name: "Roblox V2", url: "https://sciencerules.xyz/embed.html#https://68.ip.nowgg.fun/apps/a/19900/b.html", cover: "", author: "sciencerules.xyz", source: "sciencerules", directIframe: true });
 
       if (gnMathRes.status === "fulfilled" && gnMathRes.value.ok) {
         const data = await gnMathRes.value.json();
@@ -833,6 +834,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
               url: `${ckvUrl}/${g.html}`,
               author: "ChickenKingsVault", authorLink: "https://scienceissuperfun-2.blackbearshow.com",
               source: "ckv"
+            });
+          }
+        });
+      }
+
+      if (srRes.status === "fulfilled" && srRes.value.ok) {
+        const data = await srRes.value.json();
+        const srBase = "https://sciencerules.xyz";
+        const resolveSrUrl = (url: string) => {
+          if (!url) return "";
+          if (url.startsWith("http")) return url;
+          if (url.startsWith("/")) return `${srBase}${url}`;
+          if (url.startsWith("../")) return `${srBase}/${url.replace(/^(\.\.\/)+/, "")}`;
+          return `${srBase}/${url}`;
+        };
+        data.forEach((g: any, i: number) => {
+          if (g.title && g.url) {
+            addGame({
+              id: 80000 + i,
+              name: g.title,
+              cover: resolveSrUrl(g.image || ""),
+              url: resolveSrUrl(g.url),
+              author: "sciencerules.xyz",
+              authorLink: "https://sciencerules.xyz",
+              source: "sciencerules",
+              directIframe: true,
             });
           }
         });
