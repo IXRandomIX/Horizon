@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry } from "@shared/schema";
 import { eq, and, or, sql, ne, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -81,6 +81,13 @@ export interface IStorage {
   setGatekeepUnlocked(token: string): Promise<void>;
   incrementGatekeepAttempts(token: string): Promise<number>;
   setGatekeepLockout(token: string, until: Date): Promise<void>;
+
+  // Change Log
+  getChangeLogEntries(): Promise<ChangeLogEntry[]>;
+  createChangeLogEntry(content: string, imageUrl?: string): Promise<ChangeLogEntry>;
+  updateChangeLogEntry(id: number, content: string, imageUrl?: string): Promise<ChangeLogEntry>;
+  deleteChangeLogEntry(id: number): Promise<void>;
+  getChangeLogEntriesAfter(timestamp: string): Promise<ChangeLogEntry[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -361,6 +368,27 @@ export class DatabaseStorage implements IStorage {
   }
   async setGatekeepLockout(token: string, until: Date): Promise<void> {
     await db.update(sessions).set({ gatekeepLockedUntil: until }).where(eq(sessions.token, token));
+  }
+
+  // --- Change Log ---
+  async getChangeLogEntries(): Promise<ChangeLogEntry[]> {
+    return await db.select().from(changeLogEntries).orderBy(desc(changeLogEntries.createdAt));
+  }
+  async createChangeLogEntry(content: string, imageUrl?: string): Promise<ChangeLogEntry> {
+    const [inserted] = await db.insert(changeLogEntries).values({ content, imageUrl: imageUrl || "" }).returning();
+    return inserted;
+  }
+  async updateChangeLogEntry(id: number, content: string, imageUrl?: string): Promise<ChangeLogEntry> {
+    const [updated] = await db.update(changeLogEntries).set({ content, imageUrl: imageUrl !== undefined ? imageUrl : "" }).where(eq(changeLogEntries.id, id)).returning();
+    return updated;
+  }
+  async deleteChangeLogEntry(id: number): Promise<void> {
+    await db.delete(changeLogEntries).where(eq(changeLogEntries.id, id));
+  }
+  async getChangeLogEntriesAfter(timestamp: string): Promise<ChangeLogEntry[]> {
+    return await db.select().from(changeLogEntries).where(
+      sql`${changeLogEntries.createdAt} > ${timestamp}::timestamptz`
+    ).orderBy(desc(changeLogEntries.createdAt));
   }
 }
 

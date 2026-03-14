@@ -39,11 +39,18 @@ export default function Proxies() {
     }
   };
 
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem("horizon_session_token");
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+    return headers;
+  };
+
   const handleAddProxy = async () => {
     if (!newProxyName || !newProxyUrl) return;
     const res = await fetch("/api/proxies", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ name: newProxyName, url: newProxyUrl, useWebview: newProxyWebview }),
     });
     if (res.ok) {
@@ -52,11 +59,14 @@ export default function Proxies() {
       setNewProxyUrl("");
       setNewProxyWebview(true);
       fetchProxies();
+    } else {
+      const data = await res.json().catch(() => ({}));
+      toast({ title: data.message || "Failed to add proxy", variant: "destructive" });
     }
   };
 
   const handleDeleteProxy = async (id: number) => {
-    const res = await fetch(`/api/proxies/${id}`, { method: "DELETE" });
+    const res = await fetch(`/api/proxies/${id}`, { method: "DELETE", headers: getAuthHeaders() });
     if (res.ok) {
       toast({ title: "Proxy removed" });
       fetchProxies();
@@ -66,7 +76,7 @@ export default function Proxies() {
   const handleUpdateProxyWebview = async (id: number, useWebview: boolean) => {
     const res = await fetch(`/api/proxies/${id}`, {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       body: JSON.stringify({ useWebview }),
     });
     if (res.ok) {

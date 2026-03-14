@@ -121,6 +121,17 @@ function MediaCard({ m, onClick }: { m: Media; onClick: () => void }) {
   );
 }
 
+const BLOCKED_DOMAINS = ["youtube.com", "youtu.be", "www.youtube.com"];
+
+function isBlockedUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return BLOCKED_DOMAINS.some(d => parsed.hostname === d || parsed.hostname.endsWith("." + d));
+  } catch {
+    return false;
+  }
+}
+
 function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -130,6 +141,25 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   useEffect(() => {
     saveToHistory(media);
   }, [media]);
+
+  useEffect(() => {
+    const origOpen = window.open;
+    window.open = (urlArg?: string | URL, ...rest: any[]) => {
+      const urlStr = urlArg ? String(urlArg) : "";
+      if (urlStr && isBlockedUrl(urlStr)) return null;
+      return origOpen(urlArg as any, ...rest);
+    };
+    return () => { window.open = origOpen; };
+  }, []);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data && typeof e.data === "string" && isBlockedUrl(e.data)) return;
+      if (e.data && typeof e.data === "object" && e.data.url && isBlockedUrl(e.data.url)) return;
+    };
+    window.addEventListener("message", handler);
+    return () => window.removeEventListener("message", handler);
+  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {

@@ -4,15 +4,19 @@ import { useAuth } from "./auth";
 interface NotificationsContextType {
   globalInboxUnread: number;
   chatUnread: number;
+  changeLogsUnread: number;
   markGlobalInboxRead: () => void;
   markChatRead: () => void;
+  markChangeLogsRead: () => void;
 }
 
 const NotificationsContext = createContext<NotificationsContextType>({
   globalInboxUnread: 0,
   chatUnread: 0,
+  changeLogsUnread: 0,
   markGlobalInboxRead: () => {},
   markChatRead: () => {},
+  markChangeLogsRead: () => {},
 });
 
 function getLastSeen(key: string): string {
@@ -27,17 +31,20 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [globalInboxUnread, setGlobalInboxUnread] = useState(0);
   const [chatUnread, setChatUnread] = useState(0);
+  const [changeLogsUnread, setChangeLogsUnread] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const fetchCounts = async () => {
     if (!user) return;
     const globalSince = getLastSeen("horizon_global_inbox_seen");
     const chatSince = getLastSeen("horizon_chat_seen");
+    const changeLogSince = getLastSeen("horizon_changelog_seen");
 
     try {
-      const [gRes, cRes] = await Promise.all([
+      const [gRes, cRes, clRes] = await Promise.all([
         fetch(`/api/global-inbox/after?since=${encodeURIComponent(globalSince)}`),
         fetch(`/api/messages/unread-count?since=${encodeURIComponent(chatSince)}&username=${user.username}`),
+        fetch(`/api/changelog/after?since=${encodeURIComponent(changeLogSince)}`),
       ]);
       if (gRes.ok) {
         const gData = await gRes.json();
@@ -46,6 +53,10 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       if (cRes.ok) {
         const cData = await cRes.json();
         setChatUnread(typeof cData.count === "number" ? cData.count : 0);
+      }
+      if (clRes.ok) {
+        const clData = await clRes.json();
+        setChangeLogsUnread(Array.isArray(clData) ? clData.length : 0);
       }
     } catch {
     }
@@ -70,8 +81,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
     setChatUnread(0);
   };
 
+  const markChangeLogsRead = () => {
+    setLastSeen("horizon_changelog_seen", new Date().toISOString());
+    setChangeLogsUnread(0);
+  };
+
   return (
-    <NotificationsContext.Provider value={{ globalInboxUnread, chatUnread, markGlobalInboxRead, markChatRead }}>
+    <NotificationsContext.Provider value={{ globalInboxUnread, chatUnread, changeLogsUnread, markGlobalInboxRead, markChatRead, markChangeLogsRead }}>
       {children}
     </NotificationsContext.Provider>
   );

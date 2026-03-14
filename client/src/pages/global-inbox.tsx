@@ -49,9 +49,13 @@ export default function GlobalInboxPage() {
   const handleSend = async () => {
     if (!draft.trim() || !user) return;
     setSending(true);
+    const token = localStorage.getItem("horizon_session_token");
     const res = await fetch("/api/global-inbox", {
       method: "POST",
-      headers: { "Content-Type": "application/json", "x-username": user.username },
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      },
       body: JSON.stringify({ content: draft.trim() }),
     });
     if (res.ok) {

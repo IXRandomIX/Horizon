@@ -975,5 +975,39 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // ─── Change Log ───────────────────────────────────────────────────────────
+  app.get("/api/changelog", async (_req, res) => {
+    const entries = await storage.getChangeLogEntries();
+    res.json(entries);
+  });
+
+  app.get("/api/changelog/after", async (req, res) => {
+    const { since } = req.query as { since: string };
+    if (!since) return res.json([]);
+    const entries = await storage.getChangeLogEntriesAfter(since);
+    res.json(entries);
+  });
+
+  app.post("/api/changelog", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
+    const { content, imageUrl } = req.body;
+    if (!content?.trim()) return res.status(400).json({ message: "Content required" });
+    const entry = await storage.createChangeLogEntry(content.trim(), imageUrl || "");
+    res.json(entry);
+  });
+
+  app.patch("/api/changelog/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
+    const { content, imageUrl } = req.body;
+    const entry = await storage.updateChangeLogEntry(Number(req.params.id), content, imageUrl);
+    res.json(entry);
+  });
+
+  app.delete("/api/changelog/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
+    await storage.deleteChangeLogEntry(Number(req.params.id));
+    res.status(204).end();
+  });
+
   return httpServer;
 }

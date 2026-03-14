@@ -125,6 +125,15 @@ export const globalMessages = pgTable("global_messages", {
 
 export type GlobalMessage = typeof globalMessages.$inferSelect;
 
+export const changeLogEntries = pgTable("change_log_entries", {
+  id: serial("id").primaryKey(),
+  content: text("content").notNull(),
+  imageUrl: text("image_url").default(""),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type ChangeLogEntry = typeof changeLogEntries.$inferSelect;
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true });
 export const insertPageSchema = createInsertSchema(pages).omit({ id: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, timestamp: true });

@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
   Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
-  LogOut, UsersRound, MailOpen, Clapperboard, Sword
+  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText
 } from "lucide-react";
 import {
   Sidebar,
@@ -44,7 +44,7 @@ function Badge({ count }: { count: number }) {
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
-  const { globalInboxUnread, chatUnread, markGlobalInboxRead, markChatRead } = useNotifications();
+  const { globalInboxUnread, chatUnread, changeLogsUnread, markGlobalInboxRead, markChatRead, markChangeLogsRead } = useNotifications();
 
   const FONT_CLASSES: Record<string, string> = {
     "Playfair Display": "font-playfair",
@@ -61,6 +61,7 @@ export function AppSidebar() {
 
   const navItems = [
     { name: "Announcements", path: "/announcements", icon: Megaphone },
+    { name: "Change Logs", path: "/change-logs", icon: ScrollText, badge: changeLogsUnread, onNavigate: markChangeLogsRead },
     { name: "HORIZON CHAT", path: "/chat", icon: MessageCircle, badge: chatUnread, onNavigate: markChatRead },
     { name: "Horizon AI", path: "/ai", icon: Sparkles, highlight: true },
     { name: "Global Inbox", path: "/global-inbox", icon: MailOpen, badge: globalInboxUnread, onNavigate: markGlobalInboxRead },
