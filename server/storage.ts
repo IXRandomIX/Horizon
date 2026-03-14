@@ -76,6 +76,11 @@ export interface IStorage {
   incrementWallAttempts(token: string): Promise<number>;
   setWallLockout(token: string, until: Date): Promise<void>;
   clearChannelMessages(channelId: number): Promise<void>;
+
+  // Gatekeep OS
+  setGatekeepUnlocked(token: string): Promise<void>;
+  incrementGatekeepAttempts(token: string): Promise<number>;
+  setGatekeepLockout(token: string, until: Date): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -344,6 +349,18 @@ export class DatabaseStorage implements IStorage {
       sql`${reactions.messageId} IN (SELECT id FROM messages WHERE channel_id = ${channelId})`
     );
     await db.delete(messages).where(eq(messages.channelId, channelId));
+  }
+
+  async setGatekeepUnlocked(token: string): Promise<void> {
+    await db.update(sessions).set({ gatekeepUnlocked: true }).where(eq(sessions.token, token));
+  }
+  async incrementGatekeepAttempts(token: string): Promise<number> {
+    await db.update(sessions).set({ gatekeepAttempts: sql`${sessions.gatekeepAttempts} + 1` }).where(eq(sessions.token, token));
+    const [row] = await db.select().from(sessions).where(eq(sessions.token, token));
+    return row?.gatekeepAttempts ?? 1;
+  }
+  async setGatekeepLockout(token: string, until: Date): Promise<void> {
+    await db.update(sessions).set({ gatekeepLockedUntil: until }).where(eq(sessions.token, token));
   }
 }
 

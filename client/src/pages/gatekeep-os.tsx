@@ -3,65 +3,107 @@ import { Lock, ShieldAlert, Wifi, Terminal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { getSessionToken } from "@/context/auth";
+
+type Stage = "loading" | "gate" | "locked" | "unlocked";
+
+function formatTimeLeft(ms: number) {
+  const hours = Math.floor(ms / (1000 * 60 * 60));
+  const mins = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+  return `${hours}h ${mins}m remaining`;
+}
 
 export default function GatekeepOS() {
+  const [stage, setStage] = useState<Stage>("loading");
   const [password, setPassword] = useState("");
-  const [isUnlocked, setIsUnlocked] = useState(false);
   const [error, setError] = useState("");
-  const [attempts, setAttempts] = useState(15);
-  const [lockoutTime, setLockoutTime] = useState<number | null>(null);
-
-  const SECRET_KEY = "WeAreGATEKEEPING777good7luck999";
-  const LOCKOUT_DURATION = 56 * 60 * 60 * 1000; // 56 hours in ms
+  const [attemptsLeft, setAttemptsLeft] = useState(15);
+  const [lockoutMs, setLockoutMs] = useState<number | null>(null);
+  const [timeLeft, setTimeLeft] = useState(0);
 
   useEffect(() => {
-    const storedLockout = localStorage.getItem("gatekeep_lockout");
-    if (storedLockout) {
-      const time = parseInt(storedLockout);
-      if (Date.now() < time + LOCKOUT_DURATION) {
-        setLockoutTime(time);
-      }
-    }
-    const storedAttempts = localStorage.getItem("gatekeep_attempts");
-    if (storedAttempts) {
-      setAttempts(parseInt(storedAttempts));
-    }
+    checkStatus();
   }, []);
 
-  const handleUnlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (lockoutTime) return;
-
-    if (password === SECRET_KEY) {
-      setIsUnlocked(true);
-      setError("");
-      setAttempts(15);
-      localStorage.removeItem("gatekeep_attempts");
-    } else {
-      const newAttempts = attempts - 1;
-      setAttempts(newAttempts);
-      localStorage.setItem("gatekeep_attempts", newAttempts.toString());
-      
-      if (newAttempts <= 0) {
-        const time = Date.now();
-        setLockoutTime(time);
-        localStorage.setItem("gatekeep_lockout", time.toString());
-        setError("LOCKOUT INITIATED. TRY AGAIN IN 56 HOURS.");
+  useEffect(() => {
+    if (stage !== "locked" || !lockoutMs) return;
+    setTimeLeft(lockoutMs - Date.now());
+    const id = setInterval(() => {
+      const remaining = lockoutMs - Date.now();
+      if (remaining <= 0) {
+        setStage("gate");
+        setLockoutMs(null);
+        setAttemptsLeft(15);
       } else {
-        setError("ACCESS DENIED, stop trying");
+        setTimeLeft(remaining);
       }
+    }, 30000);
+    return () => clearInterval(id);
+  }, [stage, lockoutMs]);
+
+  const checkStatus = async () => {
+    const token = getSessionToken();
+    if (!token) { setStage("gate"); return; }
+    try {
+      const res = await fetch("/api/gatekeep/status", {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.unlocked) {
+        setStage("unlocked");
+      } else if (data.locked) {
+        setLockoutMs(data.lockedUntilMs);
+        setTimeLeft(data.lockedUntilMs - Date.now());
+        setStage("locked");
+      } else {
+        setAttemptsLeft(data.attemptsLeft ?? 15);
+        setStage("gate");
+      }
+    } catch {
+      setStage("gate");
     }
   };
 
-  const getTimeLeft = () => {
-    if (!lockoutTime) return "";
-    const remaining = (lockoutTime + LOCKOUT_DURATION) - Date.now();
-    const hours = Math.floor(remaining / (1000 * 60 * 60));
-    const mins = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${mins}m remaining`;
+  const handleUnlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const token = getSessionToken();
+    if (!token) { setStage("gate"); return; }
+
+    const res = await fetch("/api/gatekeep/verify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    const data = await res.json();
+    setPassword("");
+
+    if (res.ok && data.success) {
+      setStage("unlocked");
+      setError("");
+    } else if (res.status === 423 || data.locked) {
+      setLockoutMs(data.lockedUntilMs);
+      setTimeLeft(data.lockedUntilMs - Date.now());
+      setStage("locked");
+      setError("LOCKOUT INITIATED. TRY AGAIN IN 56 HOURS.");
+    } else {
+      setAttemptsLeft(data.attemptsLeft ?? 0);
+      setError("ACCESS DENIED, stop trying");
+    }
   };
 
-  if (isUnlocked) {
+  if (stage === "loading") {
+    return (
+      <div className="flex flex-col h-full bg-black items-center justify-center">
+        <div className="w-6 h-6 border border-purple-500/40 border-t-purple-500 rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (stage === "unlocked") {
     return (
       <div className="flex flex-col h-full bg-black animate-in fade-in duration-1000 relative">
         <div className="flex-1 w-full relative">
@@ -83,31 +125,31 @@ export default function GatekeepOS() {
   return (
     <div className="flex flex-col h-full bg-black items-center justify-center p-6 relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(139,92,246,0.05)_0%,transparent_70%)]" />
-      
-      <motion.div 
+
+      <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md w-full relative z-10"
       >
         <div className="bg-white/[0.02] border border-white/10 rounded-[2rem] p-10 backdrop-blur-xl shadow-2xl text-center">
           <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-8 border border-primary/20">
-            {lockoutTime ? <ShieldAlert className="w-10 h-10 text-destructive animate-pulse" /> : <Lock className="w-10 h-10 text-primary" />}
+            {stage === "locked" ? <ShieldAlert className="w-10 h-10 text-destructive animate-pulse" /> : <Lock className="w-10 h-10 text-primary" />}
           </div>
-          
+
           <h1 className="text-3xl font-display font-black text-white mb-4 tracking-widest uppercase">
             Gatekeep LMAO OS
           </h1>
-          
+
           <p className="text-muted-foreground mb-8">
-            {lockoutTime ? `Unauthorized access detected.` : `Enter decryption key to bypass the horizon.`}
+            {stage === "locked" ? `Unauthorized access detected.` : `Enter decryption key to bypass the horizon.`}
           </p>
 
-          {lockoutTime ? (
+          {stage === "locked" ? (
             <div className="space-y-4">
               <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-xl text-destructive font-bold">
-                {error}
+                {error || "LOCKOUT INITIATED. TRY AGAIN IN 56 HOURS."}
               </div>
-              <p className="text-sm text-muted-foreground font-mono">{getTimeLeft()}</p>
+              <p className="text-sm text-muted-foreground font-mono">{lockoutMs ? formatTimeLeft(timeLeft) : ""}</p>
             </div>
           ) : (
             <form onSubmit={handleUnlock} className="space-y-6">
@@ -121,10 +163,10 @@ export default function GatekeepOS() {
                   className="bg-black/50 border-white/10 h-14 pl-12 rounded-xl text-white font-mono focus-visible:ring-primary"
                 />
               </div>
-              
+
               <AnimatePresence mode="wait">
                 {error && (
-                  <motion.p 
+                  <motion.p
                     initial={{ opacity: 0, y: -10 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0 }}
@@ -135,23 +177,23 @@ export default function GatekeepOS() {
                 )}
               </AnimatePresence>
 
-              <Button 
+              <Button
                 type="submit"
                 className="w-full h-14 bg-primary hover:bg-primary-hover text-white font-display text-lg rounded-xl transition-all shadow-lg shadow-primary/20"
               >
                 EXECUTE BYPASS
               </Button>
-              
+
               <div className="flex items-center justify-center gap-4 text-xs font-mono text-muted-foreground uppercase tracking-widest">
                 <span className="flex items-center gap-1"><Wifi className="w-3 h-3" /> Encrypted</span>
                 <span>•</span>
-                <span>{attempts} Attempts Remaining</span>
+                <span>{attemptsLeft} Attempts Remaining</span>
               </div>
             </form>
           )}
         </div>
       </motion.div>
-      
+
       <style jsx global>{`
         @keyframes glitch-gold {
           0% { text-shadow: 2px 2px 0 #ffd700, -2px -2px 0 #000; transform: translate(0); }

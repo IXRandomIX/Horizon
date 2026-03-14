@@ -142,15 +142,13 @@ export default function Chat() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
+  const justSentRef = useRef(false);
 
   useEffect(() => {
     const saved = localStorage.getItem("horizon_chat_user");
     if (saved) setUser(JSON.parse(saved));
-    // Fetch channels immediately, even if not logged in yet
     fetchChannels();
-    // Initialize read-only channels if not logged in yet
     initializeReadOnlyChannels();
-    // Clear chat notification badge
     markChatRead();
   }, []);
 
@@ -183,9 +181,10 @@ export default function Chat() {
   }, [activeChannel]);
 
   useEffect(() => {
-    if (!isUserScrolling) {
+    if (!isUserScrolling || justSentRef.current) {
+      justSentRef.current = false;
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
       }, 50);
     }
   }, [messages, isUserScrolling]);
@@ -283,10 +282,30 @@ export default function Chat() {
   };
 
   const handleDeleteChannel = async (id: number) => {
-    const res = await fetch(`/api/chat/channels/${id}`, { method: "DELETE" });
+    const token = getSessionToken();
+    if (!token) return;
+    const res = await fetch(`/api/chat/channels/${id}`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` },
+    });
     if (res.ok) {
       toast({ title: "Channel deleted" });
       fetchChannels();
+    }
+  };
+
+  const handleClearMessages = async (channelId: number) => {
+    const token = getSessionToken();
+    if (!token) return;
+    const res = await fetch(`/api/chat/channels/${channelId}/messages`, {
+      method: "DELETE",
+      headers: { "Authorization": `Bearer ${token}` },
+    });
+    if (res.ok) {
+      toast({ title: "All messages cleared" });
+      if (activeChannel?.id === channelId) fetchMessages(channelId);
+    } else {
+      toast({ title: "Failed to clear messages", variant: "destructive" });
     }
   };
 
@@ -352,13 +371,17 @@ export default function Chat() {
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !user || !activeChannel) return;
+    const token = getSessionToken();
+    if (!token) return;
 
     const res = await fetch(`/api/chat/channels/${activeChannel.id}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ 
-        content: newMessage, 
-        username: user.username,
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        content: newMessage,
         replyToId: replyingTo?.id,
         replyToUsername: replyingTo?.username,
         replyToContent: replyingTo?.content
@@ -367,6 +390,7 @@ export default function Chat() {
     if (res.ok) {
       setNewMessage("");
       setReplyingTo(null);
+      justSentRef.current = true;
       fetchMessages(activeChannel.id);
     }
   };
@@ -542,10 +566,29 @@ export default function Chat() {
         <ScrollArea className="flex-1">
           <div className="p-2 space-y-1">
             {channels.map((ch) => (
-              <button key={ch.id} onClick={() => setActiveChannel(ch)} className={`w-full flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${activeChannel?.id === ch.id ? 'bg-primary/10 text-primary border border-primary/20' : 'text-muted-foreground hover:bg-white/5 hover:text-white'}`}>
-                <Hash className="w-4 h-4" />
-                <span className="font-medium">{ch.name}</span>
-              </button>
+              <div key={ch.id} className="group flex items-center gap-1">
+                <button onClick={() => setActiveChannel(ch)} className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${activeChannel?.id === ch.id ? 'bg-primary/10 text-primary border border-primary/20' : 'text-muted-foreground hover:bg-white/5 hover:text-white'}`}>
+                  <Hash className="w-4 h-4" />
+                  <span className="font-medium">{ch.name}</span>
+                </button>
+                {user.isAdmin && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+                        <MoreVertical className="w-3 h-3" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent className="bg-black border-white/10 text-white">
+                      <DropdownMenuItem
+                        className="focus:bg-white/10 cursor-pointer text-red-400 focus:text-red-300"
+                        onClick={() => handleClearMessages(ch.id)}
+                      >
+                        <Trash2 className="w-4 h-4 mr-2" /> Clear all messages
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
             ))}
           </div>
         </ScrollArea>

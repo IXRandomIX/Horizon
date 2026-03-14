@@ -108,6 +108,9 @@ export const sessions = pgTable("sessions", {
   wallUnlocked: boolean("wall_unlocked").default(false),
   wallAttempts: integer("wall_attempts").default(0),
   wallLockedUntil: timestamp("wall_locked_until"),
+  gatekeepUnlocked: boolean("gatekeep_unlocked").default(false),
+  gatekeepAttempts: integer("gatekeep_attempts").default(0),
+  gatekeepLockedUntil: timestamp("gatekeep_locked_until"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

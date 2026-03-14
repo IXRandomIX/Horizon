@@ -324,6 +324,52 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ unlocked: false, attemptsLeft: Math.max(0, WALL_MAX_ATTEMPTS - (session.wallAttempts ?? 0)) });
   });
 
+  // ─── Gatekeep OS (server-side verification) ──────────────────────────────
+  const GATEKEEP_PASS = "WeAreGATEKEEPING777good7luck999";
+  const GATEKEEP_MAX_ATTEMPTS = 15;
+  const GATEKEEP_LOCKOUT_MS = 56 * 60 * 60 * 1000;
+
+  app.get("/api/gatekeep/status", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.json({ unlocked: false, attemptsLeft: GATEKEEP_MAX_ATTEMPTS });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session) return res.json({ unlocked: false, attemptsLeft: GATEKEEP_MAX_ATTEMPTS });
+    if (session.gatekeepUnlocked) return res.json({ unlocked: true });
+    if (session.gatekeepLockedUntil && new Date() < session.gatekeepLockedUntil) {
+      return res.json({ unlocked: false, locked: true, lockedUntilMs: session.gatekeepLockedUntil.getTime(), attemptsLeft: 0 });
+    }
+    return res.json({ unlocked: false, attemptsLeft: Math.max(0, GATEKEEP_MAX_ATTEMPTS - (session.gatekeepAttempts ?? 0)) });
+  });
+
+  app.post("/api/gatekeep/verify", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session) return res.status(401).json({ message: "Invalid session" });
+
+    if (session.gatekeepUnlocked) return res.json({ success: true });
+
+    if (session.gatekeepLockedUntil && new Date() < session.gatekeepLockedUntil) {
+      return res.status(423).json({ locked: true, lockedUntilMs: session.gatekeepLockedUntil.getTime(), message: "Locked out" });
+    }
+
+    const { password } = req.body;
+    if (password === GATEKEEP_PASS) {
+      await storage.setGatekeepUnlocked(token);
+      return res.json({ success: true });
+    }
+
+    const attempts = await storage.incrementGatekeepAttempts(token);
+    if (attempts >= GATEKEEP_MAX_ATTEMPTS) {
+      const until = new Date(Date.now() + GATEKEEP_LOCKOUT_MS);
+      await storage.setGatekeepLockout(token, until);
+      return res.status(423).json({ locked: true, lockedUntilMs: until.getTime(), attemptsLeft: 0, message: "Locked out" });
+    }
+    return res.status(401).json({ success: false, attemptsLeft: GATEKEEP_MAX_ATTEMPTS - attempts, message: "Wrong password" });
+  });
+
   // ─── Chat unread count for notification badges ────────────────────────────
   app.get("/api/messages/unread-count", async (req, res) => {
     const { since, username } = req.query as { since: string; username: string };
