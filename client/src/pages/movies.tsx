@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/badge";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p/w342";
 const TMDB_BACKDROP = "https://image.tmdb.org/t/p/w780";
-const STORAGE_KEY = "horizon-continue-watching";
+const BCINE_BASE = "https://bcine.app";
+const STORAGE_KEY = "bcine-continue-watching";
 
 interface Media {
   id: number;
@@ -48,11 +49,9 @@ function getYear(m: Media) {
   return d ? d.substring(0, 4) : "";
 }
 
-function getEmbedUrl(m: Media) {
-  if (m.media_type === "tv") {
-    return `https://vidsrc.to/embed/tv/${m.id}`;
-  }
-  return `https://vidsrc.to/embed/movie/${m.id}`;
+function getBcineUrl(m: Media) {
+  const slug = getTitle(m).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `${BCINE_BASE}/${m.media_type}/${m.id}-${slug}`;
 }
 
 function saveToHistory(m: Media) {
@@ -126,7 +125,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const url = getEmbedUrl(media);
+  const url = getBcineUrl(media);
 
   useEffect(() => {
     saveToHistory(media);
@@ -235,7 +234,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by VidSrc</span>
+              <span className="text-[10px] text-white/30">Powered by bCine.app</span>
             </div>
           </div>
         </div>
@@ -293,7 +292,7 @@ export default function MoviesPage() {
             <Film className="w-6 h-6 text-primary flex-shrink-0" />
             <div>
               <h1 className="text-xl font-black tracking-wide text-white">Movies</h1>
-              <p className="text-[11px] text-white/30 tracking-wider">Powered by VidSrc</p>
+              <p className="text-[11px] text-white/30 tracking-wider">Powered by bCine.app</p>
             </div>
           </div>
           <div className="relative flex-1 max-w-md">
