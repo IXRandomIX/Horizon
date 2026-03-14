@@ -687,5 +687,49 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ── Movies (TMDB proxy + bCine.app) ──────────────────────────────────────
+  const TMDB_KEY = "3e20e76d6d210b6cb128d17d233b64dc";
+  const TMDB_BASE = "https://api.themoviedb.org/3";
+
+  async function tmdbFetch(path: string) {
+    const res = await fetch(`${TMDB_BASE}${path}`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (!res.ok) throw new Error(`TMDB error ${res.status}`);
+    return res.json();
+  }
+
+  app.get("/api/movies/trending", async (_req, res) => {
+    try {
+      const [movies, tv] = await Promise.all([
+        tmdbFetch(`/trending/movie/day?api_key=${TMDB_KEY}`),
+        tmdbFetch(`/trending/tv/day?api_key=${TMDB_KEY}`),
+      ]);
+      const combined = [
+        ...movies.results.map((m: any) => ({ ...m, media_type: "movie" })),
+        ...tv.results.map((t: any) => ({ ...t, media_type: "tv" })),
+      ].sort((a, b) => b.popularity - a.popularity);
+      res.json(combined);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/movies/search/:q", async (req, res) => {
+    const q = (req.params.q || "").trim();
+    if (!q) return res.json([]);
+    try {
+      const data = await tmdbFetch(
+        `/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false`
+      );
+      const results = (data.results || []).filter(
+        (r: any) => r.media_type === "movie" || r.media_type === "tv"
+      );
+      res.json(results);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   return httpServer;
 }

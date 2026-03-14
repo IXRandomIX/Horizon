@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
   Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
-  LogOut, UsersRound, MailOpen
+  LogOut, UsersRound, MailOpen, Clapperboard
 } from "lucide-react";
 import {
   Sidebar,
@@ -65,6 +65,7 @@ export function AppSidebar() {
     { name: "Horizon AI", path: "/ai", icon: Sparkles, highlight: true },
     { name: "Global Inbox", path: "/global-inbox", icon: MailOpen, badge: globalInboxUnread, onNavigate: markGlobalInboxRead },
     { name: "Partners", path: "/partners", icon: Users },
+    { name: "Movies", path: "/movies", icon: Clapperboard },
     { name: "Games Portal", path: "/games", icon: Gamepad2 },
     { name: "Proxy Browser", path: "/browser", icon: Globe },
     { name: "Proxies", path: "/proxies", icon: ShieldCheck },

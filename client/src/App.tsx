@@ -24,6 +24,7 @@ import InboxPage from "@/pages/inbox";
 import DMsPage from "@/pages/dms";
 import UsersPage from "@/pages/users";
 import GlobalInboxPage from "@/pages/global-inbox";
+import MoviesPage from "@/pages/movies";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 
 function Router() {
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/dms" component={DMsPage} />
       <Route path="/users" component={UsersPage} />
       <Route path="/global-inbox" component={GlobalInboxPage} />
+      <Route path="/movies" component={MoviesPage} />
       <Route component={NotFound} />
     </Switch>
   );
