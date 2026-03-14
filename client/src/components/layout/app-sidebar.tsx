@@ -67,7 +67,7 @@ export function AppSidebar() {
     { name: "Partners", path: "/partners", icon: Users },
     { name: "Movies", path: "/movies", icon: Clapperboard },
     { name: "Games Portal", path: "/games", icon: Gamepad2 },
-    { name: "EaglerCraft", path: "/eaglercraft", icon: Sword },
+    { name: "Dragon X V2", path: "/eaglercraft", icon: Sword },
     { name: "Proxy Browser", path: "/browser", icon: Globe },
     { name: "Proxies", path: "/proxies", icon: ShieldCheck },
     { name: "Media / Tools", path: "/tools", icon: Wrench },

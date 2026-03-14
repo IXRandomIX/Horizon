@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button";
 export default function EaglerCraft() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
 
   useEffect(() => {
     const onFsChange = () => setIsFullscreen(!!document.fullscreenElement);
@@ -18,10 +17,8 @@ export default function EaglerCraft() {
     if (!el) return;
     if (document.fullscreenElement) {
       await document.exitFullscreen().catch(() => {});
-      setIsFullscreen(false);
     } else {
       await el.requestFullscreen().catch(() => {});
-      setIsFullscreen(true);
     }
   }, []);
 
@@ -35,8 +32,8 @@ export default function EaglerCraft() {
             <Sword className="w-5 h-5 text-green-400" />
           </div>
           <div>
-            <h1 className="font-bold text-lg text-white leading-tight">EaglerCraft Hacked Clients</h1>
-            <p className="text-[11px] text-white/40">Minecraft in your browser — powered by EaglerCraft</p>
+            <h1 className="font-bold text-lg text-white leading-tight">Dragon X V2</h1>
+            <p className="text-[11px] text-white/40">EaglerCraft 1.8 Hack Client</p>
           </div>
         </div>
         <div className="flex items-center gap-2 relative z-10">
@@ -54,22 +51,18 @@ export default function EaglerCraft() {
         </div>
       </div>
 
-      {/* Game container — fills remaining height */}
+      {/* Game container */}
       <div
         ref={containerRef}
         className="flex-1 relative bg-black"
         style={{ willChange: "transform" }}
       >
         <iframe
-          ref={iframeRef}
-          src="https://eaglerhackedclients.vercel.app/Mod.html"
+          src="/dragonx-v2.html"
           className="absolute inset-0 w-full h-full border-0"
-          style={{
-            display: "block",
-            imageRendering: "crisp-edges",
-          }}
+          style={{ display: "block" }}
           allow="fullscreen; autoplay; pointer-lock; encrypted-media; gyroscope; picture-in-picture; clipboard-read; clipboard-write"
-          title="EaglerCraft Hacked Clients"
+          title="Dragon X V2 - EaglerCraft Hack Client"
         />
       </div>
     </div>
