@@ -1,12 +1,13 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { useGames } from "@/hooks/use-games";
 import { GameCard } from "@/components/game-card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, ArrowLeft, ExternalLink, Gamepad2, Loader2 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import type { Game } from "@shared/routes";
+
+const PAGE_SIZE = 60;
 
 function GameFrame({ url, title }: { url: string; title: string }) {
   const [content, setContent] = useState<string | null>(null);
@@ -21,7 +22,6 @@ function GameFrame({ url, title }: { url: string; title: string }) {
         if (!response.ok) throw new Error("Failed to load game content");
         let html = await response.text();
         
-        // Ensure base tag exists to resolve relative assets from the original CDN
         const baseUrl = url.substring(0, url.lastIndexOf('/') + 1);
         if (!html.includes('<base')) {
           html = html.replace('<head>', `<head><base href="${baseUrl}">`);
@@ -72,14 +72,43 @@ function GameFrame({ url, title }: { url: string; title: string }) {
 export default function Games() {
   const { data: games, isLoading, error } = useGames();
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [playingGame, setPlayingGame] = useState<Game | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const loaderRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [debouncedSearch]);
 
   const filteredGames = useMemo(() => {
     if (!games) return [];
-    return games.filter(g =>
-      g.name.toLowerCase().includes(search.toLowerCase())
+    if (!debouncedSearch.trim()) return games;
+    const q = debouncedSearch.toLowerCase();
+    return games.filter(g => g.name.toLowerCase().includes(q));
+  }, [games, debouncedSearch]);
+
+  const visibleGames = useMemo(() => filteredGames.slice(0, visibleCount), [filteredGames, visibleCount]);
+
+  const loadMore = useCallback(() => {
+    setVisibleCount(prev => Math.min(prev + PAGE_SIZE, filteredGames.length));
+  }, [filteredGames.length]);
+
+  useEffect(() => {
+    const el = loaderRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => { if (entries[0].isIntersecting) loadMore(); },
+      { rootMargin: "300px" }
     );
-  }, [games, search]);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [loadMore]);
 
   if (playingGame) {
     const gameUrl = playingGame.url?.replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/gn-math/html@main') || '';
@@ -123,7 +152,6 @@ export default function Games() {
 
   return (
     <div className="flex flex-col h-full bg-black overflow-y-auto custom-scrollbar relative">
-      {/* Decorative ambient background glows */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-primary/20 rounded-full blur-[120px] pointer-events-none opacity-50" />
       <div className="absolute bottom-1/4 right-1/4 w-[30rem] h-[30rem] bg-purple-600/10 rounded-full blur-[150px] pointer-events-none opacity-50" />
 
@@ -148,6 +176,12 @@ export default function Games() {
               />
             </div>
           </div>
+          {games && (
+            <p className="text-xs text-white/30 mt-3">
+              {debouncedSearch ? `${filteredGames.length} results` : `${games.length} games`}
+              {visibleCount < filteredGames.length ? ` — showing ${visibleCount}` : ""}
+            </p>
+          )}
         </div>
 
         {error ? (
@@ -170,33 +204,19 @@ export default function Games() {
             <p className="text-muted-foreground text-lg">No games match your current frequency.</p>
           </div>
         ) : (
-          <motion.div 
-            className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 md:gap-8 pb-24"
-            initial="hidden"
-            animate="show"
-            variants={{
-              hidden: { opacity: 0 },
-              show: {
-                opacity: 1,
-                transition: { staggerChildren: 0.05 }
-              }
-            }}
-          >
-            <AnimatePresence>
-              {filteredGames.map((game) => (
-                <motion.div
-                  key={game.id}
-                  layout
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.9 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <GameCard game={game} onClick={() => setPlayingGame(game)} />
-                </motion.div>
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 md:gap-8 pb-8">
+              {visibleGames.map((game) => (
+                <GameCard key={game.id ?? game.name} game={game} onClick={() => setPlayingGame(game)} />
               ))}
-            </AnimatePresence>
-          </motion.div>
+            </div>
+            {visibleCount < filteredGames.length && (
+              <div ref={loaderRef} className="flex justify-center py-8 pb-24">
+                <Loader2 className="w-6 h-6 text-primary/50 animate-spin" />
+              </div>
+            )}
+            {visibleCount >= filteredGames.length && <div className="pb-24" />}
+          </>
         )}
       </div>
     </div>

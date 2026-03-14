@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ChevronUp, ChevronDown, X, Search, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Download, Plus, Trash2, Music2, ListMusic, Clock,
-  Users, Loader2, Check, TrendingUp, Flame
+  Users, Loader2, Check, TrendingUp, Flame, Repeat
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -139,6 +139,7 @@ export default function MusicPlayer() {
   const [audioDur, setAudioDur] = useState(0);
   const [volume, setVolume] = useState(0.8);
   const [isMuted, setIsMuted] = useState(false);
+  const [isLooping, setIsLooping] = useState(false);
   const [queue, setQueue] = useState<SCTrack[]>([]);
   const [queueIdx, setQueueIdx] = useState(0);
   const [playlists, setPlaylists] = useState<Playlist[]>(() => loadLS(LS_PLAYLISTS, []));
@@ -195,6 +196,12 @@ export default function MusicPlayer() {
     if (!audio) return;
     audio.volume = isMuted ? 0 : volume;
   }, [volume, isMuted]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.loop = isLooping;
+  }, [isLooping]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -381,7 +388,16 @@ export default function MusicPlayer() {
                     <SkipForward className="w-4 h-4 fill-current" />
                   </button>
                 </div>
-                <div className="w-24" />
+                <div className="flex items-center justify-end w-24">
+                  <button
+                    data-testid="button-loop"
+                    onClick={() => setIsLooping(l => !l)}
+                    title={isLooping ? "Loop on" : "Loop off"}
+                    className={`w-7 h-7 flex items-center justify-center rounded-lg transition-colors ${isLooping ? "text-primary bg-primary/15 hover:bg-primary/25" : "text-white/40 hover:text-white hover:bg-white/10"}`}
+                  >
+                    <Repeat className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
