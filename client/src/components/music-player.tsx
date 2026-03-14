@@ -3,10 +3,43 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ChevronUp, ChevronDown, X, Search, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Download, Plus, Trash2, Music2, ListMusic, Clock,
-  Users, Loader2, MoreHorizontal, Check
+  Users, Loader2, Check, TrendingUp, Flame
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+
+const GENRES = [
+  { id: "all-music", label: "All" },
+  { id: "hiphoprap", label: "Hip-Hop" },
+  { id: "pop", label: "Pop" },
+  { id: "danceedm", label: "Dance & EDM" },
+  { id: "rbsoul", label: "R&B & Soul" },
+  { id: "rock", label: "Rock" },
+  { id: "electronic", label: "Electronic" },
+  { id: "house", label: "House" },
+  { id: "trap", label: "Trap" },
+  { id: "indie", label: "Indie" },
+  { id: "alternativerock", label: "Alt Rock" },
+  { id: "dubstep", label: "Dubstep" },
+  { id: "deephouse", label: "Deep House" },
+  { id: "techno", label: "Techno" },
+  { id: "trance", label: "Trance" },
+  { id: "drumnbass", label: "Drum & Bass" },
+  { id: "ambient", label: "Ambient" },
+  { id: "classical", label: "Classical" },
+  { id: "jazzblues", label: "Jazz" },
+  { id: "country", label: "Country" },
+  { id: "reggae", label: "Reggae" },
+  { id: "latin", label: "Latin" },
+  { id: "metal", label: "Metal" },
+  { id: "disco", label: "Disco" },
+  { id: "dancehall", label: "Dancehall" },
+  { id: "triphop", label: "Trip Hop" },
+  { id: "piano", label: "Piano" },
+  { id: "folksingersongwriter", label: "Folk" },
+  { id: "soundtracks", label: "Soundtracks" },
+  { id: "world", label: "World" },
+];
 
 interface SCTrack {
   id: number;
@@ -116,6 +149,8 @@ export default function MusicPlayer() {
   const [showNewPlaylist, setShowNewPlaylist] = useState(false);
   const [addToPlaylistTrack, setAddToPlaylistTrack] = useState<SCTrack | null>(null);
   const [openPlaylistId, setOpenPlaylistId] = useState<string | null>(null);
+  const [newGenre, setNewGenre] = useState("all-music");
+  const [newKind, setNewKind] = useState<"trending" | "top">("trending");
 
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
@@ -136,8 +171,13 @@ export default function MusicPlayer() {
   });
 
   const { data: newTracks = [], isLoading: newLoading } = useQuery<SCTrack[]>({
-    queryKey: ["/api/music/new"],
+    queryKey: ["/api/music/new", newGenre, newKind],
     enabled: tab === "new" && isOpen,
+    queryFn: async () => {
+      const r = await fetch(`/api/music/new?genre=${newGenre}&kind=${newKind}`, { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load");
+      return r.json();
+    },
   });
 
   const artistStats: ArtistStat[] = (() => {
@@ -399,12 +439,51 @@ export default function MusicPlayer() {
 
               {/* New Tab */}
               {tab === "new" && (
-                <div className="p-3 space-y-1">
-                  <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold mb-2 px-1">Trending on SoundCloud</p>
-                  {newLoading && <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 text-primary animate-spin" /></div>}
-                  {newTracks.map(t => (
-                    <TrackRow key={t.id} track={t} onPlay={() => playTrack(t, newTracks)} isActive={currentTrack?.id === t.id} isPlaying={isPlaying} onDownload={() => handleDownload(t)} downloading={downloadingId === t.id} onAddToPlaylist={() => setAddToPlaylistTrack(t)} />
-                  ))}
+                <div>
+                  {/* Kind toggle + Genre pills - sticky */}
+                  <div className="sticky top-0 z-10 bg-zinc-950 border-b border-white/5">
+                    <div className="flex gap-1 px-3 pt-2.5 pb-1.5">
+                      <button
+                        data-testid="button-kind-trending"
+                        onClick={() => setNewKind("trending")}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors ${newKind === "trending" ? "bg-primary text-white" : "bg-white/8 text-white/40 hover:text-white hover:bg-white/12"}`}
+                      >
+                        <Flame className="w-2.5 h-2.5" /> Trending
+                      </button>
+                      <button
+                        data-testid="button-kind-top"
+                        onClick={() => setNewKind("top")}
+                        className={`flex items-center gap-1 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-colors ${newKind === "top" ? "bg-primary text-white" : "bg-white/8 text-white/40 hover:text-white hover:bg-white/12"}`}
+                      >
+                        <TrendingUp className="w-2.5 h-2.5" /> Top Charts
+                      </button>
+                    </div>
+                    <div className="flex gap-1.5 px-3 pb-2 overflow-x-auto scrollbar-none">
+                      {GENRES.map(g => (
+                        <button
+                          key={g.id}
+                          data-testid={`button-genre-${g.id}`}
+                          onClick={() => setNewGenre(g.id)}
+                          className={`flex-shrink-0 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors whitespace-nowrap ${newGenre === g.id ? "bg-primary/30 text-primary border border-primary/40" : "bg-white/5 text-white/40 hover:text-white hover:bg-white/10 border border-transparent"}`}
+                        >
+                          {g.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Tracks list */}
+                  <div className="p-2 space-y-0.5">
+                    {newLoading && <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 text-primary animate-spin" /></div>}
+                    {!newLoading && newTracks.length === 0 && <p className="text-center text-xs text-white/30 py-6">No tracks found</p>}
+                    {newTracks.map((t, i) => (
+                      <div key={t.id} className="flex items-center gap-1">
+                        <span className="text-[9px] text-white/15 w-4 text-right flex-shrink-0">{i + 1}</span>
+                        <div className="flex-1 min-w-0">
+                          <TrackRow track={t} onPlay={() => playTrack(t, newTracks)} isActive={currentTrack?.id === t.id} isPlaying={isPlaying} onDownload={() => handleDownload(t)} downloading={downloadingId === t.id} onAddToPlaylist={() => setAddToPlaylistTrack(t)} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 

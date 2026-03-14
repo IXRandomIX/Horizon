@@ -766,10 +766,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/music/new", async (_req, res) => {
+  app.get("/api/music/new", async (req, res) => {
     try {
       const cid = await getScClientId();
-      const r = await fetch(`https://api-v2.soundcloud.com/charts?kind=trending&genre=soundcloud%3Agenres%3Aall-music&client_id=${cid}&limit=30`, {
+      const genre = (req.query.genre as string) || "all-music";
+      const kind = (req.query.kind as string) || "trending";
+      const encoded = `soundcloud%3Agenres%3A${encodeURIComponent(genre)}`;
+      const r = await fetch(`https://api-v2.soundcloud.com/charts?kind=${kind}&genre=${encoded}&client_id=${cid}&limit=50`, {
         headers: { "User-Agent": "Mozilla/5.0" },
       });
       const data = await r.json();
