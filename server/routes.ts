@@ -665,21 +665,166 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
 
+  const FROGIEE1_GAMES = [
+    { name: "Geometry Dash", url: "https://play.frogiee1.org/stuff/selfhosted/gdlite/", cover: "" },
+    { name: "Getaway Shootout", url: "https://play.frogiee1.org/stuff/selfhosted/rayvon-shootout/", cover: "" },
+    { name: "Rooftop Snipers", url: "https://play.frogiee1.org/stuff/selfhosted/rooftop-snipers/", cover: "" },
+    { name: "Rooftop Snipers 2", url: "https://play.frogiee1.org/stuff/selfhosted/rooftop-snipers-2/", cover: "" },
+    { name: "Tube Jumpers", url: "https://play.frogiee1.org/stuff/selfhosted/tube-jumpers/", cover: "" },
+    { name: "Five Nights at Freddy's", url: "https://play.frogiee1.org/stuff/selfhosted/fnaf1/", cover: "" },
+    { name: "Five Nights at Freddy's 2", url: "https://play.frogiee1.org/stuff/selfhosted/fnaf2/", cover: "" },
+    { name: "Five Nights at Freddy's 3", url: "https://play.frogiee1.org/stuff/selfhosted/fnaf3/", cover: "" },
+    { name: "Five Nights at Freddy's 4", url: "https://play.frogiee1.org/stuff/selfhosted/fnaf4/", cover: "" },
+    { name: "Five Nights at Freddy's Sister Location", url: "https://play.frogiee1.org/stuff/selfhosted/sisterlocation/", cover: "" },
+    { name: "Pizzeria Simulator", url: "https://play.frogiee1.org/stuff/selfhosted/pizzeriasimulator/", cover: "" },
+    { name: "FNaF World", url: "https://play.frogiee1.org/stuff/selfhosted/fnafworld/", cover: "" },
+    { name: "Ultimate Custom Night", url: "https://play.frogiee1.org/stuff/selfhosted/ucn/", cover: "" },
+    { name: "Minecraft Classic", url: "https://play.frogiee1.org/stuff/selfhosted/minecraft/", cover: "" },
+    { name: "Subway Surfers", url: "https://play.frogiee1.org/cdn/projects/subway-surfers/", cover: "" },
+    { name: "Bloodmoney", url: "https://play.frogiee1.org/stuff/selfhosted/bloodmoney/", cover: "" },
+    { name: "Crossy Road", url: "https://play.frogiee1.org/stuff/selfhosted/crossyroad/", cover: "" },
+    { name: "Slow Roads", url: "https://play.frogiee1.org/stuff/selfhosted/slowroads/", cover: "" },
+    { name: "Happy Wheels", url: "https://play.frogiee1.org/stuff/selfhosted/happywheels/", cover: "" },
+    { name: "PolyTrack", url: "https://play.frogiee1.org/stuff/selfhosted/polytrack/", cover: "" },
+    { name: "Slope", url: "https://play.frogiee1.org/stuff/selfhosted/slope/", cover: "" },
+    { name: "A Small World Cup", url: "https://play.frogiee1.org/stuff/selfhosted/asmallworldcup/", cover: "" },
+    { name: "BitLife", url: "https://play.frogiee1.org/stuff/selfhosted/bitlife/", cover: "" },
+    { name: "Monkey Mart", url: "https://play.frogiee1.org/stuff/selfhosted/monkey-mart/", cover: "" },
+    { name: "Drive Mad", url: "https://play.frogiee1.org/cdn/projects/drive-mad/", cover: "" },
+    { name: "Monster Tracks", url: "https://play.frogiee1.org/stuff/selfhosted/monster-tracks/", cover: "" },
+    { name: "A Dance of Fire and Ice", url: "https://play.frogiee1.org/stuff/selfhosted/a-dance-of-fire-and-ice/", cover: "" },
+    { name: "Cannon Basketball 4", url: "https://play.frogiee1.org/stuff/selfhosted/cannon-basketball-4/", cover: "" },
+    { name: "Dragon vs Icy Bricks", url: "https://play.frogiee1.org/stuff/selfhosted/dragon-vs-bricks/", cover: "" },
+    { name: "Dodge", url: "https://play.frogiee1.org/stuff/selfhosted/dodge/", cover: "" },
+    { name: "Baldi's Basics", url: "https://play.frogiee1.org/stuff/selfhosted/baldis-basics/", cover: "" },
+    { name: "100 Player Pong", url: "https://play.frogiee1.org/stuff/selfhosted/100ng/", cover: "" },
+    { name: "Burrito Bison", url: "https://play.frogiee1.org/stuff/selfhosted/burrito-bison/", cover: "" },
+    { name: "Rhythm Hell", url: "https://play.frogiee1.org/stuff/selfhosted/rhythm-hell/", cover: "" },
+    { name: "Bacon May Die", url: "https://play.frogiee1.org/stuff/selfhosted/bacon-may-die/", cover: "" },
+    { name: "Soccer Random", url: "https://play.frogiee1.org/stuff/selfhosted/soccer-random/", cover: "" },
+    { name: "Basket Random", url: "https://play.frogiee1.org/stuff/selfhosted/basket-random/", cover: "" },
+    { name: "Boxing Random", url: "https://play.frogiee1.org/stuff/selfhosted/boxing-random/", cover: "" },
+    { name: "Volley Random", url: "https://play.frogiee1.org/stuff/selfhosted/volley-random/", cover: "" },
+    { name: "Bouncy Basketball", url: "https://play.frogiee1.org/stuff/selfhosted/bouncy-basketball/", cover: "" },
+    { name: "Adventure Drivers", url: "https://play.frogiee1.org/stuff/selfhosted/adventure-drivers/", cover: "" },
+    { name: "Cookie Clicker", url: "https://play.frogiee1.org/cdn/projects/cookie-clicker/index.html", cover: "" },
+    { name: "Stickman Hook", url: "https://play.frogiee1.org/cdn/projects/stickman-hook/", cover: "" },
+    { name: "OvO", url: "https://play.frogiee1.org/cdn/projects/ovo/", cover: "" },
+    { name: "DOOM (Classic)", url: "https://play.frogiee1.org/stuff/selfhosted/doom/", cover: "" },
+    { name: "Tomb of the Mask", url: "https://play.frogiee1.org/stuff/selfhosted/tomb-of-the-mask/", cover: "" },
+    { name: "Big Tower Tiny Square", url: "https://play.frogiee1.org/cdn/projects/btts/", cover: "" },
+    { name: "Half-Life", url: "https://play.frogiee1.org/stuff/selfhosted/half-life/", cover: "" },
+    { name: "Superhot", url: "https://play.frogiee1.org/stuff/selfhosted/super-hot/", cover: "" },
+    { name: "HexGL", url: "https://play.frogiee1.org/stuff/selfhosted/hexgl/", cover: "" },
+    { name: "Buckshot Roulette", url: "https://play.frogiee1.org/stuff/selfhosted/buckshot-roulette/", cover: "" },
+    { name: "Nazi Zombies Portable", url: "https://play.frogiee1.org/stuff/selfhosted/nzp/", cover: "" },
+    { name: "Super Fowlst", url: "https://play.frogiee1.org/stuff/selfhosted/super-foulist/", cover: "" },
+    { name: "Basket Bros", url: "https://play.frogiee1.org/cdn/projects/basketbros-io/", cover: "" },
+    { name: "Quake", url: "https://play.frogiee1.org/stuff/selfhosted/quake/", cover: "" },
+    { name: "Run 3", url: "https://play.frogiee1.org/stuff/selfhosted/run3/", cover: "" },
+    { name: "Bob the Robber 2", url: "https://play.frogiee1.org/cdn/projects/bobtherobber2/index.html", cover: "" },
+    { name: "Moto X3M", url: "https://play.frogiee1.org/cdn/projects/motox3m/index.html", cover: "" },
+    { name: "Flappy Bird", url: "https://play.frogiee1.org/stuff/selfhosted/flappybird/", cover: "" },
+    { name: "Tanuki Sunset", url: "https://play.frogiee1.org/stuff/selfhosted/tanuki-sunset/", cover: "" },
+    { name: "Basketball Stars", url: "https://play.frogiee1.org/stuff/selfhosted/basketball-stars/", cover: "" },
+    { name: "10 Minutes Till Dawn", url: "https://play.frogiee1.org/stuff/selfhosted/10minutestilldawn/", cover: "" },
+    { name: "Angry Birds (Frogiee)", url: "https://play.frogiee1.org/stuff/selfhosted/angrybirds/", cover: "" },
+    { name: "Balatro", url: "https://play.frogiee1.org/stuff/selfhosted/balatro/", cover: "" },
+    { name: "Bad Game", url: "https://play.frogiee1.org/stuff/selfhosted/bad-game/", cover: "" },
+    { name: "Block Blast", url: "https://play.frogiee1.org/stuff/selfhosted/block-blast/", cover: "" },
+    { name: "Doki Doki Literature Club Plus", url: "https://play.frogiee1.org/stuff/selfhosted/ddlcplus/", cover: "" },
+    { name: "Danganronpa", url: "https://play.frogiee1.org/stuff/selfhosted/danganronpa/", cover: "" },
+    { name: "Escape Road", url: "https://play.frogiee1.org/stuff/selfhosted/escape-road/", cover: "" },
+    { name: "Delta Traveler", url: "https://play.frogiee1.org/stuff/selfhosted/delta-traveler/", cover: "" },
+    { name: "Drift Boss", url: "https://play.frogiee1.org/stuff/selfhosted/drift-boss/", cover: "" },
+    { name: "Endless Truck", url: "https://play.frogiee1.org/stuff/selfhosted/endless-truck/", cover: "" },
+    { name: "Do Not Take This Cat Home", url: "https://play.frogiee1.org/stuff/selfhosted/donotcathome/", cover: "" },
+    { name: "Diggy", url: "https://play.frogiee1.org/stuff/selfhosted/diggy/", cover: "" },
+    { name: "Avalanche", url: "https://play.frogiee1.org/stuff/selfhosted/avalanche/", cover: "" },
+    { name: "Bloons Tower Defense", url: "https://play.frogiee1.org/stuff/selfhosted/btd1/", cover: "" },
+    { name: "Bloons Tower Defense 2", url: "https://play.frogiee1.org/stuff/selfhosted/btd2/", cover: "" },
+    { name: "Advance Wars", url: "https://play.frogiee1.org/stuff/selfhosted/advance-wars/", cover: "" },
+    { name: "Animal Crossing Wild World", url: "https://play.frogiee1.org/stuff/selfhosted/animalcrossing/", cover: "" },
+    { name: "Alien Hominid", url: "https://play.frogiee1.org/stuff/selfhosted/alien-hominid/", cover: "" },
+    { name: "Burger and Frights", url: "https://play.frogiee1.org/stuff/selfhosted/burger-and-frights/", cover: "" },
+    { name: "Bendy and the Ink Machine", url: "https://play.frogiee1.org/stuff/selfhosted/batim/", cover: "" },
+    { name: "Crash Bandicoot", url: "https://play.frogiee1.org/stuff/selfhosted/crash-bandicoot/", cover: "" },
+    { name: "Cuphead", url: "https://play.frogiee1.org/stuff/selfhosted/cuphead/", cover: "" },
+  ];
+
   app.get(api.games.list.path, async (_req, res) => {
     try {
       const now = Date.now();
       if (cachedGames.length > 0 && now - lastFetchTime < CACHE_DURATION) return res.json(cachedGames);
-      const response = await fetch("https://cdn.jsdelivr.net/gh/gn-math/assets@main/zones.json");
-      if (!response.ok) throw new Error("Failed to fetch games data");
-      const data = await response.json();
+
       const coverUrl = "https://cdn.jsdelivr.net/gh/gn-math/covers@main";
       const htmlUrl = "https://cdn.jsdelivr.net/gh/gn-math/html@main";
-      cachedGames = data.filter((game: any) => game.id >= 0 && game.url && game.name).map((game: any) => ({
-        id: game.id, name: game.name,
-        cover: (game.cover || "").replace("{COVER_URL}", coverUrl),
-        url: (game.url || "").replace("{HTML_URL}", htmlUrl),
-        author: game.author, authorLink: game.authorLink
-      }));
+      const hydraUrl = "https://cdn.jsdelivr.net/gh/Hydra-Network/hydra-assets@main";
+      const ckvUrl = "https://cdn.jsdelivr.net/gh/WanoCapy/ChickenKingsVault@main";
+
+      const [gnMathRes, hydraRes, ckvRes] = await Promise.allSettled([
+        fetch("https://cdn.jsdelivr.net/gh/gn-math/assets@main/zones.json"),
+        fetch(`${hydraUrl}/gmes.json`),
+        fetch("https://raw.githubusercontent.com/carbonicality/ChickenKingsVault/main/games.json"),
+      ]);
+
+      const allGames: any[] = [];
+      const seenNames = new Set<string>();
+
+      const addGame = (game: any) => {
+        const key = game.name.toLowerCase().trim();
+        if (!seenNames.has(key)) {
+          seenNames.add(key);
+          allGames.push(game);
+        }
+      };
+
+      if (gnMathRes.status === "fulfilled" && gnMathRes.value.ok) {
+        const data = await gnMathRes.value.json();
+        data.filter((g: any) => g.id >= 0 && g.url && g.name).forEach((g: any) => {
+          addGame({
+            id: g.id, name: g.name,
+            cover: (g.cover || "").replace("{COVER_URL}", coverUrl),
+            url: (g.url || "").replace("{HTML_URL}", htmlUrl),
+            author: g.author, authorLink: g.authorLink,
+            source: "gn-math"
+          });
+        });
+      }
+
+      if (hydraRes.status === "fulfilled" && hydraRes.value.ok) {
+        const data = await hydraRes.value.json();
+        data.forEach((g: any) => {
+          if (g.title && g.file_name) {
+            addGame({
+              id: null, name: g.title,
+              cover: `${hydraUrl}/${g.thumb}`,
+              url: `${hydraUrl}/gmes/${g.file_name}`,
+              author: "Hydra Network", authorLink: "https://scienceissuperfun-2.blackbearshow.com",
+              source: "hydra"
+            });
+          }
+        });
+      }
+
+      if (ckvRes.status === "fulfilled" && ckvRes.value.ok) {
+        const data = await ckvRes.value.json();
+        data.forEach((g: any) => {
+          if (g.name && g.html) {
+            addGame({
+              id: null, name: g.name,
+              cover: g.img ? `https://raw.githubusercontent.com/carbonicality/ChickenKingsVault/main/${g.img}` : "",
+              url: `${ckvUrl}/${g.html}`,
+              author: "ChickenKingsVault", authorLink: "https://scienceissuperfun-2.blackbearshow.com",
+              source: "ckv"
+            });
+          }
+        });
+      }
+
+      FROGIEE1_GAMES.forEach((g, i) => addGame({ id: 90000 + i, ...g, author: "Frogiee1", authorLink: "https://play.frogiee1.org", source: "frogiee1" }));
+
+      cachedGames = allGames;
       lastFetchTime = now;
       res.json(cachedGames);
     } catch {
