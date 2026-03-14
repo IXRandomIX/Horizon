@@ -9,7 +9,7 @@ import { queryClient } from "@/lib/queryClient";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { useAuth } from "@/context/auth";
+import { useAuth, getSessionToken } from "@/context/auth";
 import { useNotifications } from "@/context/notifications";
 import { ProfileModal } from "@/components/profile-modal";
 
@@ -140,6 +140,7 @@ export default function Chat() {
   };
   const scrollRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
 
   useEffect(() => {
@@ -182,10 +183,10 @@ export default function Chat() {
   }, [activeChannel]);
 
   useEffect(() => {
-    if (scrollRef.current && !isUserScrolling) {
+    if (!isUserScrolling) {
       setTimeout(() => {
-        scrollRef.current!.scrollTop = scrollRef.current!.scrollHeight;
-      }, 0);
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }, 50);
     }
   }, [messages, isUserScrolling]);
 
@@ -330,15 +331,18 @@ export default function Chat() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const res = await fetch("/api/chat/auth/login", {
+    const res = await fetch("/api/auth/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ username, password }),
     });
     const data = await res.json();
     if (res.ok) {
-      setUser(data);
-      localStorage.setItem("horizon_chat_user", JSON.stringify(data));
+      const { sessionToken, ...userData } = data;
+      setUser(userData);
+      localStorage.setItem("horizon_chat_user", JSON.stringify(userData));
+      localStorage.setItem("horizon_user", JSON.stringify(userData));
+      if (sessionToken) localStorage.setItem("horizon_session_token", sessionToken);
       toast({ title: "Welcome to HORIZON CHAT" });
     } else {
       toast({ title: data.message, variant: "destructive" });

@@ -4,16 +4,16 @@ import { ExternalLink, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { getSessionToken } from "@/context/auth";
 
-const WALL_PW = atob("QEBAISEhJCQkVFRUODg4QkJCNTU1WlpaNzc3JCQkISEhQEBAb25Bcm9sbDkxOTg3Nkhvd0RpZFlvdUdldFRoaXNGYXIhISElJSUjIyNHYXRla2VlcFRoaXNOb3chISEtLS05MzcyODE5NjI=");
-const LINK_CREATOR_SRC = atob("aHR0cHM6Ly9kb21haW4tbGlua2VyLS16YWNoYXJ5Z291bGRlbi5yZXBsaXQuYXBw");
-const MAX_ATTEMPTS = 2;
-const LOCKOUT_MS = 20 * 24 * 60 * 60 * 1000;
-const SK_ATTEMPTS = "wall_attempts";
-const SK_LOCKOUT = "wall_lockout_until";
-const SK_UNLOCKED = "wall_unlocked";
+const LINK_CREATOR_SRC = "https://domain-linker--zacharygoulden.replit.app";
 
-type Stage = "gate" | "denied" | "success_flash" | "unlocked" | "locked_out";
+function formatTimeLeft(ms: number) {
+  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
+  const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+  const mins = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+  return `${days}d ${hours}h ${mins}m`;
+}
 
 const GLITCH_CHARS = "!@#$%^&*<>?/|\\~`{}[]";
 function randomGlitch(text: string, intensity: number) {
@@ -40,68 +40,79 @@ function DemonText({ text, className }: { text: string; className?: string }) {
   return <span className={`demon-text ${className ?? ""}`} data-text={text}>{display}</span>;
 }
 
-function formatTimeLeft(ms: number) {
-  const days = Math.floor(ms / (1000 * 60 * 60 * 24));
-  const hours = Math.floor((ms % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-  const mins = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
-  return `${days}d ${hours}h ${mins}m`;
-}
+type Stage = "loading" | "gate" | "denied" | "success_flash" | "unlocked" | "locked_out";
 
 export default function TheWall() {
-  const [stage, setStage] = useState<Stage>("gate");
+  const [stage, setStage] = useState<Stage>("loading");
   const [password, setPassword] = useState("");
   const [timeLeft, setTimeLeft] = useState(0);
+  const [attemptsLeft, setAttemptsLeft] = useState(2);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    const unlocked = localStorage.getItem(SK_UNLOCKED) === "true";
-    if (unlocked) { setStage("unlocked"); return; }
+    const token = getSessionToken();
+    if (!token) { setStage("gate"); return; }
 
-    const lockout = Number(localStorage.getItem(SK_LOCKOUT) || 0);
-    if (lockout && Date.now() < lockout) {
-      setStage("locked_out");
-      setTimeLeft(lockout - Date.now());
-    }
+    fetch("/api/wall/status", {
+      headers: { "Authorization": `Bearer ${token}` }
+    })
+      .then(r => r.json())
+      .then(data => {
+        if (data.unlocked) {
+          setStage("unlocked");
+        } else if (data.locked) {
+          setTimeLeft(data.lockedUntilMs - Date.now());
+          setStage("locked_out");
+        } else {
+          setAttemptsLeft(data.attemptsLeft ?? 2);
+          setStage("gate");
+        }
+      })
+      .catch(() => setStage("gate"));
   }, []);
 
   useEffect(() => {
     if (stage !== "locked_out") return;
     const id = setInterval(() => {
-      const lockout = Number(localStorage.getItem(SK_LOCKOUT) || 0);
-      const remaining = lockout - Date.now();
-      if (remaining <= 0) {
-        localStorage.removeItem(SK_LOCKOUT);
-        localStorage.removeItem(SK_ATTEMPTS);
-        setStage("gate");
-        setTimeLeft(0);
-      } else {
-        setTimeLeft(remaining);
-      }
-    }, 1000 * 30);
+      setTimeLeft(prev => {
+        if (prev <= 1000) {
+          setStage("gate");
+          setAttemptsLeft(2);
+          return 0;
+        }
+        return prev - 30000;
+      });
+    }, 30000);
     return () => clearInterval(id);
   }, [stage]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === WALL_PW) {
-      localStorage.setItem(SK_UNLOCKED, "true");
-      localStorage.removeItem(SK_ATTEMPTS);
-      localStorage.removeItem(SK_LOCKOUT);
+    const token = getSessionToken();
+    if (!token) { setStage("gate"); return; }
+
+    const res = await fetch("/api/wall/verify", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ password }),
+    });
+
+    const data = await res.json();
+    setPassword("");
+
+    if (res.ok && data.success) {
       setStage("success_flash");
       setTimeout(() => setStage("unlocked"), 4000);
+    } else if (res.status === 423 || data.locked) {
+      setTimeLeft(data.lockedUntilMs - Date.now());
+      setStage("locked_out");
     } else {
-      const attempts = Number(localStorage.getItem(SK_ATTEMPTS) || 0) + 1;
-      localStorage.setItem(SK_ATTEMPTS, String(attempts));
-      setPassword("");
-      if (attempts >= MAX_ATTEMPTS) {
-        const lockUntil = Date.now() + LOCKOUT_MS;
-        localStorage.setItem(SK_LOCKOUT, String(lockUntil));
-        setTimeLeft(lockUntil - Date.now());
-        setStage("locked_out");
-      } else {
-        setStage("denied");
-        setTimeout(() => setStage("gate"), 3500);
-      }
+      setAttemptsLeft(data.attemptsLeft ?? 0);
+      setStage("denied");
+      setTimeout(() => setStage("gate"), 3500);
     }
   };
 
@@ -110,16 +121,9 @@ export default function TheWall() {
       <style>{`
         @keyframes demon-flicker {
           0%, 19%, 21%, 23%, 25%, 54%, 56%, 100% {
-            text-shadow:
-              0 0 10px #ff0000,
-              0 0 20px #ff0000,
-              0 0 40px #ff0000,
-              0 0 80px #ff4400,
-              0 0 120px #ff2200;
+            text-shadow: 0 0 10px #ff0000, 0 0 20px #ff0000, 0 0 40px #ff0000, 0 0 80px #ff4400, 0 0 120px #ff2200;
           }
-          20%, 24%, 55% {
-            text-shadow: none;
-          }
+          20%, 24%, 55% { text-shadow: none; }
         }
         @keyframes demon-shake {
           0%, 100% { transform: translate(0,0) skew(0deg); }
@@ -133,21 +137,9 @@ export default function TheWall() {
           80% { transform: translate(3px, 1px) skew(-1deg); }
           90% { transform: translate(-1px, -2px) skew(1deg); }
         }
-        @keyframes wall-bg-pulse {
-          0%, 100% { opacity: 0.03; }
-          50% { opacity: 0.08; }
-        }
         @keyframes scanline {
           0% { transform: translateY(-100%); }
           100% { transform: translateY(100vh); }
-        }
-        @keyframes wall-glitch-bg {
-          0%, 90%, 100% { background-position: 0 0; }
-          91% { background-position: -5px 0; }
-          92% { background-position: 5px 0; }
-          93% { background-position: -5px 0; }
-          94% { background-position: 5px 0; }
-          95% { background-position: 0 0; }
         }
         .demon-text {
           color: #ff2200;
@@ -259,21 +251,20 @@ export default function TheWall() {
       <div className="scanline-overlay" />
 
       <div className="relative z-10 flex flex-col items-center justify-start min-h-full px-6 py-16 md:py-24">
-
         <AnimatePresence mode="wait">
 
-          {/* LOCKED OUT STATE */}
+          {stage === "loading" && (
+            <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center gap-4 text-white/30 font-mono text-xs uppercase tracking-widest">
+              <div className="w-6 h-6 border border-purple-500/40 border-t-purple-500 rounded-full animate-spin" />
+              <span>Verifying access...</span>
+            </motion.div>
+          )}
+
           {stage === "locked_out" && (
-            <motion.div
-              key="locked_out"
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center gap-8 max-w-xl w-full text-center"
-            >
-              <div className="wall-glitch-title text-5xl md:text-7xl font-black uppercase mb-4" data-text="THE WALL">
-                THE WALL
-              </div>
+            <motion.div key="locked_out" initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center gap-8 max-w-xl w-full text-center">
+              <div className="wall-glitch-title text-5xl md:text-7xl font-black uppercase mb-4" data-text="THE WALL">THE WALL</div>
               <div className="w-24 h-1 bg-gradient-to-r from-red-800 via-red-500 to-red-800 rounded-full shadow-[0_0_20px_rgba(239,68,68,0.5)]" />
               <div className="mt-8 space-y-6">
                 <p className="access-denied-text text-2xl md:text-3xl">ACCESS DENIED</p>
@@ -287,84 +278,48 @@ export default function TheWall() {
             </motion.div>
           )}
 
-          {/* ACCESS DENIED FLASH */}
           {stage === "denied" && (
-            <motion.div
-              key="denied"
-              initial={{ opacity: 0, scale: 1.1 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className="flex flex-col items-center gap-6 max-w-2xl w-full text-center"
-            >
-              <motion.div
-                animate={{ x: [0, -8, 8, -8, 8, -5, 5, 0] }}
-                transition={{ duration: 0.4, repeat: 3 }}
-              >
+            <motion.div key="denied" initial={{ opacity: 0, scale: 1.1 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+              className="flex flex-col items-center gap-6 max-w-2xl w-full text-center">
+              <motion.div animate={{ x: [0, -8, 8, -8, 8, -5, 5, 0] }} transition={{ duration: 0.4, repeat: 3 }}>
                 <p className="access-denied-text text-3xl md:text-5xl leading-tight">
                   ACCESS DENIED<br />YOU ARE NEVER GETTING PASSED
                 </p>
               </motion.div>
               <div className="w-full h-0.5 bg-red-900/50 mt-4" />
               <p className="text-red-400/50 font-mono text-xs uppercase tracking-widest">
-                {MAX_ATTEMPTS - Number(localStorage.getItem(SK_ATTEMPTS) || 0)} attempt(s) remaining
+                {attemptsLeft} attempt(s) remaining
               </p>
             </motion.div>
           )}
 
-          {/* SUCCESS FLASH */}
           {stage === "success_flash" && (
-            <motion.div
-              key="success_flash"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="flex flex-col items-center gap-8 max-w-3xl w-full text-center px-4"
-            >
-              <motion.div
-                animate={{ scale: [1, 1.05, 0.97, 1.03, 1] }}
-                transition={{ duration: 0.5, repeat: 5 }}
-                className="text-3xl md:text-5xl leading-tight"
-              >
+            <motion.div key="success_flash" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex flex-col items-center gap-8 max-w-3xl w-full text-center px-4">
+              <motion.div animate={{ scale: [1, 1.05, 0.97, 1.03, 1] }} transition={{ duration: 0.5, repeat: 5 }}
+                className="text-3xl md:text-5xl leading-tight">
                 <DemonText text="WELCOME GATEKEEPER" className="block mb-4 text-4xl md:text-6xl" />
                 <DemonText text="HAHAHAHAHAHHAHHAHAHA" className="block text-2xl md:text-4xl" />
               </motion.div>
-              <motion.div
-                animate={{ opacity: [1, 0, 1, 0.5, 1] }}
-                transition={{ duration: 0.2, repeat: 15 }}
-                className="text-red-500/40 font-mono text-xs uppercase tracking-[0.4em]"
-              >
+              <motion.div animate={{ opacity: [1, 0, 1, 0.5, 1] }} transition={{ duration: 0.2, repeat: 15 }}
+                className="text-red-500/40 font-mono text-xs uppercase tracking-[0.4em]">
                 initializing access...
               </motion.div>
             </motion.div>
           )}
 
-          {/* GATE / PASSWORD ENTRY */}
           {stage === "gate" && (
-            <motion.div
-              key="gate"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="flex flex-col items-center gap-10 max-w-xl w-full text-center"
-            >
+            <motion.div key="gate" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }}
+              className="flex flex-col items-center gap-10 max-w-xl w-full text-center">
               <div>
-                <div className="wall-glitch-title text-6xl md:text-8xl font-black uppercase tracking-widest mb-6" data-text="THE WALL">
-                  THE WALL
-                </div>
+                <div className="wall-glitch-title text-6xl md:text-8xl font-black uppercase tracking-widest mb-6" data-text="THE WALL">THE WALL</div>
                 <div className="w-32 h-1 mx-auto bg-gradient-to-r from-purple-900 via-purple-500 to-purple-900 rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)]" />
               </div>
-
               <div className="max-w-lg">
                 <p className="sub-glitch text-lg md:text-xl italic leading-relaxed" data-text="you will never know what is behind this wall">
-                  <GlitchText
-                    text="you will never know what is behind this wall"
-                    className="sub-glitch"
-                    intensity={0.06}
-                    interval={120}
-                  />
+                  <GlitchText text="you will never know what is behind this wall" className="sub-glitch" intensity={0.06} interval={120} />
                 </p>
               </div>
-
               <div className="w-full max-w-md space-y-4">
                 <div className="flex items-center gap-3 justify-center mb-2">
                   <Shield className="w-4 h-4 text-purple-500/60" />
@@ -391,34 +346,22 @@ export default function TheWall() {
                   </Button>
                 </form>
                 <p className="text-white/20 font-mono text-xs mt-4">
-                  {MAX_ATTEMPTS} attempts allowed · failure locks you out for 20 days
+                  2 attempts allowed · failure locks you out for 20 days
                 </p>
               </div>
             </motion.div>
           )}
 
-          {/* UNLOCKED CONTENT */}
           {stage === "unlocked" && (
-            <motion.div
-              key="unlocked"
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.8 }}
-              className="w-full max-w-4xl space-y-10"
-            >
+            <motion.div key="unlocked" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.8 }}
+              className="w-full max-w-4xl space-y-10">
               <div className="text-center">
-                <div className="wall-glitch-title text-5xl md:text-7xl font-black uppercase tracking-widest mb-3" data-text="THE WALL">
-                  THE WALL
-                </div>
+                <div className="wall-glitch-title text-5xl md:text-7xl font-black uppercase tracking-widest mb-3" data-text="THE WALL">THE WALL</div>
                 <div className="w-32 h-1 mx-auto bg-gradient-to-r from-purple-900 via-purple-500 to-purple-900 rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)] mb-4" />
                 <p className="text-purple-400/60 font-mono text-xs uppercase tracking-[0.3em]">Access Granted — Welcome, Gatekeeper</p>
               </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-              >
+              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
                 <Card className="bg-white/[0.03] border-white/10 overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 to-transparent pointer-events-none" />
                   <CardHeader>
@@ -447,19 +390,9 @@ export default function TheWall() {
                 </Card>
               </motion.div>
 
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: 0.6 }}
-                className="text-center py-10"
-              >
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="text-center py-10">
                 <p className="sub-glitch text-base md:text-lg text-white/40 italic tracking-widest" data-text="The wall will bring more stuff soon...">
-                  <GlitchText
-                    text="The wall will bring more stuff soon..."
-                    intensity={0.04}
-                    interval={150}
-                    className="font-cormorant italic"
-                  />
+                  <GlitchText text="The wall will bring more stuff soon..." intensity={0.04} interval={150} className="font-cormorant italic" />
                 </p>
               </motion.div>
             </motion.div>

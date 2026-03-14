@@ -36,10 +36,28 @@ const CACHE_DURATION = 1000 * 60 * 60;
 
 const ADMIN_USER = "RandomIX";
 const ADMIN_PASS = "AdminWorks1717!!!TotallyGatekeeped!!!@@@";
+const WALL_PASS = "@@@!!!$$$TTT888BBB555ZZZ777$$$!!!@@@onAroll919876HowDidYouGetThisFar!!!%%%###GatekeepThisNow!!!---937281962";
+const WALL_MAX_ATTEMPTS = 2;
+const WALL_LOCKOUT_MS = 20 * 24 * 60 * 60 * 1000;
 
 function sanitizeUser(user: any) {
   const { password, ...rest } = user;
   return rest;
+}
+
+async function getSessionUser(req: any): Promise<string | null> {
+  const auth = req.headers["authorization"] as string;
+  if (!auth || !auth.startsWith("Bearer ")) return null;
+  const token = auth.slice(7);
+  const session = await storage.getSession(token);
+  return session?.username ?? null;
+}
+
+async function requireAdmin(req: any, res: any): Promise<boolean> {
+  const caller = await getSessionUser(req);
+  if (!caller) { res.status(401).json({ message: "Unauthorized" }); return false; }
+  if (caller !== ADMIN_USER) { res.status(403).json({ message: "Forbidden" }); return false; }
+  return true;
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -80,7 +98,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const existing = await storage.getUser(username);
     if (existing) return res.status(409).json({ message: "Username already taken. Try a different one." });
     const user = await storage.createUser({ username, password, role: "User", roleColor: "#9ca3af" });
-    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor });
+    const sessionToken = await storage.createSession(user.username);
+    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor, sessionToken });
   });
 
   app.post("/api/auth/login", async (req, res) => {
@@ -93,7 +112,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!user) {
         user = await storage.createUser({ username: ADMIN_USER, password: ADMIN_PASS, role: "Owner", roleColor: "#a855f7", animation: "glitch", font: "fancy" });
       }
-      return res.json({ username: user.username, role: "Owner", isAdmin: true, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor });
+      const sessionToken = await storage.createSession(ADMIN_USER);
+      return res.json({ username: user.username, role: "Owner", isAdmin: true, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor, sessionToken });
     }
 
     const user = await storage.getUser(username);
@@ -103,7 +123,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(401).json({ message: "Incorrect password." });
     }
 
-    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor });
+    const sessionToken = await storage.createSession(user.username);
+    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor, sessionToken });
   });
 
   // ─── Users Directory ──────────────────────────────────────────────────────
@@ -119,6 +140,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/users/:username/profile", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    if (caller !== req.params.username && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
     const allowed = ["displayName", "displayFont", "bio", "avatar", "banner", "bannerColor", "font", "animation"];
     const updates: any = {};
     for (const k of allowed) {
@@ -129,8 +153,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/users/:username/roles", async (req, res) => {
-    const caller = req.headers["x-username"] as string;
-    if (caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
+    if (!await requireAdmin(req, res)) return;
     const { roles: roleNames } = req.body;
     const user = await storage.assignRolesToUser(req.params.username, roleNames);
     res.json(sanitizeUser(user));
@@ -251,12 +274,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/global-inbox", async (req, res) => {
-    const caller = req.headers["x-username"] as string;
-    if (caller !== ADMIN_USER) return res.status(403).json({ message: "Only the owner can post to Global Inbox." });
+    if (!await requireAdmin(req, res)) return;
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ message: "Content required" });
-    const msg = await storage.createGlobalMessage(content.trim(), caller);
+    const msg = await storage.createGlobalMessage(content.trim(), ADMIN_USER);
     res.json(msg);
+  });
+
+  // ─── The Wall (server-side verification) ─────────────────────────────────
+  app.post("/api/wall/verify", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session) return res.status(401).json({ message: "Invalid session" });
+
+    if (session.wallUnlocked) return res.json({ success: true });
+
+    if (session.wallLockedUntil && new Date() < session.wallLockedUntil) {
+      const ms = session.wallLockedUntil.getTime() - Date.now();
+      return res.status(423).json({ locked: true, lockedUntilMs: session.wallLockedUntil.getTime(), message: "Locked out" });
+    }
+
+    const { password } = req.body;
+    if (password === WALL_PASS) {
+      await storage.setWallUnlocked(token);
+      return res.json({ success: true });
+    }
+
+    const attempts = await storage.incrementWallAttempts(token);
+    if (attempts >= WALL_MAX_ATTEMPTS) {
+      const until = new Date(Date.now() + WALL_LOCKOUT_MS);
+      await storage.setWallLockout(token, until);
+      return res.status(423).json({ locked: true, lockedUntilMs: until.getTime(), attemptsLeft: 0, message: "Locked out" });
+    }
+    return res.status(401).json({ success: false, attemptsLeft: WALL_MAX_ATTEMPTS - attempts, message: "Wrong password" });
+  });
+
+  app.get("/api/wall/status", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.json({ unlocked: false, attemptsLeft: WALL_MAX_ATTEMPTS });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session) return res.json({ unlocked: false, attemptsLeft: WALL_MAX_ATTEMPTS });
+    if (session.wallUnlocked) return res.json({ unlocked: true });
+    if (session.wallLockedUntil && new Date() < session.wallLockedUntil) {
+      return res.json({ unlocked: false, locked: true, lockedUntilMs: session.wallLockedUntil.getTime(), attemptsLeft: 0 });
+    }
+    return res.json({ unlocked: false, attemptsLeft: Math.max(0, WALL_MAX_ATTEMPTS - (session.wallAttempts ?? 0)) });
   });
 
   // ─── Chat unread count for notification badges ────────────────────────────
@@ -308,7 +373,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/chat/channels/:id", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
     await storage.deleteChannel(Number(req.params.id));
+    res.status(204).end();
+  });
+
+  app.delete("/api/chat/channels/:id/messages", async (req, res) => {
+    if (!await requireAdmin(req, res)) return;
+    await storage.clearChannelMessages(Number(req.params.id));
     res.status(204).end();
   });
 
@@ -360,7 +432,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/chat/channels/:channelId/messages", async (req, res) => {
-    const { content, username, replyToId, replyToUsername, replyToContent } = req.body;
+    const sessionUsername = await getSessionUser(req);
+    if (!sessionUsername) return res.status(401).json({ message: "Unauthorized" });
+    const { content, replyToId, replyToUsername, replyToContent } = req.body;
+    const username = sessionUsername;
     const user = await storage.getUser(username);
     const msg = await storage.createMessage({
       channelId: Number(req.params.channelId),

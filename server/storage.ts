@@ -1,6 +1,7 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session } from "@shared/schema";
 import { eq, and, or, sql, ne, desc } from "drizzle-orm";
+import { randomUUID } from "crypto";
 
 export interface IStorage {
   getDummies(): Promise<any[]>;
@@ -67,6 +68,14 @@ export interface IStorage {
   getGlobalMessages(): Promise<GlobalMessage[]>;
   createGlobalMessage(content: string, author: string): Promise<GlobalMessage>;
   getGlobalMessagesAfter(timestamp: string): Promise<GlobalMessage[]>;
+
+  // Sessions
+  createSession(username: string): Promise<string>;
+  getSession(token: string): Promise<Session | null>;
+  setWallUnlocked(token: string): Promise<void>;
+  incrementWallAttempts(token: string): Promise<number>;
+  setWallLockout(token: string, until: Date): Promise<void>;
+  clearChannelMessages(channelId: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -306,6 +315,35 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(globalMessages).where(
       sql`${globalMessages.createdAt} > ${timestamp}::timestamptz`
     ).orderBy(globalMessages.createdAt);
+  }
+
+  // --- Sessions ---
+  async createSession(username: string): Promise<string> {
+    const token = randomUUID();
+    await db.insert(sessions).values({ token, username });
+    return token;
+  }
+  async getSession(token: string): Promise<Session | null> {
+    if (!token) return null;
+    const [row] = await db.select().from(sessions).where(eq(sessions.token, token));
+    return row ?? null;
+  }
+  async setWallUnlocked(token: string): Promise<void> {
+    await db.update(sessions).set({ wallUnlocked: true }).where(eq(sessions.token, token));
+  }
+  async incrementWallAttempts(token: string): Promise<number> {
+    await db.update(sessions).set({ wallAttempts: sql`${sessions.wallAttempts} + 1` }).where(eq(sessions.token, token));
+    const [row] = await db.select().from(sessions).where(eq(sessions.token, token));
+    return row?.wallAttempts ?? 1;
+  }
+  async setWallLockout(token: string, until: Date): Promise<void> {
+    await db.update(sessions).set({ wallLockedUntil: until }).where(eq(sessions.token, token));
+  }
+  async clearChannelMessages(channelId: number): Promise<void> {
+    await db.delete(reactions).where(
+      sql`${reactions.messageId} IN (SELECT id FROM messages WHERE channel_id = ${channelId})`
+    );
+    await db.delete(messages).where(eq(messages.channelId, channelId));
   }
 }
 

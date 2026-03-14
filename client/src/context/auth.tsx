@@ -18,9 +18,22 @@ interface AuthContextType {
   register: (username: string, password: string) => Promise<void>;
   logout: () => void;
   updateUser: (updates: Partial<AuthUser>) => void;
+  getToken: () => string | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
+
+export function getSessionToken(): string | null {
+  return localStorage.getItem("horizon_session_token");
+}
+
+export function authFetch(url: string, opts: RequestInit = {}): Promise<Response> {
+  const token = getSessionToken();
+  const existingHeaders = (opts.headers || {}) as Record<string, string>;
+  const headers: Record<string, string> = { ...existingHeaders };
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  return fetch(url, { ...opts, headers });
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(() => {
@@ -38,9 +51,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Login failed");
-    setUser(data);
-    localStorage.setItem("horizon_user", JSON.stringify(data));
-    localStorage.setItem("horizon_chat_user", JSON.stringify(data));
+    const { sessionToken, ...userData } = data;
+    setUser(userData);
+    localStorage.setItem("horizon_user", JSON.stringify(userData));
+    localStorage.setItem("horizon_chat_user", JSON.stringify(userData));
+    if (sessionToken) localStorage.setItem("horizon_session_token", sessionToken);
   };
 
   const register = async (username: string, password: string) => {
@@ -51,15 +66,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const data = await res.json();
     if (!res.ok) throw new Error(data.message || "Registration failed");
-    setUser(data);
-    localStorage.setItem("horizon_user", JSON.stringify(data));
-    localStorage.setItem("horizon_chat_user", JSON.stringify(data));
+    const { sessionToken, ...userData } = data;
+    setUser(userData);
+    localStorage.setItem("horizon_user", JSON.stringify(userData));
+    localStorage.setItem("horizon_chat_user", JSON.stringify(userData));
+    if (sessionToken) localStorage.setItem("horizon_session_token", sessionToken);
   };
 
   const logout = () => {
     setUser(null);
     localStorage.removeItem("horizon_user");
     localStorage.removeItem("horizon_chat_user");
+    localStorage.removeItem("horizon_session_token");
   };
 
   const updateUser = (updates: Partial<AuthUser>) => {
@@ -72,8 +90,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  const getToken = () => getSessionToken();
+
   return (
-    <AuthContext.Provider value={{ user, login, register, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, login, register, logout, updateUser, getToken }}>
       {children}
     </AuthContext.Provider>
   );

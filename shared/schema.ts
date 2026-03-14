@@ -102,6 +102,17 @@ export const directMessages = pgTable("direct_messages", {
   isRead: boolean("is_read").default(false),
 });
 
+export const sessions = pgTable("sessions", {
+  token: text("token").primaryKey(),
+  username: text("username").notNull(),
+  wallUnlocked: boolean("wall_unlocked").default(false),
+  wallAttempts: integer("wall_attempts").default(0),
+  wallLockedUntil: timestamp("wall_locked_until"),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type Session = typeof sessions.$inferSelect;
+
 export const globalMessages = pgTable("global_messages", {
   id: serial("id").primaryKey(),
   content: text("content").notNull(),
