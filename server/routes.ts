@@ -894,104 +894,172 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Script injected into the proxied page to kill ads, popups, and boost performance
   const NOWGG_INJECT = `<script>
 (function(){
-  /* ── Block window.open popups ── */
+  /* ── 1. Block window.open / window.alert popups ── */
   window.open = function(){ return null; };
+  window.alert = function(){};
+  window.confirm = function(){ return false; };
 
-  /* ── Neutralize ad networks ── */
-  window.googletag   = { cmd: { push: function(){} }, pubads: function(){ return { setTargeting:function(){return this}, enableSingleRequest:function(){return this}, disableInitialLoad:function(){return this}, addEventListener:function(){return this}, refresh:function(){} }; }, enableServices:function(){} };
-  window.tude        = { cmd: { push: function(){} } };
-  window.adsbygoogle = { push: function(){} };
-  window.__tcfapi    = function(c,v,cb){ cb && cb({},true); };
+  /* ── 2. Neutralize ad network globals before their scripts can run ── */
+  window.googletag   = { cmd:{ push:function(){} }, pubads:function(){ return { setTargeting:function(){return this},enableSingleRequest:function(){return this},disableInitialLoad:function(){return this},addEventListener:function(){return this},refresh:function(){},setPrivacySettings:function(){return this} }; }, enableServices:function(){} };
+  window.tude        = { cmd:{ push:function(){} } };
+  window.adsbygoogle = { push:function(){} };
+  window.__tcfapi    = function(c,v,cb){ cb && cb({cmpStatus:'loaded',eventStatus:'tcloaded',gdprApplies:false},true); };
   window.__uspapi    = function(c,v,cb){ cb && cb('1YNN',true); };
+  window._taboola    = { push:function(){} };
+  window._mgq        = { push:function(){} };
+  window.dataLayer   = { push:function(){} };
+  window.gtag        = function(){};
+  window._qevents    = [];
+  window.clicky      = { log:function(){}, goal:function(){} };
 
-  /* ── Block ad/analytics fetch calls ── */
-  var _origFetch = window.fetch;
+  /* ── 3. Block ad/analytics fetch ── */
+  var _oFetch = window.fetch;
   window.fetch = function(url, opts){
-    var u = String(url||'');
-    if(/googletagmanager|googlesyndication|doubleclick|adservice|tude|pubmatic|rubiconproject|openx|amazon-adsystem|moatads|adsystem|pagead|securepubads/i.test(u)){
-      return Promise.resolve(new Response('', {status:200}));
+    if(/googletagmanager|googlesyndication|doubleclick|adservice|tude\.tv|pubmatic|rubiconproject|openx|amazon-adsystem|moatads|pagead|securepubads|taboola|outbrain|mgid|sharethrough|quantcast|criteo|adsrvr|adnxs|bidswitch/i.test(String(url||''))){
+      return Promise.resolve(new Response('{}', {status:200,headers:{'Content-Type':'application/json'}}));
     }
-    return _origFetch.apply(this, arguments);
+    return _oFetch.apply(this, arguments);
   };
 
-  /* ── Block XHR to ad endpoints ── */
-  var _origXHROpen = XMLHttpRequest.prototype.open;
+  /* ── 4. Block ad XHR ── */
+  var _oXHR = XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.open = function(m, url){
-    if(/googletagmanager|googlesyndication|doubleclick|adservice|tude|pubmatic/i.test(String(url||''))){
-      url = 'data:text/plain,';
+    if(/googletagmanager|googlesyndication|doubleclick|adservice|tude|pubmatic|taboola|outbrain|criteo|quantcast/i.test(String(url||''))){
+      url = 'about:blank';
     }
-    return _origXHROpen.apply(this, arguments);
+    return _oXHR.apply(this, arguments);
   };
 
-  /* ── Block dynamically-created ad <script> and <iframe> tags ── */
-  var _origCreateElement = document.createElement.bind(document);
-  document.createElement = function(tag){
-    var el = _origCreateElement(tag);
-    if(tag.toLowerCase() === 'script'){
-      var _origSetSrc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
-      Object.defineProperty(el, 'src', {
-        set: function(v){
-          if(/googletagmanager|googlesyndication|doubleclick|tude\.tv|pubmatic|moatads|pagead/i.test(String(v||''))){
-            Object.defineProperty(el, 'src', { value: '', writable: true });
-            return;
-          }
-          if(_origSetSrc && _origSetSrc.set) _origSetSrc.set.call(el, v);
-        },
-        get: function(){ return (_origSetSrc && _origSetSrc.get) ? _origSetSrc.get.call(el) : ''; },
-        configurable: true
-      });
-    }
-    return el;
-  };
+  /* ── 5. Inject CSS nukes for common ad overlay patterns ── */
+  var _style = document.createElement('style');
+  _style.textContent = [
+    /* Performance */
+    'html,body,canvas,video,iframe{transform:translateZ(0);will-change:transform;image-rendering:auto;}',
+    /* Kill fixed-position ad cards in corners (z-index > 999) */
+    'body>div[style*="position: fixed"],body>div[style*="position:fixed"]{display:none!important;}',
+    /* Kill common ad wrapper class patterns */
+    '[class*="AdCard"],[class*="ad-card"],[class*="AdWidget"],[class*="sticky-ad"],[class*="floatAd"],[class*="float-ad"],[class*="corner-ad"],[class*="popup-ad"],[class*="pop-ad"],[id*="sticky-ad"],[id*="float-ad"]{display:none!important;}',
+    /* Kill any element with very high z-index that is fixed/absolute and NOT the game */
+    '*[style*="z-index: 9"]:not(#game-player):not(canvas):not(video){pointer-events:none;}',
+  ].join('');
+  document.documentElement.appendChild(_style);
 
-  /* ── MutationObserver: kill popups/ads as they appear ── */
+  /* ── 6. Aggressive DOM sweeper ── */
   var AD_SELECTORS = [
     '[class*="modal"],[class*="Modal"],[class*="popup"],[class*="Popup"]',
-    '[class*="overlay"],[class*="Overlay"],[class*="ad-"],[class*="-ad"]',
+    '[class*="overlay"],[class*="Overlay"],[class*="ad-"],[class*="-ad-"]',
     '[class*="AdSlot"],[class*="adSlot"],[class*="AdBanner"],[class*="adBanner"]',
-    '[id*="modal"],[id*="popup"],[id*="overlay"],[id*="google_ads"],[id*="ad-"]',
+    '[class*="AdCard"],[class*="adCard"],[class*="FloatAd"],[class*="StickyAd"]',
+    '[id*="modal"],[id*="popup"],[id*="overlay"],[id*="google_ads"],[id*="ad-unit"]',
     'iframe[src*="googlesyndication"],iframe[src*="doubleclick"],iframe[src*="adservice"]',
     '[role="dialog"],[role="alertdialog"]',
-    'div[class*="DiscordCard"],div[class*="discord-card"]',
+    'ins.adsbygoogle',
   ].join(',');
+
+  /* Text fragments that only appear in ads */
+  var AD_TEXT = ['learn more','click here','sponsored','advertisement','public wi-fi','your whatsapp'];
+
+  function isGameEl(el){
+    try {
+      if(!el) return false;
+      var id = (el.id||'').toLowerCase();
+      if(id === 'game-iframe' || id === 'game-player' || id === '__next') return true;
+      if(el.tagName === 'HTML' || el.tagName === 'BODY') return true;
+      if(el.closest && (el.closest('#game-player') || el.closest('#__next'))) return true;
+    } catch(e){}
+    return false;
+  }
+
+  function killEl(el){
+    try {
+      if(isGameEl(el)) return;
+      el.style.cssText += ';display:none!important;visibility:hidden!important;opacity:0!important;pointer-events:none!important;';
+      el.remove();
+    } catch(e){}
+  }
+
+  function sweepFixedEls(){
+    try {
+      /* Kill anything fixed/absolute with a high z-index that isn't the game */
+      var all = document.querySelectorAll('body > div, body > section, body > aside');
+      all.forEach(function(el){
+        if(isGameEl(el)) return;
+        var st = window.getComputedStyle(el);
+        var pos = st.position;
+        var zi  = parseInt(st.zIndex,10)||0;
+        if((pos==='fixed'||pos==='absolute') && zi > 100){
+          /* Check it's not the game stream */
+          if(!el.querySelector('canvas') && !el.querySelector('video[autoplay]')){
+            killEl(el);
+          }
+        }
+      });
+    } catch(e){}
+  }
+
+  function sweepByText(){
+    try {
+      /* Kill any small fixed-ish card that contains known ad text */
+      var divs = document.querySelectorAll('body div');
+      divs.forEach(function(el){
+        if(isGameEl(el)) return;
+        var txt = (el.innerText||'').toLowerCase();
+        var st  = window.getComputedStyle(el);
+        var isFixed = st.position === 'fixed' || st.position === 'absolute';
+        if(isFixed && el.offsetWidth < 500 && el.offsetHeight < 400){
+          for(var i=0;i<AD_TEXT.length;i++){
+            if(txt.indexOf(AD_TEXT[i]) !== -1){ killEl(el); break; }
+          }
+        }
+      });
+    } catch(e){}
+  }
 
   function killAds(root){
     try {
-      var q = (root && root.querySelectorAll ? root : document).querySelectorAll(AD_SELECTORS);
-      q.forEach(function(el){
-        // Never kill the main game containers
-        var id = el.id || '';
-        if(id === 'game-iframe' || id === 'game-player' || el.closest && el.closest('#game-player')) return;
-        el.style.display = 'none';
-        el.remove();
+      var scope = (root && root.querySelectorAll) ? root : document;
+      scope.querySelectorAll(AD_SELECTORS).forEach(function(el){
+        killEl(el);
       });
     } catch(e) {}
   }
 
-  /* Start observer immediately on documentElement so nothing slips through */
+  /* MutationObserver — starts immediately before any other script ── */
   var _obs = new MutationObserver(function(muts){
     for(var i=0;i<muts.length;i++){
       muts[i].addedNodes.forEach(function(n){
-        if(n.nodeType===1){ killAds(n); }
+        if(n.nodeType===1){
+          killAds(n);
+          /* If the added node itself is a fixed ad card, kill it */
+          try {
+            var st = window.getComputedStyle(n);
+            if((st.position==='fixed'||st.position==='absolute') && parseInt(st.zIndex||'0',10)>50 && !n.querySelector('canvas') && !n.querySelector('video')){
+              killEl(n);
+            }
+          } catch(e){}
+        }
       });
     }
   });
   _obs.observe(document.documentElement, {childList:true, subtree:true});
 
+  /* Interval sweep — catches anything the observer misses ── */
+  var _sweepCount = 0;
+  var _sweepTimer = setInterval(function(){
+    killAds(document);
+    sweepFixedEls();
+    sweepByText();
+    _sweepCount++;
+    /* After 60s (300 × 200ms) slow down; after 5min stop ── */
+    if(_sweepCount > 1500){ clearInterval(_sweepTimer); }
+    else if(_sweepCount > 300){ clearInterval(_sweepTimer); _sweepTimer = setInterval(function(){ killAds(document); sweepFixedEls(); sweepByText(); }, 2000); }
+  }, 200);
+
   document.addEventListener('DOMContentLoaded', function(){
     killAds(document);
+    sweepFixedEls();
+    sweepByText();
   });
-
-  /* ── 60fps: hint to the browser this is a high-priority interactive frame ── */
-  document.addEventListener('DOMContentLoaded', function(){
-    var style = document.createElement('style');
-    style.textContent = 'html,body,canvas,video,iframe{transform:translateZ(0);will-change:transform;image-rendering:auto;}';
-    document.head.appendChild(style);
-  });
-
-  /* ── Disable GTM dataLayer ── */
-  window.dataLayer = { push: function(){} };
-  window.gtag = function(){};
 })();
 </script>`;
 
@@ -1028,11 +1096,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return text;
   }
 
+  // Injected as the VERY FIRST thing in <head> so it runs before Next.js router reads window.location
+  const NOWGG_URL_SPOOF = `<script>
+(function(){
+  /* Make Next.js router think we are at the Roblox game path */
+  try{ history.replaceState({}, '', '/apps/a/19900/b.html'); }catch(e){}
+})();
+</script>`;
+
   function injectAndClean(html: string): string {
     html = stripAdScripts(html);
     html = rewriteNowGG(html);
-    // Inject our anti-ad + performance script right after <head>
-    html = html.replace(/<head[^>]*>/, (m) => m + NOWGG_INJECT);
+    // URL spoof runs FIRST, then the ad-blocker — single replacement so order is guaranteed
+    html = html.replace(/<head[^>]*>/, (m) => m + NOWGG_URL_SPOOF + NOWGG_INJECT);
     return html;
   }
 
@@ -1070,7 +1146,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // Serve the proxied Roblox V3 entry page
   app.get(`${PROXY_BASE}/`, async (_req, res) => {
     try {
-      await proxyNowGGUpstream(`${NOWGG_ORIGIN}/apps/a/5349/b.html`, res);
+      await proxyNowGGUpstream(`${NOWGG_ORIGIN}/apps/a/19900/b.html`, res);
     } catch (e: any) {
       res.status(502).send("Proxy error: " + e.message);
     }
