@@ -898,21 +898,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // JSON-escaped variant (backslash before each slash)
       text = text.split(origin.replace(/\//g, "\\/")).join(prefix.replace(/\//g, "\\/"));
     }
-    // Rewrite root-relative paths (e.g. /2/_next/...) to our proxy
-    text = text.replace(/(["'`])(\/(?!\/)[^"'`\s)]+)/g, (_, q, p) => {
+    // Rewrite root-relative paths like /2/_next/... or /cdn/... to our proxy.
+    // Only match paths starting with /[a-zA-Z0-9_] to avoid matching "/>" etc.
+    text = text.replace(/(["'`])(\/[a-zA-Z0-9_][^"'`\s)>]*)/g, (_, q, p) => {
       if (p.startsWith(PROXY_BASE)) return `${q}${p}`;
       return `${q}${PROXY_BASE}/__rel__${p}`;
     });
     return text;
   }
 
-  async function proxyNowGGUpstream(targetUrl: string, res: any) {
+  async function proxyNowGGUpstream(targetUrl: string, res: any, reqBody?: Buffer, method = "GET") {
     const upstream = await fetch(targetUrl, {
-      headers: { "User-Agent": NOWGG_UA, "Referer": NOWGG_ORIGIN, "Origin": NOWGG_ORIGIN },
+      method,
+      headers: {
+        "User-Agent": NOWGG_UA,
+        "Referer": NOWGG_ORIGIN,
+        "Origin": NOWGG_ORIGIN,
+        ...(reqBody ? { "Content-Type": "application/json" } : {}),
+      },
+      ...(reqBody ? { body: reqBody } : {}),
     });
     const ct = upstream.headers.get("content-type") || "application/octet-stream";
     res.setHeader("Content-Type", ct);
     res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "*");
     res.setHeader("Cross-Origin-Embedder-Policy", "unsafe-none");
     res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
     if (ct.includes("text") || ct.includes("javascript")) {
@@ -936,14 +945,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   function nowggRoute(prefix: string, origin: string) {
     const re = new RegExp(`^${PROXY_BASE.replace(/\//g, "\\/")}\\/${prefix}\\/?(.*)`);
-    app.get(re, async (req: any, res: any) => {
+    const handler = async (req: any, res: any) => {
       const tail = req.params[0] || "";
       const qs = req.url.includes("?") ? "?" + req.url.split("?")[1] : "";
       try {
-        await proxyNowGGUpstream(`${origin}/${tail}${qs}`, res);
+        const body = req.method === "POST" || req.method === "PUT"
+          ? Buffer.isBuffer(req.body) ? req.body : Buffer.from(JSON.stringify(req.body || {}))
+          : undefined;
+        await proxyNowGGUpstream(`${origin}/${tail}${qs}`, res, body, req.method);
       } catch {
         res.status(502).send("Proxy error");
       }
+    };
+    app.get(re, handler);
+    app.post(re, handler);
+    app.options(re, (_req: any, res: any) => {
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+      res.sendStatus(204);
     });
   }
 
