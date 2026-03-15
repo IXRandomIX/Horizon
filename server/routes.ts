@@ -891,6 +891,127 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "https://now.gg":          `${PROXY_BASE}/__ngg__`,
   };
 
+  // Script injected into the proxied page to kill ads, popups, and boost performance
+  const NOWGG_INJECT = `<script>
+(function(){
+  /* ── Block window.open popups ── */
+  window.open = function(){ return null; };
+
+  /* ── Neutralize ad networks ── */
+  window.googletag   = { cmd: { push: function(){} }, pubads: function(){ return { setTargeting:function(){return this}, enableSingleRequest:function(){return this}, disableInitialLoad:function(){return this}, addEventListener:function(){return this}, refresh:function(){} }; }, enableServices:function(){} };
+  window.tude        = { cmd: { push: function(){} } };
+  window.adsbygoogle = { push: function(){} };
+  window.__tcfapi    = function(c,v,cb){ cb && cb({},true); };
+  window.__uspapi    = function(c,v,cb){ cb && cb('1YNN',true); };
+
+  /* ── Block ad/analytics fetch calls ── */
+  var _origFetch = window.fetch;
+  window.fetch = function(url, opts){
+    var u = String(url||'');
+    if(/googletagmanager|googlesyndication|doubleclick|adservice|tude|pubmatic|rubiconproject|openx|amazon-adsystem|moatads|adsystem|pagead|securepubads/i.test(u)){
+      return Promise.resolve(new Response('', {status:200}));
+    }
+    return _origFetch.apply(this, arguments);
+  };
+
+  /* ── Block XHR to ad endpoints ── */
+  var _origXHROpen = XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open = function(m, url){
+    if(/googletagmanager|googlesyndication|doubleclick|adservice|tude|pubmatic/i.test(String(url||''))){
+      url = 'data:text/plain,';
+    }
+    return _origXHROpen.apply(this, arguments);
+  };
+
+  /* ── Block dynamically-created ad <script> and <iframe> tags ── */
+  var _origCreateElement = document.createElement.bind(document);
+  document.createElement = function(tag){
+    var el = _origCreateElement(tag);
+    if(tag.toLowerCase() === 'script'){
+      var _origSetSrc = Object.getOwnPropertyDescriptor(HTMLScriptElement.prototype, 'src');
+      Object.defineProperty(el, 'src', {
+        set: function(v){
+          if(/googletagmanager|googlesyndication|doubleclick|tude\.tv|pubmatic|moatads|pagead/i.test(String(v||''))){
+            Object.defineProperty(el, 'src', { value: '', writable: true });
+            return;
+          }
+          if(_origSetSrc && _origSetSrc.set) _origSetSrc.set.call(el, v);
+        },
+        get: function(){ return (_origSetSrc && _origSetSrc.get) ? _origSetSrc.get.call(el) : ''; },
+        configurable: true
+      });
+    }
+    return el;
+  };
+
+  /* ── MutationObserver: kill popups/ads as they appear ── */
+  var AD_SELECTORS = [
+    '[class*="modal"],[class*="Modal"],[class*="popup"],[class*="Popup"]',
+    '[class*="overlay"],[class*="Overlay"],[class*="ad-"],[class*="-ad"]',
+    '[class*="AdSlot"],[class*="adSlot"],[class*="AdBanner"],[class*="adBanner"]',
+    '[id*="modal"],[id*="popup"],[id*="overlay"],[id*="google_ads"],[id*="ad-"]',
+    'iframe[src*="googlesyndication"],iframe[src*="doubleclick"],iframe[src*="adservice"]',
+    '[role="dialog"],[role="alertdialog"]',
+    'div[class*="DiscordCard"],div[class*="discord-card"]',
+  ].join(',');
+
+  function killAds(root){
+    try {
+      var q = (root && root.querySelectorAll ? root : document).querySelectorAll(AD_SELECTORS);
+      q.forEach(function(el){
+        // Never kill the main game containers
+        var id = el.id || '';
+        if(id === 'game-iframe' || id === 'game-player' || el.closest && el.closest('#game-player')) return;
+        el.style.display = 'none';
+        el.remove();
+      });
+    } catch(e) {}
+  }
+
+  /* Start observer immediately on documentElement so nothing slips through */
+  var _obs = new MutationObserver(function(muts){
+    for(var i=0;i<muts.length;i++){
+      muts[i].addedNodes.forEach(function(n){
+        if(n.nodeType===1){ killAds(n); }
+      });
+    }
+  });
+  _obs.observe(document.documentElement, {childList:true, subtree:true});
+
+  document.addEventListener('DOMContentLoaded', function(){
+    killAds(document);
+  });
+
+  /* ── 60fps: hint to the browser this is a high-priority interactive frame ── */
+  document.addEventListener('DOMContentLoaded', function(){
+    var style = document.createElement('style');
+    style.textContent = 'html,body,canvas,video,iframe{transform:translateZ(0);will-change:transform;image-rendering:auto;}';
+    document.head.appendChild(style);
+  });
+
+  /* ── Disable GTM dataLayer ── */
+  window.dataLayer = { push: function(){} };
+  window.gtag = function(){};
+})();
+</script>`;
+
+  // Ad/analytics script patterns to strip entirely from HTML
+  const AD_SCRIPT_PATTERNS = [
+    /googletagmanager\.com[^"']*/g,
+    /googlesyndication\.com[^"']*/g,
+    /doubleclick\.net[^"']*/g,
+    /pagead2\.googlesyndication[^"']*/g,
+  ];
+
+  function stripAdScripts(html: string): string {
+    // Remove <script> tags loading ad networks
+    html = html.replace(/<script[^>]*src=["'][^"']*(?:googletagmanager|googlesyndication|doubleclick|adsbygoogle|tude\.tv|pubmatic|pagead)[^"']*["'][^>]*><\/script>/gi, '');
+    html = html.replace(/<script[^>]*src=["'][^"']*(?:googletagmanager|googlesyndication|doubleclick|adsbygoogle|tude\.tv|pubmatic|pagead)[^"']*["'][^>]*\/>/gi, '');
+    // Remove GTM noscript iframe
+    html = html.replace(/<noscript[^>]*>[\s\S]*?googletagmanager[\s\S]*?<\/noscript>/gi, '');
+    return html;
+  }
+
   function rewriteNowGG(text: string): string {
     for (const [origin, prefix] of Object.entries(NOWGG_ORIGIN_MAP)) {
       // Plain string replacement
@@ -905,6 +1026,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return `${q}${PROXY_BASE}/__rel__${p}`;
     });
     return text;
+  }
+
+  function injectAndClean(html: string): string {
+    html = stripAdScripts(html);
+    html = rewriteNowGG(html);
+    // Inject our anti-ad + performance script right after <head>
+    html = html.replace(/<head[^>]*>/, (m) => m + NOWGG_INJECT);
+    return html;
   }
 
   async function proxyNowGGUpstream(targetUrl: string, res: any, reqBody?: Buffer, method = "GET") {
@@ -926,7 +1055,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.setHeader("Cross-Origin-Opener-Policy", "unsafe-none");
     if (ct.includes("text") || ct.includes("javascript")) {
       let body = await upstream.text();
-      body = rewriteNowGG(body);
+      if (ct.includes("text/html")) {
+        body = injectAndClean(body);
+      } else {
+        body = rewriteNowGG(body);
+      }
       res.send(body);
     } else {
       const buf = await upstream.arrayBuffer();
