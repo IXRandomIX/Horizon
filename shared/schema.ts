@@ -134,6 +134,19 @@ export const changeLogEntries = pgTable("change_log_entries", {
 
 export type ChangeLogEntry = typeof changeLogEntries.$inferSelect;
 
+export const userTracks = pgTable("user_tracks", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull(),
+  name: text("name").notNull(),
+  filePath: text("file_path").notNull(),
+  fileType: text("file_type").notNull(),
+  isPublic: boolean("is_public").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export type UserTrack = typeof userTracks.$inferSelect;
+export const insertUserTrackSchema = createInsertSchema(userTracks).omit({ id: true, createdAt: true });
+
 export const insertProxySchema = createInsertSchema(proxies).omit({ id: true });
 export const insertPageSchema = createInsertSchema(pages).omit({ id: true });
 export const insertMessageSchema = createInsertSchema(messages).omit({ id: true, timestamp: true });
