@@ -9,7 +9,7 @@ import type { Game } from "@shared/routes";
 
 const PAGE_SIZE = 60;
 
-function DirectIframeFrame({ url, title }: { url: string; title: string }) {
+function DirectIframeFrame({ url, title, containedMode }: { url: string; title: string; containedMode?: boolean }) {
   return (
     <iframe
       id="game-iframe"
@@ -17,7 +17,11 @@ function DirectIframeFrame({ url, title }: { url: string; title: string }) {
       className="absolute inset-0 w-full h-full border-0 bg-black"
       allow="fullscreen; autoplay; encrypted-media; gyroscope; picture-in-picture; pointer-lock"
       title={title}
-      sandbox="allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation allow-top-navigation-by-user-activation"
+      sandbox={
+        containedMode
+          ? "allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-presentation allow-same-origin allow-scripts allow-storage-access-by-user-activation"
+          : "allow-forms allow-modals allow-orientation-lock allow-pointer-lock allow-popups allow-popups-to-escape-sandbox allow-presentation allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation allow-top-navigation-by-user-activation"
+      }
     />
   );
 }
@@ -142,6 +146,7 @@ export default function Games() {
   if (playingGame) {
     const gameUrl = playingGame.url?.replace('{HTML_URL}', 'https://cdn.jsdelivr.net/gh/gn-math/html@main') || '';
     const isDirectIframe = (playingGame as any).directIframe === true;
+    const isCloudMoon = (playingGame as any).source === "cloudmoon";
 
     return (
       <div className="flex flex-col h-full w-full bg-black animate-in fade-in zoom-in-95 duration-500">
@@ -175,7 +180,7 @@ export default function Games() {
         
         <div ref={gameContainerRef} className="flex-1 w-full bg-black relative">
           {isDirectIframe
-            ? <DirectIframeFrame url={gameUrl} title={playingGame.name} />
+            ? <DirectIframeFrame url={gameUrl} title={playingGame.name} containedMode={isCloudMoon} />
             : <GameFrame url={gameUrl} title={playingGame.name} />
           }
         </div>
