@@ -971,7 +971,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       CLOUDMOON_GAMES.forEach((g, i) => addGame({
         id: 70000 + i,
         name: g.name,
-        url: `/api/cloudmoon-proxy/game/${g.pkg}`,
+        url: `https://web.cloudmoonapp.com/game/${g.pkg}`,
         cover: "",
         author: "CloudMoon",
         authorLink: "https://web.cloudmoonapp.com",
@@ -1470,69 +1470,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!await requireAdmin(req, res)) return;
     await storage.deleteChangeLogEntry(Number(req.params.id));
     res.status(204).end();
-  });
-
-  app.use("/api/cloudmoon-proxy", async (req: any, res: any) => {
-    try {
-      const targetPath = req.path;
-      const queryString = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-      const targetUrl = `https://web.cloudmoonapp.com${targetPath}${queryString}`;
-
-      const response = await fetch(targetUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": req.headers.accept || "*/*",
-          "Accept-Language": req.headers["accept-language"] || "en-US,en;q=0.9",
-          "Accept-Encoding": "identity",
-          "Referer": "https://web.cloudmoonapp.com/",
-          "Origin": "https://web.cloudmoonapp.com",
-        },
-        redirect: "follow",
-      });
-
-      const contentType = response.headers.get("content-type") || "application/octet-stream";
-      res.setHeader("Content-Type", contentType);
-      const cacheControl = response.headers.get("cache-control");
-      if (cacheControl) res.setHeader("Cache-Control", cacheControl);
-
-      if (contentType.includes("text/html")) {
-        let html = await response.text();
-
-        const interceptScript = `<script>
-(function(){
-  var P='/api/cloudmoon-proxy';
-  var T='https://web.cloudmoonapp.com';
-  var oF=window.fetch;
-  window.fetch=function(u,o){
-    if(typeof u==='string'&&u.startsWith(T)){u=P+u.slice(T.length);}
-    return oF.call(this,u,o);
-  };
-  var oX=XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open=function(){
-    var a=Array.prototype.slice.call(arguments);
-    if(typeof a[1]==='string'&&a[1].startsWith(T)){a[1]=P+a[1].slice(T.length);}
-    return oX.apply(this,a);
-  };
-})();
-</script>`;
-
-        if (html.includes("<head>")) {
-          html = html.replace("<head>", "<head>" + interceptScript);
-        } else {
-          html = interceptScript + html;
-        }
-
-        html = html.replace(/https:\/\/web\.cloudmoonapp\.com\//g, "/api/cloudmoon-proxy/");
-
-        res.send(html);
-      } else {
-        const buffer = await response.arrayBuffer();
-        res.send(Buffer.from(buffer));
-      }
-    } catch (err: any) {
-      console.error("CloudMoon proxy error:", err.message);
-      res.status(502).json({ error: "Proxy error" });
-    }
   });
 
   return httpServer;
