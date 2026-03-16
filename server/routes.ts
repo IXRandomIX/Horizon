@@ -10,6 +10,22 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+const audioUpload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadsDir),
+    filename: (_req, file, cb) => {
+      const unique = Date.now() + "-" + Math.round(Math.random() * 1e9);
+      cb(null, unique + path.extname(file.originalname));
+    },
+  }),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    const allowed = /\.(mp3|mp4|wav|ogg|flac|aac|m4a|webm|opus)$/i;
+    const ok = allowed.test(path.extname(file.originalname)) || file.mimetype.startsWith("audio/") || file.mimetype.startsWith("video/");
+    cb(null, ok);
+  },
+});
+
 const upload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -971,7 +987,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       CLOUDMOON_GAMES.forEach((g, i) => addGame({
         id: 70000 + i,
         name: g.name,
-        url: `https://web.cloudmoonapp.com/game/${g.pkg}`,
+        url: `/api/cloudmoon-game/${g.pkg}`,
         cover: "",
         author: "CloudMoon",
         authorLink: "https://web.cloudmoonapp.com",
@@ -1469,6 +1485,98 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.delete("/api/changelog/:id", async (req, res) => {
     if (!await requireAdmin(req, res)) return;
     await storage.deleteChangeLogEntry(Number(req.params.id));
+    res.status(204).end();
+  });
+
+  // CloudMoon game proxy — loads the game info page through our domain and intercepts window.open
+  // so clicking "Play" navigates the current iframe instead of opening a new tab
+  app.get("/api/cloudmoon-game/:pkg", async (req: any, res: any) => {
+    try {
+      const pkg = req.params.pkg;
+      const targetUrl = `https://web.cloudmoonapp.com/game/${pkg}`;
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Referer": "https://web.cloudmoonapp.com/",
+        },
+        redirect: "follow",
+      });
+      if (!response.ok) return res.status(response.status).send("Failed to load game");
+      let html = await response.text();
+      const inject = `<base href="https://web.cloudmoonapp.com/"><script>
+(function(){
+  var origOpen = window.open;
+  window.open = function(url, target, features) {
+    if (url && typeof url === 'string' && url.length > 0) {
+      window.location.href = url;
+      return window;
+    }
+    return origOpen ? origOpen.apply(this, arguments) : null;
+  };
+  // Also intercept anchor clicks with target=_blank
+  document.addEventListener('click', function(e) {
+    var el = e.target;
+    while (el && el.tagName !== 'A') el = el.parentElement;
+    if (el && el.target === '_blank' && el.href) {
+      e.preventDefault();
+      window.location.href = el.href;
+    }
+  }, true);
+})();
+</script>`;
+      html = html.replace(/<head>/i, `<head>${inject}`);
+      if (!html.match(/<head>/i)) html = inject + html;
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.send(html);
+    } catch (err: any) {
+      res.status(502).send("Proxy error");
+    }
+  });
+
+  // User Tracks — upload, list, serve, delete
+  app.get("/api/user-tracks", async (req: any, res: any) => {
+    const session = await storage.getSession(req.cookies?.token || "");
+    const tracks = await storage.getUserTracks(session?.username);
+    res.json(tracks);
+  });
+
+  app.post("/api/user-tracks", audioUpload.single("file"), async (req: any, res: any) => {
+    const session = await storage.getSession(req.cookies?.token || "");
+    if (!session) return res.status(401).json({ error: "Not logged in" });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    const { name, isPublic } = req.body;
+    if (!name?.trim()) return res.status(400).json({ error: "Name is required" });
+    const track = await storage.createUserTrack({
+      username: session.username,
+      name: name.trim(),
+      filePath: req.file.filename,
+      fileType: req.file.mimetype || "audio/mpeg",
+      isPublic: isPublic === "true" || isPublic === true,
+    });
+    res.json(track);
+  });
+
+  app.get("/api/user-tracks/file/:id", async (req: any, res: any) => {
+    const track = await storage.getUserTrack(Number(req.params.id));
+    if (!track) return res.status(404).json({ error: "Not found" });
+    const filePath = path.join(uploadsDir, track.filePath);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+    res.setHeader("Content-Type", track.fileType || "audio/mpeg");
+    res.setHeader("Accept-Ranges", "bytes");
+    fs.createReadStream(filePath).pipe(res);
+  });
+
+  app.delete("/api/user-tracks/:id", async (req: any, res: any) => {
+    const session = await storage.getSession(req.cookies?.token || "");
+    if (!session) return res.status(401).json({ error: "Not logged in" });
+    const track = await storage.getUserTrack(Number(req.params.id));
+    if (!track) return res.status(404).json({ error: "Not found" });
+    if (track.username !== session.username) return res.status(403).json({ error: "Not yours" });
+    const filePath = path.join(uploadsDir, track.filePath);
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    await storage.deleteUserTrack(track.id);
     res.status(204).end();
   });
 

@@ -1,12 +1,13 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronUp, ChevronDown, X, Search, Play, Pause, SkipBack, SkipForward,
   Volume2, VolumeX, Download, Plus, Trash2, Music2, ListMusic, Clock,
-  Users, Loader2, Check, TrendingUp, Flame, Repeat
+  Users, Loader2, Check, TrendingUp, Flame, Repeat, Upload, Lock, Globe
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/context/auth";
 
 const GENRES = [
   { id: "all-music", label: "All" },
@@ -49,6 +50,17 @@ interface SCTrack {
   artwork_url: string | null;
   user: { id: number; username: string; avatar_url: string | null };
   playback_count?: number;
+  sourceUrl?: string;
+}
+
+interface UserTrack {
+  id: number;
+  username: string;
+  name: string;
+  filePath: string;
+  fileType: string;
+  isPublic: boolean;
+  createdAt: string;
 }
 
 interface Playlist {
@@ -129,7 +141,7 @@ function TrackRow({
 
 export default function MusicPlayer() {
   const [isOpen, setIsOpen] = useState(false);
-  const [tab, setTab] = useState<"search" | "new" | "library" | "downloaded" | "artists">("search");
+  const [tab, setTab] = useState<"search" | "new" | "library" | "downloaded" | "artists" | "upload">("search");
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [currentTrack, setCurrentTrack] = useState<SCTrack | null>(null);
@@ -153,8 +165,14 @@ export default function MusicPlayer() {
   const [newGenre, setNewGenre] = useState("all-music");
   const [newKind, setNewKind] = useState<"trending" | "top">("trending");
 
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadName, setUploadName] = useState("");
+  const [uploadIsPublic, setUploadIsPublic] = useState(true);
+
   const audioRef = useRef<HTMLAudioElement>(null);
   const { toast } = useToast();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput), 400);
@@ -181,6 +199,65 @@ export default function MusicPlayer() {
     },
   });
 
+  const { data: userTracks = [], isLoading: tracksLoading } = useQuery<UserTrack[]>({
+    queryKey: ["/api/user-tracks"],
+    enabled: tab === "upload" && isOpen,
+    queryFn: async () => {
+      const r = await fetch("/api/user-tracks", { credentials: "include" });
+      if (!r.ok) throw new Error("Failed to load");
+      return r.json();
+    },
+  });
+
+  const uploadMutation = useMutation({
+    mutationFn: async (formData: FormData) => {
+      const r = await fetch("/api/user-tracks", { method: "POST", body: formData, credentials: "include" });
+      if (!r.ok) { const e = await r.json(); throw new Error(e.error || "Upload failed"); }
+      return r.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-tracks"] });
+      setUploadFile(null);
+      setUploadName("");
+      toast({ title: "Uploaded successfully" });
+    },
+    onError: (e: any) => toast({ title: "Upload failed", description: e.message, variant: "destructive" }),
+  });
+
+  const deleteTrackMutation = useMutation({
+    mutationFn: async (id: number) => {
+      const r = await fetch(`/api/user-tracks/${id}`, { method: "DELETE", credentials: "include" });
+      if (!r.ok && r.status !== 204) throw new Error("Delete failed");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/user-tracks"] });
+      toast({ title: "Track deleted" });
+    },
+    onError: () => toast({ title: "Delete failed", variant: "destructive" }),
+  });
+
+  const handleUpload = () => {
+    if (!uploadFile || !uploadName.trim()) return;
+    const fd = new FormData();
+    fd.append("file", uploadFile);
+    fd.append("name", uploadName);
+    fd.append("isPublic", String(uploadIsPublic));
+    uploadMutation.mutate(fd);
+  };
+
+  const playUserTrack = (ut: UserTrack) => {
+    const fakeTrack: SCTrack = {
+      id: -(ut.id),
+      title: ut.name,
+      permalink_url: `/api/user-tracks/file/${ut.id}`,
+      duration: 0,
+      artwork_url: null,
+      user: { id: 0, username: ut.username, avatar_url: null },
+      sourceUrl: `/api/user-tracks/file/${ut.id}`,
+    };
+    playTrack(fakeTrack, [fakeTrack]);
+  };
+
   const artistStats: ArtistStat[] = (() => {
     const map = new Map<number, ArtistStat>();
     for (const t of history) {
@@ -206,7 +283,7 @@ export default function MusicPlayer() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio || !currentTrack) return;
-    audio.src = `/api/music/stream/${currentTrack.id}`;
+    audio.src = currentTrack.sourceUrl || `/api/music/stream/${currentTrack.id}`;
     audio.load();
     audio.play().catch(() => {});
     setIsPlaying(true);
@@ -310,6 +387,7 @@ export default function MusicPlayer() {
     { key: "library", label: "Library", icon: ListMusic },
     { key: "downloaded", label: "Downloaded", icon: Download },
     { key: "artists", label: "Artists", icon: Users },
+    { key: "upload", label: "Upload", icon: Upload },
   ] as const;
 
   return (
@@ -610,6 +688,92 @@ export default function MusicPlayer() {
                       </div>
                     ))}
                   </div>
+                </div>
+              )}
+
+              {/* Upload Tab */}
+              {tab === "upload" && (
+                <div className="p-3 space-y-3">
+                  {user ? (
+                    <>
+                      {/* Upload form */}
+                      <div className="bg-white/5 rounded-xl p-3 space-y-2.5 border border-white/8">
+                        <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold">Upload Audio</p>
+                        <label className="flex flex-col items-center justify-center gap-1.5 w-full h-16 rounded-lg border border-dashed border-white/15 hover:border-primary/50 bg-white/3 hover:bg-primary/5 cursor-pointer transition-colors">
+                          <Upload className="w-4 h-4 text-white/30" />
+                          <span className="text-[10px] text-white/40">{uploadFile ? uploadFile.name : "Click to select MP3, WAV, M4A…"}</span>
+                          <input type="file" accept="audio/*,.mp3,.wav,.ogg,.flac,.aac,.m4a,.webm" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) { setUploadFile(f); if (!uploadName) setUploadName(f.name.replace(/\.[^.]+$/, "")); } }} />
+                        </label>
+                        <Input
+                          data-testid="input-upload-name"
+                          value={uploadName}
+                          onChange={e => setUploadName(e.target.value)}
+                          placeholder="Track name"
+                          className="h-7 text-xs bg-white/5 border-white/10 text-white placeholder:text-white/25 focus-visible:ring-primary/40 rounded-lg"
+                        />
+                        <div className="flex items-center justify-between">
+                          <button
+                            data-testid="button-toggle-visibility"
+                            onClick={() => setUploadIsPublic(v => !v)}
+                            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold transition-colors ${uploadIsPublic ? "bg-green-500/20 text-green-400 border border-green-500/30" : "bg-white/8 text-white/40 border border-white/10"}`}
+                          >
+                            {uploadIsPublic ? <Globe className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                            {uploadIsPublic ? "Public" : "Private"}
+                          </button>
+                          <button
+                            data-testid="button-upload-submit"
+                            onClick={handleUpload}
+                            disabled={!uploadFile || !uploadName.trim() || uploadMutation.isPending}
+                            className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-primary text-white text-[10px] font-bold disabled:opacity-40 hover:bg-primary/80 transition-colors"
+                          >
+                            {uploadMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                            Upload
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Track list */}
+                      <p className="text-[10px] text-white/30 uppercase tracking-wider font-bold px-1">All Uploads</p>
+                      {tracksLoading && <div className="flex justify-center py-4"><Loader2 className="w-5 h-5 text-primary animate-spin" /></div>}
+                      {!tracksLoading && userTracks.length === 0 && (
+                        <div className="flex flex-col items-center justify-center py-6 text-white/20">
+                          <Music2 className="w-7 h-7 mb-1.5" />
+                          <p className="text-xs">No uploads yet</p>
+                        </div>
+                      )}
+                      <div className="space-y-0.5">
+                        {userTracks.map(ut => (
+                          <div key={ut.id} data-testid={`row-upload-${ut.id}`} className={`flex items-center gap-2.5 px-3 py-2 rounded-lg group transition-colors hover:bg-white/5 ${currentTrack?.id === -(ut.id) ? "bg-primary/20 border border-primary/30" : "border border-transparent"}`}>
+                            <button onClick={() => playUserTrack(ut)} className="w-8 h-8 flex-shrink-0 rounded-md bg-white/10 flex items-center justify-center hover:bg-primary/20 transition-colors">
+                              {currentTrack?.id === -(ut.id) && isPlaying ? <Pause className="w-3.5 h-3.5 text-primary fill-primary" /> : <Play className="w-3.5 h-3.5 text-white/60 fill-white/60" />}
+                            </button>
+                            <div className="flex-1 min-w-0">
+                              <p className={`text-xs font-semibold truncate ${currentTrack?.id === -(ut.id) ? "text-primary" : "text-white"}`}>{ut.name}</p>
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] text-white/40">{ut.username}</span>
+                                {ut.isPublic ? <Globe className="w-2.5 h-2.5 text-green-400/60" /> : <Lock className="w-2.5 h-2.5 text-white/30" />}
+                              </div>
+                            </div>
+                            {ut.username === user.username && (
+                              <button
+                                data-testid={`button-delete-upload-${ut.id}`}
+                                onClick={() => deleteTrackMutation.mutate(ut.id)}
+                                disabled={deleteTrackMutation.isPending}
+                                className="w-6 h-6 flex-shrink-0 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400 hover:bg-red-400/10 transition-all"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex flex-col items-center justify-center py-10 text-white/20">
+                      <Upload className="w-8 h-8 mb-2" />
+                      <p className="text-xs">Log in to upload audio</p>
+                    </div>
+                  )}
                 </div>
               )}
 

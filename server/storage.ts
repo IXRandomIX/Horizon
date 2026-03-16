@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack } from "@shared/schema";
 import { eq, and, or, sql, ne, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -90,6 +90,12 @@ export interface IStorage {
   updateChangeLogEntry(id: number, content: string, imageUrl?: string): Promise<ChangeLogEntry>;
   deleteChangeLogEntry(id: number): Promise<void>;
   getChangeLogEntriesAfter(timestamp: string): Promise<ChangeLogEntry[]>;
+
+  // User Tracks
+  getUserTracks(username?: string): Promise<UserTrack[]>;
+  createUserTrack(data: { username: string; name: string; filePath: string; fileType: string; isPublic: boolean }): Promise<UserTrack>;
+  deleteUserTrack(id: number): Promise<void>;
+  getUserTrack(id: number): Promise<UserTrack | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -398,6 +404,29 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(changeLogEntries).where(
       sql`${changeLogEntries.createdAt} > ${timestamp}::timestamptz`
     ).orderBy(desc(changeLogEntries.createdAt));
+  }
+
+  async getUserTracks(username?: string): Promise<UserTrack[]> {
+    if (username) {
+      return await db.select().from(userTracks).where(
+        or(eq(userTracks.isPublic, true), eq(userTracks.username, username))
+      ).orderBy(desc(userTracks.createdAt));
+    }
+    return await db.select().from(userTracks).where(eq(userTracks.isPublic, true)).orderBy(desc(userTracks.createdAt));
+  }
+
+  async createUserTrack(data: { username: string; name: string; filePath: string; fileType: string; isPublic: boolean }): Promise<UserTrack> {
+    const [track] = await db.insert(userTracks).values(data).returning();
+    return track;
+  }
+
+  async deleteUserTrack(id: number): Promise<void> {
+    await db.delete(userTracks).where(eq(userTracks.id, id));
+  }
+
+  async getUserTrack(id: number): Promise<UserTrack | undefined> {
+    const [track] = await db.select().from(userTracks).where(eq(userTracks.id, id));
+    return track;
   }
 }
 
