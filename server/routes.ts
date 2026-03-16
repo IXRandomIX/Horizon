@@ -1488,48 +1488,108 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).end();
   });
 
-  // CloudMoon game proxy — loads the game info page through our domain and intercepts window.open
-  // so clicking "Play" navigates the current iframe instead of opening a new tab
-  app.get("/api/cloudmoon-game/:pkg", async (req: any, res: any) => {
-    try {
-      const pkg = req.params.pkg;
-      const targetUrl = `https://web.cloudmoonapp.com/game/${pkg}`;
-      const response = await fetch(targetUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Referer": "https://web.cloudmoonapp.com/",
-        },
-        redirect: "follow",
-      });
-      if (!response.ok) return res.status(response.status).send("Failed to load game");
-      let html = await response.text();
-      const inject = `<base href="https://web.cloudmoonapp.com/"><script>
+  // Helper: fetch a cloudmoonapp.com URL, strip framing-hostile headers, and return HTML
+  async function proxyCloudMoonHtml(targetUrl: string, baseHref: string, res: any) {
+    const response = await fetch(targetUrl, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://web.cloudmoonapp.com/",
+      },
+      redirect: "follow",
+    });
+    if (!response.ok) return res.status(response.status).send("Failed to load from CloudMoon");
+    let html = await response.text();
+    const inject = `<base href="${baseHref}"><script>
 (function(){
+  function routeUrl(url) {
+    if (!url || typeof url !== 'string' || !url.trim()) return;
+    if (url.includes('cloudmoonapp.com')) {
+      window.location.href = '/api/cloudmoon-proxy?url=' + encodeURIComponent(url);
+    } else {
+      window.location.href = url;
+    }
+  }
   var origOpen = window.open;
   window.open = function(url, target, features) {
-    if (url && typeof url === 'string' && url.length > 0) {
-      window.location.href = url;
-      return window;
-    }
-    return origOpen ? origOpen.apply(this, arguments) : null;
+    routeUrl(url);
+    return { closed: false, focus: function(){}, close: function(){} };
   };
-  // Also intercept anchor clicks with target=_blank
   document.addEventListener('click', function(e) {
     var el = e.target;
     while (el && el.tagName !== 'A') el = el.parentElement;
     if (el && el.target === '_blank' && el.href) {
       e.preventDefault();
-      window.location.href = el.href;
+      routeUrl(el.href);
     }
   }, true);
+  // Override location.assign and location.replace to stay in iframe
+  var _assign = window.location.assign.bind(window.location);
+  var _replace = window.location.replace.bind(window.location);
+  try {
+    Object.defineProperty(window, 'location', {
+      get: function() { return window.location; },
+      configurable: true
+    });
+  } catch(e) {}
 })();
 </script>`;
-      html = html.replace(/<head>/i, `<head>${inject}`);
-      if (!html.match(/<head>/i)) html = inject + html;
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.send(html);
+    // Inject before </head> or <head> or at start
+    if (html.match(/<head[^>]*>/i)) {
+      html = html.replace(/(<head[^>]*>)/i, `$1${inject}`);
+    } else {
+      html = inject + html;
+    }
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("X-Frame-Options", "ALLOWALL");
+    res.removeHeader?.("X-Frame-Options");
+    res.send(html);
+  }
+
+  // CloudMoon game proxy — loads the game info page through our domain and intercepts window.open
+  app.get("/api/cloudmoon-game/:pkg", async (req: any, res: any) => {
+    try {
+      const pkg = req.params.pkg;
+      await proxyCloudMoonHtml(
+        `https://web.cloudmoonapp.com/game/${pkg}`,
+        "https://web.cloudmoonapp.com/",
+        res
+      );
+    } catch (err: any) {
+      res.status(502).send("Proxy error");
+    }
+  });
+
+  // CloudMoon arbitrary URL proxy — used by the injected script to proxy run-site URLs
+  // so they load inside the iframe instead of being blocked by X-Frame-Options
+  app.get("/api/cloudmoon-proxy", async (req: any, res: any) => {
+    try {
+      const rawUrl = req.query.url as string;
+      if (!rawUrl) return res.status(400).send("Missing url");
+      let targetUrl: URL;
+      try { targetUrl = new URL(rawUrl); } catch { return res.status(400).send("Invalid url"); }
+      // Only allow cloudmoonapp.com
+      if (!targetUrl.hostname.endsWith("cloudmoonapp.com")) {
+        return res.status(403).send("Not allowed");
+      }
+      const baseHref = `${targetUrl.protocol}//${targetUrl.hostname}/`;
+      const contentTypeHint = targetUrl.pathname.match(/\.(js|css|json|png|jpg|gif|svg|woff|woff2|ttf|ico)$/i);
+      if (contentTypeHint) {
+        // For non-HTML assets, pass them through directly
+        const r = await fetch(rawUrl, {
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Referer": "https://web.cloudmoonapp.com/",
+          },
+          redirect: "follow",
+        });
+        const ct = r.headers.get("content-type") || "application/octet-stream";
+        res.setHeader("Content-Type", ct);
+        const buf = await r.arrayBuffer();
+        return res.send(Buffer.from(buf));
+      }
+      await proxyCloudMoonHtml(rawUrl, baseHref, res);
     } catch (err: any) {
       res.status(502).send("Proxy error");
     }
