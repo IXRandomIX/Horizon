@@ -1356,6 +1356,147 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ── HorizonTube (YouTube Data API v3 proxy) ───────────────────────────────
+  const YT_KEY = process.env.YOUTUBE_API_KEY || "";
+  const YT_BASE = "https://www.googleapis.com/youtube/v3";
+
+  async function ytFetch(path: string) {
+    const res = await fetch(`${YT_BASE}${path}`, {
+      headers: { "User-Agent": "Mozilla/5.0" },
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`YouTube API error ${res.status}: ${text.slice(0, 200)}`);
+    }
+    return res.json();
+  }
+
+  function fmtYtItem(item: any) {
+    const snippet = item.snippet || {};
+    const stats = item.statistics || {};
+    const id =
+      typeof item.id === "string"
+        ? item.id
+        : item.id?.videoId || item.id?.channelId || item.id?.playlistId || "";
+    const kind =
+      typeof item.id === "string"
+        ? "youtube#video"
+        : item.id?.kind || "youtube#video";
+    return {
+      id,
+      kind,
+      title: snippet.title || "",
+      description: snippet.description || "",
+      thumbnail:
+        snippet.thumbnails?.high?.url ||
+        snippet.thumbnails?.medium?.url ||
+        snippet.thumbnails?.default?.url ||
+        "",
+      channelTitle: snippet.channelTitle || "",
+      channelId: snippet.channelId || "",
+      publishedAt: snippet.publishedAt || "",
+      viewCount: stats.viewCount || null,
+      likeCount: stats.likeCount || null,
+      duration: item.contentDetails?.duration || null,
+    };
+  }
+
+  app.get("/api/youtube/popular", async (_req, res) => {
+    if (!YT_KEY) return res.status(500).json({ message: "YOUTUBE_API_KEY not configured" });
+    try {
+      const data = await ytFetch(`/videos?part=snippet,statistics&chart=mostPopular&maxResults=24&key=${YT_KEY}`);
+      res.json((data.items || []).map(fmtYtItem));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/latest", async (_req, res) => {
+    if (!YT_KEY) return res.status(500).json({ message: "YOUTUBE_API_KEY not configured" });
+    try {
+      const data = await ytFetch(`/search?part=snippet&order=date&type=video&maxResults=24&key=${YT_KEY}`);
+      res.json((data.items || []).map(fmtYtItem));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/newer", async (_req, res) => {
+    if (!YT_KEY) return res.status(500).json({ message: "YOUTUBE_API_KEY not configured" });
+    try {
+      const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      const data = await ytFetch(
+        `/search?part=snippet&order=viewCount&type=video&maxResults=24&publishedAfter=${encodeURIComponent(weekAgo)}&key=${YT_KEY}`
+      );
+      res.json((data.items || []).map(fmtYtItem));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/oldest", async (_req, res) => {
+    if (!YT_KEY) return res.status(500).json({ message: "YOUTUBE_API_KEY not configured" });
+    try {
+      const fiveYearsAgo = new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000).toISOString();
+      const tenYearsAgo = new Date(Date.now() - 10 * 365 * 24 * 60 * 60 * 1000).toISOString();
+      const data = await ytFetch(
+        `/search?part=snippet&order=viewCount&type=video&maxResults=24&publishedBefore=${encodeURIComponent(fiveYearsAgo)}&publishedAfter=${encodeURIComponent(tenYearsAgo)}&key=${YT_KEY}`
+      );
+      res.json((data.items || []).map(fmtYtItem));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/shorts", async (_req, res) => {
+    if (!YT_KEY) return res.status(500).json({ message: "YOUTUBE_API_KEY not configured" });
+    try {
+      const data = await ytFetch(
+        `/search?part=snippet&order=viewCount&type=video&videoDuration=short&maxResults=20&q=shorts&key=${YT_KEY}`
+      );
+      res.json((data.items || []).map(fmtYtItem));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/search", async (req, res) => {
+    if (!YT_KEY) return res.status(500).json({ message: "YOUTUBE_API_KEY not configured" });
+    const q = (req.query.q as string || "").trim();
+    if (!q) return res.json([]);
+    const typeParam = (req.query.type as string || "all").toLowerCase();
+    const durationParam = (req.query.duration as string || "any").toLowerCase();
+    const uploadDate = (req.query.uploadDate as string || "anytime").toLowerCase();
+    const prioritize = (req.query.prioritize as string || "relevance").toLowerCase();
+    const features = ((req.query.features as string) || "").split(",").filter(Boolean);
+
+    try {
+      let params = `/search?part=snippet&q=${encodeURIComponent(q)}&maxResults=24&key=${YT_KEY}`;
+
+      if (typeParam === "videos" || typeParam === "video") params += "&type=video";
+      else if (typeParam === "shorts") { params += "&type=video&videoDuration=short"; }
+      else if (typeParam === "channels" || typeParam === "channel") params += "&type=channel";
+      else if (typeParam === "playlists" || typeParam === "playlist") params += "&type=playlist";
+      else if (typeParam === "movies" || typeParam === "movie") params += "&type=video&videoType=movie";
+      else params += "&type=video,channel,playlist";
+
+      if (durationParam === "under 3 minutes") params += "&videoDuration=short";
+      else if (durationParam === "3-20 minutes") params += "&videoDuration=medium";
+      else if (durationParam === "over 20 minutes") params += "&videoDuration=long";
+
+      if (uploadDate === "today") {
+        params += `&publishedAfter=${encodeURIComponent(new Date(Date.now() - 24*60*60*1000).toISOString())}`;
+      } else if (uploadDate === "this week") {
+        params += `&publishedAfter=${encodeURIComponent(new Date(Date.now() - 7*24*60*60*1000).toISOString())}`;
+      } else if (uploadDate === "this month") {
+        params += `&publishedAfter=${encodeURIComponent(new Date(Date.now() - 30*24*60*60*1000).toISOString())}`;
+      } else if (uploadDate === "this year") {
+        params += `&publishedAfter=${encodeURIComponent(new Date(Date.now() - 365*24*60*60*1000).toISOString())}`;
+      }
+
+      if (prioritize === "popularity") params += "&order=viewCount";
+      else params += "&order=relevance";
+
+      if (features.includes("live")) params += "&eventType=live";
+      if (features.includes("hd") || features.includes("4k")) params += "&videoDefinition=high";
+      if (features.includes("subtitles/cc")) params += "&videoCaption=closedCaption";
+      if (features.includes("creative commons")) params += "&videoLicense=creativeCommon";
+
+      const data = await ytFetch(params);
+      res.json((data.items || []).map(fmtYtItem));
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
   // ─── SoundCloud Music ────────────────────────────────────────────────────────
   let _scClientId: string | null = null;
   let _scClientIdTs = 0;

@@ -2,7 +2,7 @@ import { useLocation, Link } from "wouter";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
   Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
-  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen
+  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen, Youtube
 } from "lucide-react";
 import {
   Sidebar,
@@ -68,6 +68,7 @@ export function AppSidebar() {
     { name: "Global Inbox", path: "/global-inbox", icon: MailOpen, badge: globalInboxUnread, onNavigate: markGlobalInboxRead },
     { name: "Partners", path: "/partners", icon: Users },
     { name: "Movies", path: "/movies", icon: Clapperboard },
+    { name: "HorizonTube", path: "/horizontube", icon: Youtube },
     { name: "Games Portal", path: "/games", icon: Gamepad2 },
     { name: "Dragon X V2", path: "/eaglercraft", icon: Sword },
     { name: "Eaglercraft Launcher", path: "/eaglercraft-launcher", icon: Monitor },
