@@ -1640,5 +1640,68 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.status(204).end();
   });
 
+  // ─── Eaglercraft Proxy (bypasses content blockers) ───────────────────────
+  const EAGLER_ORIGIN = "https://d3rsc7j663z58n.cloudfront.net";
+
+  app.use("/api/eaglercraft-proxy", async (req: any, res: any) => {
+    const subPath = req.path === "/" ? "/" : req.path;
+    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    const targetUrl = `${EAGLER_ORIGIN}${subPath}${query}`;
+
+    try {
+      const headers: Record<string, string> = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        "Accept": req.headers["accept"] as string || "*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": EAGLER_ORIGIN + "/",
+        "Origin": EAGLER_ORIGIN,
+      };
+      if (req.headers["accept-encoding"]) {
+        headers["Accept-Encoding"] = "identity";
+      }
+
+      const upstreamRes = await fetch(targetUrl, {
+        method: req.method,
+        headers,
+        body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body,
+        redirect: "follow",
+      });
+
+      const contentType = upstreamRes.headers.get("content-type") || "";
+
+      res.status(upstreamRes.status);
+      upstreamRes.headers.forEach((value: string, key: string) => {
+        const skip = ["content-encoding", "content-length", "transfer-encoding",
+          "connection", "x-frame-options", "content-security-policy",
+          "x-content-type-options", "strict-transport-security"];
+        if (!skip.includes(key.toLowerCase())) {
+          res.setHeader(key, value);
+        }
+      });
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+
+      if (contentType.includes("text/html")) {
+        let html = await upstreamRes.text();
+        html = html.replace(new RegExp(EAGLER_ORIGIN.replace(/\./g, "\\."), "g"), "/api/eaglercraft-proxy");
+        html = html.replace(/(src|href|action)="\//g, `$1="/api/eaglercraft-proxy/`);
+        html = html.replace(/(src|href|action)='\//g, `$1='/api/eaglercraft-proxy/`);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(html);
+      } else if (contentType.includes("javascript") || contentType.includes("text/css")) {
+        let text = await upstreamRes.text();
+        text = text.replace(new RegExp(EAGLER_ORIGIN.replace(/\./g, "\\."), "g"), "/api/eaglercraft-proxy");
+        res.setHeader("Content-Type", contentType);
+        res.send(text);
+      } else {
+        const buf = Buffer.from(await upstreamRes.arrayBuffer());
+        res.send(buf);
+      }
+    } catch (err: any) {
+      console.error("[eaglercraft-proxy] error:", err.message);
+      res.status(502).json({ message: "Proxy error", detail: err.message });
+    }
+  });
+
   return httpServer;
 }

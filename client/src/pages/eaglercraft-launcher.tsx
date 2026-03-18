@@ -56,7 +56,7 @@ export default function EaglerCraftLauncher() {
         style={{ willChange: "transform" }}
       >
         <iframe
-          src="https://d3rsc7j663z58n.cloudfront.net/"
+          src="/api/eaglercraft-proxy/"
           className="absolute inset-0 w-full h-full border-0"
           style={{ display: "block" }}
           allow="fullscreen; autoplay; pointer-lock; encrypted-media; gyroscope; picture-in-picture; clipboard-read; clipboard-write"
