@@ -12,8 +12,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useAuth, getSessionToken, authFetch } from "@/context/auth";
 import { useNotifications } from "@/context/notifications";
 import { ProfileModal } from "@/components/profile-modal";
-
-const COMMON_EMOJIS = ["😀", "😂", "😍", "🤣", "😊", "🙏", "😭", "😘", "👍", "✨", "🔥", "❤️", "💀", "💀", "💯", "🎉", "✅", "❌", "🤔", "👀"];
+import { EmojiPicker } from "@/components/emoji-picker";
 
 const FONTS = [
   "Adios Script Pro", "Affair", "Aphrodite Pro", "Belluccia Pro", "Burges Script",
@@ -772,10 +771,8 @@ export default function Chat() {
                                 <Smile className="w-4 h-4 mr-2" /> React
                               </div>
                             </PopoverTrigger>
-                            <PopoverContent className="w-auto p-2 bg-black border-white/10 grid grid-cols-5 gap-1">
-                              {COMMON_EMOJIS.map(emoji => (
-                                <button key={emoji} className="p-2 hover:bg-white/10 rounded transition-colors" onClick={() => handleAddReaction(msg.id, emoji)}>{emoji}</button>
-                              ))}
+                            <PopoverContent className="w-auto p-0 bg-transparent border-0 shadow-none">
+                              <EmojiPicker onSelect={(emoji) => handleAddReaction(msg.id, emoji)} />
                             </PopoverContent>
                           </Popover>
                         </DropdownMenuContent>
@@ -867,10 +864,8 @@ export default function Chat() {
               <PopoverTrigger asChild>
                 <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><Smile className="w-5 h-5" /></Button>
               </PopoverTrigger>
-              <PopoverContent className="w-64 p-2 bg-black border-white/10 grid grid-cols-6 gap-1">
-                {COMMON_EMOJIS.map(emoji => (
-                  <button type="button" key={emoji} className="p-2 hover:bg-white/10 rounded transition-colors text-xl" onClick={() => setNewMessage(prev => prev + emoji)}>{emoji}</button>
-                ))}
+              <PopoverContent className="w-auto p-0 bg-transparent border-0 shadow-none">
+                <EmojiPicker onSelect={(emoji) => setNewMessage(prev => prev + emoji)} />
               </PopoverContent>
             </Popover>
 
