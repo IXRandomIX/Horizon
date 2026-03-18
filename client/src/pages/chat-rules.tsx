@@ -30,6 +30,7 @@ export default function ChatRulesPage() {
   const [customRules, setCustomRules] = useState<string[]>([]);
   const [editingRules, setEditingRules] = useState<string[]>([]);
   const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     localStorage.setItem("horizon_visited_rules", "true");
@@ -62,32 +63,31 @@ export default function ChatRulesPage() {
   };
 
   const handleSave = async () => {
+    const toSave = editingRules.filter((r) => r.trim() !== "");
+    setIsSaving(true);
     try {
       const token = localStorage.getItem("horizon_session_token");
       const headers: Record<string, string> = { "Content-Type": "application/json" };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const body = JSON.stringify({ name: "chat-rules", content: JSON.stringify(editingRules) });
-
-      let res = await fetch("/api/pages/chat-rules", {
+      const res = await fetch("/api/pages/chat-rules", {
         method: "PATCH",
         headers,
-        body,
+        body: JSON.stringify({ name: "chat-rules", content: JSON.stringify(toSave) }),
       });
-      if (res.status === 404) {
-        res = await fetch("/api/pages", {
-          method: "POST",
-          headers,
-          body,
-        });
-      }
+
       if (res.ok) {
-        toast({ title: "Rules saved" });
-        setCustomRules([...editingRules]);
+        setCustomRules(toSave);
+        setEditingRules([]);
         setIsEditing(false);
+        toast({ title: "Rules saved successfully" });
+      } else {
+        toast({ title: "Failed to save rules", variant: "destructive" });
       }
     } catch {
-      toast({ title: "Failed to save", variant: "destructive" });
+      toast({ title: "Failed to save rules", variant: "destructive" });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -102,10 +102,6 @@ export default function ChatRulesPage() {
   const deleteRule = (index: number) => {
     setEditingRules(editingRules.filter((_, i) => i !== index));
   };
-
-  const allRules = isEditing
-    ? [...PERMANENT_RULES, ...editingRules]
-    : [...PERMANENT_RULES, ...customRules];
 
   return (
     <div className="flex flex-col h-full bg-black overflow-hidden">
@@ -127,11 +123,21 @@ export default function ChatRulesPage() {
               <div className="flex gap-2 shrink-0">
                 {isEditing ? (
                   <>
-                    <Button onClick={cancelEditing} variant="outline" className="border-white/10 hover:bg-white/10 gap-2">
+                    <Button
+                      onClick={cancelEditing}
+                      variant="outline"
+                      className="border-white/10 hover:bg-white/10 gap-2"
+                      disabled={isSaving}
+                    >
                       <X className="w-4 h-4" /> Cancel
                     </Button>
-                    <Button onClick={handleSave} className="bg-primary hover:bg-primary/90 gap-2">
-                      <Save className="w-4 h-4" /> Save
+                    <Button
+                      onClick={handleSave}
+                      className="bg-primary hover:bg-primary/90 gap-2"
+                      disabled={isSaving}
+                    >
+                      <Save className="w-4 h-4" />
+                      {isSaving ? "Saving..." : "Save"}
                     </Button>
                   </>
                 ) : (
@@ -149,6 +155,7 @@ export default function ChatRulesPage() {
             className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 md:p-8"
           >
             <ol className="space-y-3">
+              {/* Permanent rules — never editable or deletable */}
               {PERMANENT_RULES.map((rule, i) => (
                 <li key={`perm-${i}`} className="flex gap-4 items-start">
                   <span className="shrink-0 w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-black text-primary">
@@ -156,30 +163,29 @@ export default function ChatRulesPage() {
                   </span>
                   <div className="flex-1 flex items-start justify-between gap-2 pt-0.5">
                     <p className="text-white/80 text-sm md:text-base leading-relaxed">{rule}</p>
-                    {isEditing && (
-                      <Lock className="w-3.5 h-3.5 text-white/20 shrink-0 mt-0.5" />
-                    )}
+                    {isEditing && <Lock className="w-3.5 h-3.5 text-white/20 shrink-0 mt-1" />}
                   </div>
                 </li>
               ))}
 
+              {/* Custom rules */}
               {isEditing
                 ? editingRules.map((rule, i) => (
                     <li key={`edit-${i}`} className="flex gap-4 items-start">
-                      <span className="shrink-0 w-7 h-7 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-xs font-black text-white/60">
+                      <span className="shrink-0 w-7 h-7 rounded-full bg-primary/20 border border-primary/30 flex items-center justify-center text-xs font-black text-primary">
                         {PERMANENT_RULES.length + i + 1}
                       </span>
-                      <div className="flex-1 flex items-center gap-2">
+                      <div className="flex-1 flex items-start gap-2">
                         <textarea
                           value={rule}
                           onChange={(e) => updateRule(i, e.target.value)}
-                          placeholder="Enter rule text..."
+                          placeholder="Type rule here..."
                           rows={2}
-                          className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-primary/50 text-sm resize-none"
+                          className="flex-1 bg-white/5 border border-primary/30 rounded-lg px-3 py-2 text-white placeholder-white/30 focus:outline-none focus:border-primary/60 text-sm md:text-base leading-relaxed resize-none"
                         />
                         <button
                           onClick={() => deleteRule(i)}
-                          className="p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors shrink-0"
+                          className="mt-1 p-1.5 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-colors shrink-0"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -201,7 +207,7 @@ export default function ChatRulesPage() {
                 <Button
                   onClick={addRule}
                   variant="outline"
-                  className="w-full border-dashed border-white/10 hover:bg-white/5 hover:border-primary/30 text-white/50 hover:text-white gap-2"
+                  className="w-full border-dashed border-white/20 hover:bg-white/5 hover:border-primary/40 text-white/50 hover:text-white gap-2 transition-colors"
                 >
                   <Plus className="w-4 h-4" /> Add Rule
                 </Button>
