@@ -125,6 +125,9 @@ export default function Chat() {
   const [showRoleSidebar, setShowRoleSidebar] = useState(true);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [imageUrl, setImageUrl] = useState("");
+  const [rulesAccepted, setRulesAccepted] = useState(() => localStorage.getItem("horizon_rules_accepted") === "true");
+  const [hasVisitedRules, setHasVisitedRules] = useState(() => localStorage.getItem("horizon_visited_rules") === "true");
+  const [showEnjoy, setShowEnjoy] = useState(false);
   const { toast } = useToast();
   const { markChatRead } = useNotifications();
 
@@ -469,6 +472,81 @@ export default function Chat() {
       return part;
     });
   };
+
+  const handleAcceptRules = () => {
+    setShowEnjoy(true);
+    setTimeout(() => {
+      setShowEnjoy(false);
+      localStorage.setItem("horizon_rules_accepted", "true");
+      setRulesAccepted(true);
+    }, 2500);
+  };
+
+  if (!rulesAccepted) {
+    return (
+      <div className="flex h-full bg-black items-center justify-center relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 via-black to-blue-900/10 pointer-events-none" />
+
+        {showEnjoy ? (
+          <div className="flex flex-col items-center justify-center gap-4 z-10">
+            <div
+              className="anim-glitch font-display text-6xl md:text-8xl font-black text-white tracking-widest uppercase"
+              data-text="ENJOY"
+              style={{ color: "white" }}
+            >
+              ENJOY
+            </div>
+          </div>
+        ) : (
+          <div className="relative z-10 max-w-md w-full mx-4 text-center space-y-8">
+            <div className="space-y-2">
+              <div className="w-16 h-16 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto mb-6">
+                <span className="text-3xl">📋</span>
+              </div>
+              <h2 className="font-display text-2xl md:text-3xl font-black text-white tracking-widest uppercase">
+                Welcome to Horizon Chat
+              </h2>
+              <p className="text-white/60 text-sm md:text-base leading-relaxed">
+                Please go to the <strong className="text-primary">Chat Rules</strong> section in the website before you start chatting.
+              </p>
+            </div>
+
+            <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-6 space-y-4">
+              {!hasVisitedRules && (
+                <p className="text-yellow-400/80 text-xs tracking-wide">
+                  You must visit the <strong>Chat Rules</strong> section first before you can proceed.
+                </p>
+              )}
+              {hasVisitedRules && (
+                <p className="text-green-400/80 text-xs tracking-wide">
+                  Rules section visited. You may now proceed.
+                </p>
+              )}
+              <button
+                onClick={() => {
+                  if (hasVisitedRules) handleAcceptRules();
+                  else {
+                    const stored = localStorage.getItem("horizon_visited_rules") === "true";
+                    if (stored) {
+                      setHasVisitedRules(true);
+                    }
+                  }
+                }}
+                disabled={!hasVisitedRules}
+                className={`w-full py-3 px-6 rounded-xl font-bold text-base tracking-widest uppercase transition-all duration-200 ${
+                  hasVisitedRules
+                    ? "bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/30 cursor-pointer"
+                    : "bg-white/5 text-white/20 cursor-not-allowed border border-white/10"
+                }`}
+              >
+                I've Read the Rules
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (!user) {
     return (

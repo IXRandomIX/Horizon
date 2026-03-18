@@ -28,6 +28,7 @@ import MoviesPage from "@/pages/movies";
 import EaglerCraft from "@/pages/eaglercraft";
 import EaglerCraftLauncher from "@/pages/eaglercraft-launcher";
 import ChangeLogsPage from "@/pages/change-logs";
+import ChatRulesPage from "@/pages/chat-rules";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import MusicPlayer from "@/components/music-player";
 
@@ -58,6 +59,7 @@ function Router() {
       <Route path="/eaglercraft" component={EaglerCraft} />
       <Route path="/eaglercraft-launcher" component={EaglerCraftLauncher} />
       <Route path="/change-logs" component={ChangeLogsPage} />
+      <Route path="/chat-rules" component={ChatRulesPage} />
       <Route component={NotFound} />
     </Switch>
   );
