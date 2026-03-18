@@ -15,9 +15,10 @@ interface YTVideo {
   channelTitle: string;
   channelId: string;
   publishedAt: string;
+  uploadedDate: string;
   viewCount: string | null;
   likeCount: string | null;
-  duration: string | null;
+  duration: number | null;
 }
 
 interface Filters {
@@ -47,18 +48,13 @@ function formatViews(v: string | null): string {
   return `${n} views`;
 }
 
-function timeAgo(dateStr: string): string {
-  if (!dateStr) return "";
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const minutes = Math.floor(diff / 60000);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return `${months}mo ago`;
-  return `${Math.floor(months / 12)}y ago`;
+function formatDuration(secs: number | null): string {
+  if (!secs || secs <= 0) return "";
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, "0")}`;
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -71,13 +67,14 @@ function useDebounce<T>(value: T, delay: number): T {
 }
 
 function VideoCard({ video, onClick }: { video: YTVideo; onClick: () => void }) {
+  const dur = formatDuration(video.duration);
   return (
     <button
       data-testid={`card-video-${video.id}`}
       onClick={onClick}
       className="group flex flex-col text-left focus:outline-none w-full"
     >
-      <div className="relative rounded-xl overflow-hidden bg-white/5 border border-white/8 group-hover:border-primary/40 transition-all duration-300 aspect-video">
+      <div className="relative rounded-xl overflow-hidden bg-white/5 border border-white/8 group-hover:border-red-500/40 transition-all duration-300 aspect-video">
         {video.thumbnail ? (
           <img
             src={video.thumbnail}
@@ -95,6 +92,11 @@ function VideoCard({ video, onClick }: { video: YTVideo; onClick: () => void }) 
             <Play className="w-5 h-5 text-white fill-current ml-0.5" />
           </div>
         </div>
+        {dur && (
+          <div className="absolute bottom-1.5 right-1.5 bg-black/80 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
+            {dur}
+          </div>
+        )}
       </div>
       <div className="pt-2 px-0.5">
         <p className="text-sm font-semibold text-white leading-snug line-clamp-2 group-hover:text-red-400 transition-colors">
@@ -108,8 +110,8 @@ function VideoCard({ video, onClick }: { video: YTVideo; onClick: () => void }) 
               {formatViews(video.viewCount)}
             </span>
           )}
-          {video.publishedAt && (
-            <span className="text-[11px] text-white/25">{timeAgo(video.publishedAt)}</span>
+          {video.uploadedDate && (
+            <span className="text-[11px] text-white/25">{video.uploadedDate}</span>
           )}
         </div>
       </div>
@@ -152,6 +154,9 @@ function ShortCard({ video, onClick }: { video: YTVideo; onClick: () => void }) 
               <Eye className="w-2.5 h-2.5" />
               {formatViews(video.viewCount)}
             </p>
+          )}
+          {video.uploadedDate && (
+            <p className="text-[10px] text-white/30 mt-0.5">{video.uploadedDate}</p>
           )}
         </div>
       </div>
