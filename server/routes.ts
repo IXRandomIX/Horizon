@@ -1433,34 +1433,141 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return ytVideoDetails(ids);
   }
 
-  // ── Video player proxy (no youtube.com domain exposed to browser) ─────────
-  const INVIDIOUS_INSTANCES = [
-    "https://inv.riverside.rocks",
-    "https://invidious.io.lol",
-    "https://yt.artemislena.eu",
-    "https://invidious.privacydev.net",
-    "https://vid.puffyan.us",
+  // ── Self-hosted YouTube proxy (all traffic stays on our domain) ───────────
+
+  // Domains we proxy through our server (browser never contacts these directly)
+  const YT_PROXY_HOSTS: Record<string, string> = {
+    "www.youtube-nocookie.com": "https://www.youtube-nocookie.com",
+    "www.youtube.com":          "https://www.youtube.com",
+    "s.ytimg.com":              "https://s.ytimg.com",
+    "i.ytimg.com":              "https://i.ytimg.com",
+    "yt3.ggpht.com":            "https://yt3.ggpht.com",
+    "yt3.googleusercontent.com":"https://yt3.googleusercontent.com",
+    "lh3.googleusercontent.com":"https://lh3.googleusercontent.com",
+  };
+
+  // Ad/tracking domains — block at proxy and also inject runtime blocker
+  const YT_AD_DOMAINS = [
+    "googlesyndication.com",
+    "doubleclick.net",
+    "googleadservices.com",
+    "imasdk.googleapis.com",
+    "googletagmanager.com",
+    "google-analytics.com",
+    "googletagservices.com",
+    "static.doubleclick.net",
+    "ad.doubleclick.net",
   ];
 
-  app.get("/api/yt-embed/:videoId", (req, res) => {
+  // Injected at top of every proxied HTML page to block ads at runtime
+  const YT_AD_BLOCKER = `<script>
+(function(){
+  var AD=["googlesyndication.com","doubleclick.net","googleadservices.com","imasdk.googleapis.com","googletagmanager.com","google-analytics.com"];
+  function blocked(u){if(!u)return false;try{var h=new URL(String(u),location.href).hostname;return AD.some(function(d){return h===d||h.endsWith("."+d);});}catch(e){return false;}}
+  var oFetch=window.fetch;
+  window.fetch=function(u,o){if(blocked(u))return Promise.resolve(new Response("",{status:204}));return oFetch.apply(this,arguments);};
+  var oOpen=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(m,u){this._adBlocked=blocked(u);if(!this._adBlocked)return oOpen.apply(this,arguments);};
+  var oSend=XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.send=function(){if(this._adBlocked)return;return oSend.apply(this,arguments);};
+  var oCreate=document.createElement.bind(document);
+  document.createElement=function(t){
+    var el=oCreate(t);
+    if(/^(script|iframe)$/i.test(t)){
+      var oSA=el.setAttribute.bind(el);
+      el.setAttribute=function(n,v){if(n==="src"&&blocked(v))return;return oSA(n,v);};
+      var desc=Object.getOwnPropertyDescriptor(HTMLElement.prototype,"innerHTML")||{};
+      Object.defineProperty(el,"src",{get:function(){return el.getAttribute("src")||"";},set:function(v){if(!blocked(v))oSA("src",v);}});
+    }
+    return el;
+  };
+})();
+</script>`;
+
+  function rewriteYtContent(content: string): string {
+    let out = content;
+    for (const host of Object.keys(YT_PROXY_HOSTS)) {
+      // Replace https://HOST with /api/yt-proxy/HOST (path-based — no query-string ambiguity)
+      out = out.split(`https://${host}`).join(`/api/yt-proxy/${host}`);
+    }
+    // Strip ad script tags
+    for (const ad of YT_AD_DOMAINS) {
+      out = out.replace(new RegExp(`<script[^>]*${ad.replace(/\./g,"\\.")}[^>]*>[\\s\\S]*?<\\/script>`, "gi"), "");
+    }
+    return out;
+  }
+
+  async function ytProxyFetch(url: string, extraHeaders?: Record<string, string>): Promise<Response> {
+    return fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
+        "Referer": "https://www.youtube-nocookie.com/",
+        "Origin": "https://www.youtube-nocookie.com",
+        ...extraHeaders,
+      },
+    });
+  }
+
+  // Main embed endpoint — browser only ever loads /api/yt-embed/:id (our domain)
+  app.get("/api/yt-embed/:videoId", async (req, res) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
-    const instanceList = INVIDIOUS_INSTANCES.map(i => JSON.stringify(i)).join(",");
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.send(`<!DOCTYPE html>
-<html lang="en"><head><meta charset="utf-8">
-<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#000;overflow:hidden}iframe{width:100%;height:100%;border:0;display:block}#err{display:none;position:absolute;inset:0;background:#111;color:#eee;align-items:center;justify-content:center;flex-direction:column;gap:14px;font-family:sans-serif;font-size:14px;text-align:center;padding:20px}#err.show{display:flex}button{padding:8px 20px;background:#c00;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}</style>
-</head><body>
-<iframe id="pl" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
-<div id="err"><p>Could not load video player.</p><button onclick="tryNext()">Try another server</button></div>
-<script>
-var V=${JSON.stringify(videoId)},INST=[${instanceList}],idx=0;
-function load(i){document.getElementById("pl").src=INST[i]+"/embed/"+V+"?autoplay=1&rel=0";}
-function tryNext(){idx++;if(idx>=INST.length){document.getElementById("err").className="show";}else{load(idx);}}
-document.getElementById("pl").addEventListener("error",tryNext);
-load(0);
-</script>
-</body></html>`);
+    const targetUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
+    try {
+      const response = await ytProxyFetch(targetUrl);
+      if (!response.ok) throw new Error(`Upstream HTTP ${response.status}`);
+      let html = await response.text();
+      // Inject ad blocker before anything else runs
+      html = html.includes("<head>")
+        ? html.replace("<head>", `<head>${YT_AD_BLOCKER}`)
+        : YT_AD_BLOCKER + html;
+      // Rewrite all YouTube domain URLs to go through our proxy
+      html = rewriteYtContent(html);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+      res.removeHeader("Content-Security-Policy");
+      res.send(html);
+    } catch (e: any) {
+      res.status(502).setHeader("Content-Type", "text/html").send(
+        `<html><body style="background:#111;color:#eee;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:12px;text-align:center;padding:20px"><p>Could not load video.</p><small style="opacity:.6">${e.message}</small></body></html>`
+      );
+    }
+  });
+
+  // Generic resource proxy — serves YouTube JS, CSS, images through our domain
+  app.use("/api/yt-proxy", async (req, res) => {
+    // req.url = '/s.ytimg.com/path?query=val'  (Express strips the mount prefix)
+    const raw = req.url.startsWith("/") ? req.url.slice(1) : req.url;
+    const slashIdx = raw.indexOf("/");
+    const targetHost = slashIdx === -1 ? raw.split("?")[0] : raw.slice(0, slashIdx);
+    const targetPath = slashIdx === -1 ? "/" : raw.slice(slashIdx);
+
+    const targetBase = YT_PROXY_HOSTS[targetHost];
+    if (!targetBase) return res.status(403).json({ error: `Blocked host: ${targetHost}` });
+    if (YT_AD_DOMAINS.some(d => targetHost.includes(d))) return res.status(204).end();
+
+    const targetUrl = `${targetBase}${targetPath}`;
+    try {
+      const response = await ytProxyFetch(targetUrl);
+      const ct = response.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      const cacheControl = response.headers.get("cache-control");
+      if (cacheControl) res.setHeader("Cache-Control", cacheControl);
+
+      const isText = ct.includes("html") || ct.includes("javascript") || ct.includes("css") || ct.includes("json");
+      if (isText) {
+        let text = await response.text();
+        text = rewriteYtContent(text);
+        res.send(text);
+      } else {
+        const buf = await response.arrayBuffer();
+        res.end(Buffer.from(buf));
+      }
+    } catch (e: any) {
+      res.status(502).json({ error: e.message });
+    }
   });
 
   app.get("/api/youtube/popular", async (_req, res) => {
