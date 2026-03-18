@@ -243,7 +243,7 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isShort = video.kind === "youtube#short";
-  const embedUrl = `https://www.youtube.com/embed/${video.id}?autoplay=1&rel=0&modestbranding=1`;
+  const embedUrl = `/api/yt-embed/${video.id}`;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };

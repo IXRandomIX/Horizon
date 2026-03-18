@@ -1356,183 +1356,193 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // ── HorizonTube (YouTube InnerTube API — no API key required) ─────────────
-  const IT_BASE = "https://www.youtube.com/youtubei/v1";
-  const IT_CTX = {
-    client: {
-      clientName: "WEB",
-      clientVersion: "2.20231201.01.00",
-      hl: "en",
-      gl: "US",
-    },
-  };
-  const IT_HEADERS = {
-    "Content-Type": "application/json",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Origin": "https://www.youtube.com",
-    "Referer": "https://www.youtube.com/",
-  };
+  // ── HorizonTube (YouTube Data API v3) ────────────────────────────────────
+  const YT_API_KEY = process.env.YOUTUBE_API_KEY || "";
+  const YT_API_BASE = "https://www.googleapis.com/youtube/v3";
 
-  // Sort params (proto3-based filter encoding used by YouTube)
-  const YT_SORT_DATE  = "CAISAhAB";  // sort by upload date
-  const YT_SORT_VIEWS = "CAMSAhAB";  // sort by view count
-
-  // Type filter params
-  const YT_TYPE_VIDEO    = "EgIQAQ==";
-  const YT_TYPE_CHANNEL  = "EgIQAg==";
-  const YT_TYPE_PLAYLIST = "EgIQAw==";
-
-  function parseLengthText(text: string): number | null {
-    if (!text) return null;
-    const parts = text.split(":").map(Number);
-    if (parts.some(isNaN)) return null;
-    if (parts.length === 3) return parts[0]*3600 + parts[1]*60 + parts[2];
-    if (parts.length === 2) return parts[0]*60 + parts[1];
-    return null;
+  function parseISODuration(iso: string): number | null {
+    if (!iso) return null;
+    const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+    if (!m) return null;
+    return (parseInt(m[1] || "0") * 3600) + (parseInt(m[2] || "0") * 60) + parseInt(m[3] || "0");
   }
 
-  function parseVideoRenderer(v: any) {
-    const id = v.videoId || "";
-    if (!id) return null;
-    const title = (v.title?.runs || []).map((r: any) => r.text).join("") || v.title?.simpleText || "";
-    const viewsRaw = v.viewCountText?.simpleText || (v.viewCountText?.runs || []).map((r: any) => r.text).join("") || "";
-    const views = viewsRaw.replace(/[^0-9]/g, "") || null;
-    const thumb = (v.thumbnail?.thumbnails || []).slice(-1)[0]?.url || "";
-    const channel = (v.ownerText?.runs || v.shortBylineText?.runs || []).map((r: any) => r.text).join("");
-    const uploaded = v.publishedTimeText?.simpleText || "";
-    const duration = parseLengthText(v.lengthText?.simpleText || "");
-    return { id, kind: "youtube#video", title, description: v.descriptionSnippet?.runs?.map((r: any)=>r.text).join("") || "", thumbnail: thumb, channelTitle: channel, channelId: "", publishedAt: "", uploadedDate: uploaded, viewCount: views, likeCount: null, duration };
+  function mapYtItem(item: any) {
+    const snippet = item.snippet || {};
+    const stats = item.statistics || {};
+    const duration = parseISODuration(item.contentDetails?.duration || "");
+    const thumb =
+      snippet.thumbnails?.maxres?.url ||
+      snippet.thumbnails?.high?.url ||
+      snippet.thumbnails?.medium?.url ||
+      snippet.thumbnails?.default?.url || "";
+    const publishedAt = snippet.publishedAt || "";
+    const uploadedDate = publishedAt
+      ? new Date(publishedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+      : "";
+    return {
+      id: item.id,
+      kind: "youtube#video",
+      title: snippet.title || "",
+      description: snippet.description || "",
+      thumbnail: thumb,
+      channelTitle: snippet.channelTitle || "",
+      channelId: snippet.channelId || "",
+      publishedAt,
+      uploadedDate,
+      viewCount: stats.viewCount || null,
+      likeCount: stats.likeCount || null,
+      duration,
+    };
   }
 
-  function extractItemsFromSection(items: any[]): any[] {
-    const results: any[] = [];
-    for (const item of items) {
-      if (item.videoRenderer || item.compactVideoRenderer) {
-        const parsed = parseVideoRenderer(item.videoRenderer || item.compactVideoRenderer);
-        if (parsed) results.push(parsed);
-      } else if (item.channelRenderer) {
-        const c = item.channelRenderer;
-        results.push({ id: c.channelId || "", kind: "youtube#channel", title: c.title?.simpleText || "", description: c.subscriberCountText?.simpleText || "", thumbnail: (c.thumbnail?.thumbnails || []).slice(-1)[0]?.url || "", channelTitle: c.title?.simpleText || "", channelId: c.channelId || "", publishedAt: "", uploadedDate: "", viewCount: null, likeCount: null, duration: null });
-      } else if (item.playlistRenderer) {
-        const p = item.playlistRenderer;
-        results.push({ id: p.playlistId || "", kind: "youtube#playlist", title: p.title?.simpleText || "", description: "", thumbnail: (p.thumbnails?.[0]?.thumbnails || []).slice(-1)[0]?.url || "", channelTitle: (p.shortBylineText?.runs||[]).map((r: any)=>r.text).join(""), channelId: "", publishedAt: "", uploadedDate: "", viewCount: null, likeCount: null, duration: null });
-      } else if (item.shelfRenderer) {
-        const shelfItems = item.shelfRenderer?.content?.verticalListRenderer?.items || item.shelfRenderer?.content?.horizontalListRenderer?.items || [];
-        for (const si of shelfItems) {
-          if (si.gridVideoRenderer) {
-            const parsed = parseVideoRenderer(si.gridVideoRenderer);
-            if (parsed) results.push(parsed);
-          } else if (si.videoRenderer) {
-            const parsed = parseVideoRenderer(si.videoRenderer);
-            if (parsed) results.push(parsed);
-          }
-        }
-      } else if (item.reelShelfRenderer) {
-        for (const ri of (item.reelShelfRenderer?.items || [])) {
-          if (ri.reelItemRenderer) {
-            const r = ri.reelItemRenderer;
-            const id = r.videoId || "";
-            if (!id) continue;
-            const title = r.headline?.simpleText || r.headline?.runs?.map((x: any)=>x.text).join("") || "";
-            const thumb = (r.thumbnail?.thumbnails || []).slice(-1)[0]?.url || "";
-            const views = (r.viewCountText?.simpleText || "").replace(/[^0-9]/g, "") || null;
-            results.push({ id, kind: "youtube#video", title, description: "", thumbnail: thumb, channelTitle: "", channelId: "", publishedAt: "", uploadedDate: "", viewCount: views, likeCount: null, duration: null });
-          }
-        }
-      }
-    }
-    return results;
-  }
-
-  async function itSearch(query: string, filterParam?: string): Promise<any[]> {
-    const body: any = { query, context: IT_CTX };
-    if (filterParam) body.params = filterParam;
-    const res = await fetch(`${IT_BASE}/search`, {
-      method: "POST",
-      headers: IT_HEADERS,
-      body: JSON.stringify(body),
-    });
-    if (!res.ok) throw new Error(`InnerTube search error ${res.status}`);
+  async function ytVideoDetails(ids: string[]): Promise<any[]> {
+    if (!ids.length) return [];
+    const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", id: ids.join(","), key: YT_API_KEY });
+    const res = await fetch(`${YT_API_BASE}/videos?${params}`);
+    if (!res.ok) throw new Error(`YouTube videos API error ${res.status}: ${await res.text()}`);
     const data = await res.json();
-    const sections =
-      data?.contents?.twoColumnSearchResultsRenderer?.primaryContents
-        ?.sectionListRenderer?.contents || [];
-    const videos: any[] = [];
-    for (const section of sections) {
-      const items = section?.itemSectionRenderer?.contents || [];
-      videos.push(...extractItemsFromSection(items));
-    }
-    return videos;
+    return (data.items || []).map(mapYtItem);
   }
+
+  async function ytMostPopular(maxResults = 24): Promise<any[]> {
+    const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", chart: "mostPopular", regionCode: "US", maxResults: String(maxResults), key: YT_API_KEY });
+    const res = await fetch(`${YT_API_BASE}/videos?${params}`);
+    if (!res.ok) throw new Error(`YouTube popular error ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    return (data.items || []).map(mapYtItem);
+  }
+
+  async function ytSearch(query: string, options: {
+    order?: string; type?: string; videoDuration?: string;
+    publishedAfter?: string; publishedBefore?: string;
+    videoDefinition?: string; eventType?: string;
+    maxResults?: number;
+  } = {}): Promise<any[]> {
+    const { order = "relevance", type = "video", videoDuration, publishedAfter, publishedBefore, videoDefinition, eventType, maxResults = 24 } = options;
+    const params: Record<string, string> = { part: "id", q: query, type, order, maxResults: String(maxResults), key: YT_API_KEY };
+    if (videoDuration) params.videoDuration = videoDuration;
+    if (publishedAfter) params.publishedAfter = publishedAfter;
+    if (publishedBefore) params.publishedBefore = publishedBefore;
+    if (videoDefinition) params.videoDefinition = videoDefinition;
+    if (eventType) params.eventType = eventType;
+    const res = await fetch(`${YT_API_BASE}/search?${new URLSearchParams(params)}`);
+    if (!res.ok) throw new Error(`YouTube search error ${res.status}: ${await res.text()}`);
+    const data = await res.json();
+    const ids = (data.items || []).map((item: any) => item.id?.videoId || item.id).filter(Boolean);
+    return ytVideoDetails(ids);
+  }
+
+  // ── Video player proxy (no youtube.com domain exposed to browser) ─────────
+  const INVIDIOUS_INSTANCES = [
+    "https://inv.riverside.rocks",
+    "https://invidious.io.lol",
+    "https://yt.artemislena.eu",
+    "https://invidious.privacydev.net",
+    "https://vid.puffyan.us",
+  ];
+
+  app.get("/api/yt-embed/:videoId", (req, res) => {
+    const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const instanceList = INVIDIOUS_INSTANCES.map(i => JSON.stringify(i)).join(",");
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.send(`<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8">
+<style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#000;overflow:hidden}iframe{width:100%;height:100%;border:0;display:block}#err{display:none;position:absolute;inset:0;background:#111;color:#eee;align-items:center;justify-content:center;flex-direction:column;gap:14px;font-family:sans-serif;font-size:14px;text-align:center;padding:20px}#err.show{display:flex}button{padding:8px 20px;background:#c00;color:#fff;border:none;border-radius:6px;cursor:pointer;font-size:14px}</style>
+</head><body>
+<iframe id="pl" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture" sandbox="allow-scripts allow-same-origin allow-forms allow-popups"></iframe>
+<div id="err"><p>Could not load video player.</p><button onclick="tryNext()">Try another server</button></div>
+<script>
+var V=${JSON.stringify(videoId)},INST=[${instanceList}],idx=0;
+function load(i){document.getElementById("pl").src=INST[i]+"/embed/"+V+"?autoplay=1&rel=0";}
+function tryNext(){idx++;if(idx>=INST.length){document.getElementById("err").className="show";}else{load(idx);}}
+document.getElementById("pl").addEventListener("error",tryNext);
+load(0);
+</script>
+</body></html>`);
+  });
 
   app.get("/api/youtube/popular", async (_req, res) => {
     try {
-      const videos = await itSearch("most popular trending videos today", YT_SORT_VIEWS);
-      res.json(videos.slice(0, 24));
+      const videos = await ytMostPopular(24);
+      res.json(videos);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/youtube/latest", async (_req, res) => {
     try {
-      const videos = await itSearch("new videos uploaded today", YT_SORT_DATE);
-      res.json(videos.slice(0, 24));
+      const after = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
+      const videos = await ytSearch("trending", { order: "date", publishedAfter: after });
+      res.json(videos);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/youtube/newer", async (_req, res) => {
     try {
-      const videos = await itSearch("new this week trending videos", YT_SORT_DATE);
-      res.json(videos.slice(0, 24));
+      const after = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+      const videos = await ytSearch("popular videos", { order: "date", publishedAfter: after });
+      res.json(videos);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/youtube/oldest", async (_req, res) => {
     try {
-      const videos = await itSearch("classic viral youtube videos early 2010s most viewed");
-      res.json(videos.slice(0, 24));
+      const videos = await ytSearch("classic viral videos most viewed all time", { order: "viewCount", publishedBefore: "2020-01-01T00:00:00Z" });
+      res.json(videos);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/youtube/shorts", async (_req, res) => {
     try {
-      const videos = await itSearch("#shorts viral funny", YT_SORT_VIEWS);
+      const videos = await ytSearch("#shorts viral funny", { order: "viewCount", videoDuration: "short" });
       const shortVideos = videos.filter(v => v.duration !== null && v.duration <= 180);
-      res.json((shortVideos.length >= 8 ? shortVideos : videos).slice(0, 20));
+      res.json((shortVideos.length >= 6 ? shortVideos : videos).slice(0, 20));
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/youtube/search", async (req, res) => {
     const q = (req.query.q as string || "").trim();
     if (!q) return res.json([]);
-    const typeParam = (req.query.type as string || "All").toLowerCase();
-    const durationParam = (req.query.duration as string || "Any").toLowerCase();
-    const prioritize = (req.query.prioritize as string || "Relevance").toLowerCase();
+    const typeParam = (req.query.type as string || "all").toLowerCase();
+    const durationParam = (req.query.duration as string || "any").toLowerCase();
+    const prioritize = (req.query.prioritize as string || "relevance").toLowerCase();
     const features = ((req.query.features as string) || "").split(",").filter(Boolean).map(f => f.toLowerCase());
 
     try {
-      let filterParam: string | undefined;
+      const opts: Parameters<typeof ytSearch>[1] = {};
 
-      if (typeParam === "videos") filterParam = YT_TYPE_VIDEO;
-      else if (typeParam === "channels") filterParam = YT_TYPE_CHANNEL;
-      else if (typeParam === "playlists") filterParam = YT_TYPE_PLAYLIST;
-      else if (prioritize === "popularity") filterParam = YT_SORT_VIEWS;
-      else if (prioritize === "relevance") filterParam = undefined;
+      if (prioritize === "popularity") opts.order = "viewCount";
+      else if (prioritize === "date") opts.order = "date";
+      else if (prioritize === "rating") opts.order = "rating";
+      else opts.order = "relevance";
+
+      if (typeParam === "videos") opts.type = "video";
+      else if (typeParam === "channels") opts.type = "channel";
+      else if (typeParam === "playlists") opts.type = "playlist";
+      else if (typeParam === "shorts") { opts.type = "video"; opts.videoDuration = "short"; }
+      else opts.type = "video";
+
+      if (durationParam === "under 3 minutes" || durationParam === "short") opts.videoDuration = "short";
+      else if (durationParam === "3-20 minutes" || durationParam === "medium") opts.videoDuration = "medium";
+      else if (durationParam === "over 20 minutes" || durationParam === "long") opts.videoDuration = "long";
+
+      if (features.includes("hd") || features.includes("4k")) opts.videoDefinition = "high";
+      if (features.includes("live")) opts.eventType = "live";
+
+      const dateUpload = (req.query.uploadDate as string || "").toLowerCase();
+      if (dateUpload === "last hour") opts.publishedAfter = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+      else if (dateUpload === "today") opts.publishedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      else if (dateUpload === "this week") opts.publishedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      else if (dateUpload === "this month") opts.publishedAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+      else if (dateUpload === "this year") opts.publishedAfter = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
 
       let finalQuery = q;
-      if (typeParam === "shorts") finalQuery = q + " #shorts";
-      if (features.includes("live")) finalQuery = q + " live stream";
+      if (features.includes("live")) finalQuery = q + " live";
       if (features.includes("4k")) finalQuery = q + " 4K";
-      if (features.includes("hd")) finalQuery = q + " HD";
 
-      const videos = await itSearch(finalQuery, filterParam);
-
-      let filtered = videos;
-      if (durationParam === "under 3 minutes") filtered = videos.filter(v => v.duration !== null && v.duration < 180);
-      else if (durationParam === "3-20 minutes") filtered = videos.filter(v => v.duration !== null && v.duration >= 180 && v.duration <= 1200);
-      else if (durationParam === "over 20 minutes") filtered = videos.filter(v => v.duration !== null && v.duration > 1200);
-
-      res.json((filtered.length > 0 ? filtered : videos).slice(0, 24));
+      const videos = await ytSearch(finalQuery, opts);
+      res.json(videos);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
