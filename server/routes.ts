@@ -136,6 +136,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/auth/register", async (req, res) => {
     const { username, password } = req.body;
     if (!username || !password) return res.status(400).json({ message: "Username and password required." });
+    if (!/^[a-zA-Z0-9]+$/.test(username)) return res.status(400).json({ message: "Username can only contain letters and numbers." });
     if (username === ADMIN_USER) return res.status(400).json({ message: "That username is reserved." });
     const existing = await storage.getUser(username);
     if (existing) return res.status(409).json({ message: "Username already taken. Try a different one." });

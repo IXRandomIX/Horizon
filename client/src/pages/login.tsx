@@ -23,6 +23,11 @@ export default function LoginPage() {
         toast({ title: `Welcome back, ${username.trim()}!` });
       } else {
         if (!password) { toast({ title: "Password required to register", variant: "destructive" }); setLoading(false); return; }
+        if (!/^[a-zA-Z0-9]+$/.test(username.trim())) {
+          toast({ title: "Username can only contain letters and numbers", variant: "destructive" });
+          setLoading(false);
+          return;
+        }
         await register(username.trim(), password);
         toast({ title: `Account created! Welcome, ${username.trim()}!` });
       }
@@ -78,7 +83,12 @@ export default function LoginPage() {
                 data-testid="input-username"
                 placeholder="Enter your username"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => {
+                  const val = tab === "register"
+                    ? e.target.value.replace(/[^a-zA-Z0-9]/g, "")
+                    : e.target.value;
+                  setUsername(val);
+                }}
                 className="bg-black/50 border-white/10 h-12 text-white placeholder:text-white/20 focus:border-primary/50"
                 required
               />
