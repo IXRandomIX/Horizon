@@ -1360,6 +1360,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const YT_API_KEY = process.env.YOUTUBE_API_KEY || "";
   const YT_API_BASE = "https://www.googleapis.com/youtube/v3";
 
+  const ytCache = new Map<string, { data: any; expires: number }>();
+  const YT_CACHE_TTL = 30 * 60 * 1000;
+
+  function ytCacheGet(key: string): any | null {
+    const entry = ytCache.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expires) { ytCache.delete(key); return null; }
+    return entry.data;
+  }
+  function ytCacheSet(key: string, data: any, ttl = YT_CACHE_TTL) {
+    ytCache.set(key, { data, expires: Date.now() + ttl });
+  }
+
   function parseISODuration(iso: string): number | null {
     if (!iso) return null;
     const m = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
@@ -1431,9 +1444,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return (data.items || []).map(mapYtChannel);
   }
 
-  async function ytMostPopular(maxResults = 20, pageToken?: string): Promise<{ videos: any[]; nextPageToken?: string }> {
+  async function ytMostPopular(maxResults = 20, pageToken?: string, videoCategoryId?: string): Promise<{ videos: any[]; nextPageToken?: string }> {
     const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", chart: "mostPopular", regionCode: "US", maxResults: String(maxResults), key: YT_API_KEY });
     if (pageToken) params.set("pageToken", pageToken);
+    if (videoCategoryId) params.set("videoCategoryId", videoCategoryId);
     const res = await fetch(`${YT_API_BASE}/videos?${params}`);
     if (!res.ok) throw new Error(`YouTube popular error ${res.status}`);
     const data = await res.json();
@@ -1579,7 +1593,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/youtube/popular", async (req, res) => {
     try {
       const pageToken = req.query.pageToken as string | undefined;
+      const cacheKey = `popular:${pageToken || ""}`;
+      const cached = ytCacheGet(cacheKey);
+      if (cached) return res.json(cached);
       const result = await ytMostPopular(20, pageToken);
+      ytCacheSet(cacheKey, result);
       res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -1587,8 +1605,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/youtube/latest", async (req, res) => {
     try {
       const pageToken = req.query.pageToken as string | undefined;
-      const after = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
-      const result = await ytSearch("trending", { order: "date", publishedAfter: after, pageToken });
+      const cacheKey = `latest:${pageToken || ""}`;
+      const cached = ytCacheGet(cacheKey);
+      if (cached) return res.json(cached);
+      const result = await ytMostPopular(20, pageToken, "25");
+      ytCacheSet(cacheKey, result);
       res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -1596,8 +1617,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/youtube/newer", async (req, res) => {
     try {
       const pageToken = req.query.pageToken as string | undefined;
-      const after = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-      const result = await ytSearch("popular videos", { order: "date", publishedAfter: after, pageToken });
+      const cacheKey = `newer:${pageToken || ""}`;
+      const cached = ytCacheGet(cacheKey);
+      if (cached) return res.json(cached);
+      const result = await ytMostPopular(20, pageToken, "20");
+      ytCacheSet(cacheKey, result);
       res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -1605,7 +1629,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/youtube/oldest", async (req, res) => {
     try {
       const pageToken = req.query.pageToken as string | undefined;
-      const result = await ytSearch("classic viral videos most viewed all time", { order: "viewCount", publishedBefore: "2020-01-01T00:00:00Z", pageToken });
+      const cacheKey = `oldest:${pageToken || ""}`;
+      const cached = ytCacheGet(cacheKey);
+      if (cached) return res.json(cached);
+      const result = await ytMostPopular(20, pageToken, "10");
+      ytCacheSet(cacheKey, result);
       res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
@@ -1613,9 +1641,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.get("/api/youtube/shorts", async (req, res) => {
     try {
       const pageToken = req.query.pageToken as string | undefined;
-      const result = await ytSearch("#shorts viral funny", { order: "viewCount", videoDuration: "short", pageToken });
+      const cacheKey = `shorts:${pageToken || ""}`;
+      const cached = ytCacheGet(cacheKey);
+      if (cached) return res.json(cached);
+      const result = await ytMostPopular(50, pageToken, "24");
       const shortVideos = result.videos.filter((v: any) => v.duration !== null && v.duration <= 180);
-      res.json({ videos: (shortVideos.length >= 6 ? shortVideos : result.videos).slice(0, 20), nextPageToken: result.nextPageToken });
+      const final = { videos: shortVideos.slice(0, 20), nextPageToken: result.nextPageToken };
+      ytCacheSet(cacheKey, final);
+      res.json(final);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

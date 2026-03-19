@@ -482,6 +482,7 @@ function usePagedFetch(baseUrl: string) {
   const [isLoading, setIsLoading] = useState(true);
   const [isFetchingMore, setIsFetchingMore] = useState(false);
   const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -489,16 +490,18 @@ function usePagedFetch(baseUrl: string) {
     setIsLoading(true);
     setHasMore(false);
     setNextToken(undefined);
+    setError(null);
     fetch(baseUrl, { credentials: "include" })
       .then(r => r.json())
-      .then((data: PagedVideos) => {
+      .then((data: PagedVideos & { message?: string }) => {
         if (cancelled) return;
+        if (data.message) { setError(data.message); setIsLoading(false); return; }
         setVideos(data.videos || []);
         setNextToken(data.nextPageToken);
         setHasMore(!!data.nextPageToken);
         setIsLoading(false);
       })
-      .catch(() => { if (!cancelled) setIsLoading(false); });
+      .catch(() => { if (!cancelled) { setError("Failed to load videos"); setIsLoading(false); } });
     return () => { cancelled = true; };
   }, [baseUrl]);
 
@@ -517,7 +520,7 @@ function usePagedFetch(baseUrl: string) {
       .catch(() => setIsFetchingMore(false));
   }, [baseUrl, nextToken, isFetchingMore]);
 
-  return { videos, isLoading, isFetchingMore, hasMore, fetchMore };
+  return { videos, isLoading, isFetchingMore, hasMore, fetchMore, error };
 }
 
 function InfiniteVideoGrid({ baseUrl, onVideoClick, onChannelClick, emptyText }: {
@@ -526,7 +529,7 @@ function InfiniteVideoGrid({ baseUrl, onVideoClick, onChannelClick, emptyText }:
   onChannelClick?: (id: string) => void;
   emptyText?: string;
 }) {
-  const { videos, isLoading, isFetchingMore, hasMore, fetchMore } = usePagedFetch(baseUrl);
+  const { videos, isLoading, isFetchingMore, hasMore, fetchMore, error } = usePagedFetch(baseUrl);
   const sentinelRef = useInfiniteScroll(fetchMore, hasMore && !isFetchingMore);
 
   if (isLoading) return (
@@ -534,6 +537,14 @@ function InfiniteVideoGrid({ baseUrl, onVideoClick, onChannelClick, emptyText }:
       {Array.from({ length: 12 }).map((_, i) => (
         <div key={i} className="animate-pulse"><div className="aspect-video rounded-xl bg-white/5" /><div className="mt-2 space-y-1.5"><div className="h-3 bg-white/5 rounded-full w-4/5" /><div className="h-2.5 bg-white/5 rounded-full w-2/5" /></div></div>
       ))}
+    </div>
+  );
+
+  if (error) return (
+    <div className="flex flex-col items-center justify-center py-24 text-white/30">
+      <Youtube className="w-12 h-12 mb-4 opacity-50" />
+      <p className="text-base font-semibold">YouTube API limit reached</p>
+      <p className="text-sm mt-1 text-white/20">Quota resets daily — check back soon</p>
     </div>
   );
 
@@ -806,11 +817,11 @@ export default function HorizonTubePage() {
               />
             </section>
 
-            {/* Latest */}
+            {/* News */}
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Clock className="w-4 h-4 text-blue-400" />
-                <h2 className="text-base font-bold text-white tracking-wide">Latest</h2>
+                <h2 className="text-base font-bold text-white tracking-wide">News & Politics</h2>
               </div>
               <InfiniteVideoGrid
                 baseUrl="/api/youtube/latest"
@@ -819,11 +830,11 @@ export default function HorizonTubePage() {
               />
             </section>
 
-            {/* Newer */}
+            {/* Gaming */}
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <Zap className="w-4 h-4 text-yellow-400" />
-                <h2 className="text-base font-bold text-white tracking-wide">Newer This Week</h2>
+                <h2 className="text-base font-bold text-white tracking-wide">Gaming</h2>
               </div>
               <InfiniteVideoGrid
                 baseUrl="/api/youtube/newer"
@@ -832,11 +843,11 @@ export default function HorizonTubePage() {
               />
             </section>
 
-            {/* Oldest classics */}
+            {/* Music */}
             <section>
               <div className="flex items-center gap-2 mb-3">
                 <History className="w-4 h-4 text-purple-400" />
-                <h2 className="text-base font-bold text-white tracking-wide">Classic Hits</h2>
+                <h2 className="text-base font-bold text-white tracking-wide">Music</h2>
               </div>
               <InfiniteVideoGrid
                 baseUrl="/api/youtube/oldest"
