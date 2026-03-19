@@ -1606,7 +1606,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   async function getInnertube() {
     if (innertubeInstance) return innertubeInstance;
     const { Innertube } = await import("youtubei.js");
-    innertubeInstance = await Innertube.create({ retrieve_player: true });
+    const vm = await import("node:vm");
+    innertubeInstance = await Innertube.create({
+      retrieve_player: true,
+      generate_session_locally: true,
+      runtime: {
+        js: {
+          evaluate: (script: string) => ({ result: vm.runInNewContext(script, {}) }),
+        },
+      },
+    } as any);
     return innertubeInstance;
   }
 
@@ -1656,7 +1665,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!combined.length) throw new Error("No combined stream found");
 
       const best = combined[0];
-      const streamUrl: string = best.decipher(yt.session.player);
+      const streamUrl: string = await best.decipher(yt.session.player);
 
       const upstreamHeaders: Record<string, string> = {
         "User-Agent": YT_UA,
