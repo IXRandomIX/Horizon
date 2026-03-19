@@ -1606,9 +1606,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const ITAGS = [22, 18, 43, 17];
 
   // Cache which (instance, itag) pair works for each videoId
-  const streamRouteCache = new Map<string, { instance: string; itag: number; expires: number }>();
+  const streamRouteCache = new Map<string, { instance: string; itag: number; contentType: string; expires: number }>();
 
-  async function findStreamRoute(videoId: string): Promise<{ instance: string; itag: number }> {
+  async function findStreamRoute(videoId: string): Promise<{ instance: string; itag: number; contentType: string }> {
     const cached = streamRouteCache.get(videoId);
     if (cached && Date.now() < cached.expires) return cached;
 
@@ -1616,19 +1616,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       for (const itag of ITAGS) {
         try {
           const proxyUrl = `${instance}/latest_version?id=${videoId}&itag=${itag}&local=true`;
-          // Probe with a tiny range request to check availability
           const probe = await fetch(proxyUrl, {
             headers: { "User-Agent": YT_UA, "Range": "bytes=0-0" },
             signal: AbortSignal.timeout(7000),
+            redirect: "follow",
           });
-          if (probe.ok || probe.status === 206) {
-            const entry = { instance, itag, expires: Date.now() + 20 * 60 * 1000 };
+          const ct = probe.headers.get("content-type") || "";
+          console.log(`[yt-probe] ${instance} itag=${itag} status=${probe.status} ct="${ct}"`);
+          // Must be a real video response, not an HTML error page
+          if ((probe.ok || probe.status === 206) && ct.startsWith("video/")) {
+            // Drain the 1-byte probe body to free the connection
+            await probe.body?.cancel();
+            const entry = { instance, itag, contentType: ct, expires: Date.now() + 20 * 60 * 1000 };
             streamRouteCache.set(videoId, entry);
-            console.log(`[yt-stream] found route: ${instance} itag=${itag} for ${videoId}`);
+            console.log(`[yt-stream] found route: ${instance} itag=${itag} ct="${ct}" for ${videoId}`);
             return entry;
           }
-        } catch {
-          // try next
+          await probe.body?.cancel();
+        } catch (e: any) {
+          console.log(`[yt-probe] ${instance} itag=${itag} error: ${e.message}`);
         }
       }
     }
