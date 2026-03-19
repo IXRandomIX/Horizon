@@ -1475,16 +1475,105 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return { channels, nextPageToken: data.nextPageToken };
   }
 
-  // Embed endpoint — serves a clean HTML page wrapping youtube-nocookie.com
-  // youtube-nocookie.com is YouTube's official privacy/ad-reduced embed domain
-  app.get("/api/yt-embed/:videoId", (req, res) => {
+  // ── YouTube Full Proxy (Eaglercraft-style — browser never sees YouTube domains) ──
+  const YT_ORIGINS: Record<string, string> = {
+    "noco":   "https://www.youtube-nocookie.com",
+    "yt":     "https://www.youtube.com",
+    "ytimg":  "https://s.ytimg.com",
+    "ithumb": "https://i.ytimg.com",
+    "yt3":    "https://yt3.ggpht.com",
+    "yt3guc": "https://yt3.googleusercontent.com",
+    "lh3":    "https://lh3.googleusercontent.com",
+  };
+  const YT_PROXY_PATH = "/api/yt-proxy";
+  const YT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+  function rewriteYtUrls(text: string): string {
+    let out = text;
+    for (const [prefix, origin] of Object.entries(YT_ORIGINS)) {
+      const host = new URL(origin).host;
+      out = out.split(`https://${host}`).join(`${YT_PROXY_PATH}/${prefix}`);
+      out = out.split(`http://${host}`).join(`${YT_PROXY_PATH}/${prefix}`);
+      out = out.split(`//${host}`).join(`${YT_PROXY_PATH}/${prefix}`);
+    }
+    out = out.replace(/(src|href|action|poster|data-src)="\//g, `$1="${YT_PROXY_PATH}/noco/`);
+    out = out.replace(/(src|href|action|poster|data-src)='\//g, `$1='${YT_PROXY_PATH}/noco/`);
+    return out;
+  }
+
+  app.get("/api/yt-embed/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
-    const src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1&color=white`;
-    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#000;overflow:hidden}iframe{width:100%;height:100%;border:0;display:block}</style></head><body><iframe src="${src}" allow="autoplay;fullscreen;encrypted-media;picture-in-picture;clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><script>(function(){var sel=['.ytp-popup','.ytp-tooltip','.ytp-cards-teaser','.ytp-card-content','.ad-showing .video-ads'];var clean=function(){sel.forEach(function(s){document.querySelectorAll(s).forEach(function(el){el.remove();});});};new MutationObserver(clean).observe(document.documentElement,{childList:true,subtree:true});})();</script></body></html>`;
-    res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("X-Frame-Options", "SAMEORIGIN");
-    res.removeHeader("Content-Security-Policy");
-    res.send(html);
+    const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1&color=white`;
+    try {
+      const upstream = await fetch(embedUrl, {
+        headers: {
+          "User-Agent": YT_UA,
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "identity",
+          "Referer": "https://www.youtube-nocookie.com/",
+        },
+        redirect: "follow",
+      });
+      if (!upstream.ok) throw new Error(`Upstream ${upstream.status}`);
+      let html = await upstream.text();
+      html = rewriteYtUrls(html);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+      res.removeHeader("Content-Security-Policy");
+      res.send(html);
+    } catch (e: any) {
+      console.error("[yt-embed] error:", e.message);
+      res.status(502).send(`<html><body style="background:#111;color:#eee;display:flex;height:100vh;align-items:center;justify-content:center;font-family:sans-serif;text-align:center"><div><p style="font-size:1.2rem">Could not load video</p><small>${e.message}</small></div></body></html>`);
+    }
+  });
+
+  app.use(YT_PROXY_PATH, async (req: any, res: any) => {
+    const parts = req.path.split("/").filter(Boolean);
+    const prefix = parts[0];
+    const subPath = "/" + parts.slice(1).join("/");
+    const query = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    const origin = YT_ORIGINS[prefix];
+    if (!origin) return res.status(403).send("Unknown proxy target");
+    const targetUrl = `${origin}${subPath}${query}`;
+    try {
+      const upstreamRes = await fetch(targetUrl, {
+        method: req.method,
+        headers: {
+          "User-Agent": YT_UA,
+          "Accept": (req.headers["accept"] as string) || "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "identity",
+          "Referer": "https://www.youtube-nocookie.com/",
+          "Origin": "https://www.youtube-nocookie.com",
+        },
+        body: ["GET", "HEAD"].includes(req.method) ? undefined : req.body,
+        redirect: "follow",
+      });
+      const contentType = upstreamRes.headers.get("content-type") || "";
+      res.status(upstreamRes.status);
+      upstreamRes.headers.forEach((value: string, key: string) => {
+        const skip = ["content-encoding", "content-length", "transfer-encoding", "connection",
+          "x-frame-options", "content-security-policy", "x-content-type-options", "strict-transport-security"];
+        if (!skip.includes(key.toLowerCase())) res.setHeader(key, value);
+      });
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("X-Frame-Options", "SAMEORIGIN");
+      const isText = contentType.includes("html") || contentType.includes("javascript") ||
+        contentType.includes("css") || contentType.includes("json");
+      if (isText) {
+        let text = await upstreamRes.text();
+        text = rewriteYtUrls(text);
+        res.setHeader("Content-Type", contentType);
+        res.send(text);
+      } else {
+        const buf = Buffer.from(await upstreamRes.arrayBuffer());
+        res.send(buf);
+      }
+    } catch (e: any) {
+      console.error("[yt-proxy] error:", e.message);
+      res.status(502).json({ message: "Proxy error", detail: e.message });
+    }
   });
 
   app.get("/api/youtube/popular", async (req, res) => {
