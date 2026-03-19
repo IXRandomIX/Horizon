@@ -289,8 +289,6 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
     return () => { cancelled = true; };
   }, [video.id]);
 
-  const fallbackUrl = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1`;
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={containerRef} className={`relative bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col ${isShort ? "w-full max-w-sm" : "w-full max-w-5xl"}`} style={{ height: "92vh" }}>
@@ -332,14 +330,24 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
           )}
 
           {streamReady === "error" && (
-            <iframe
-              src={fallbackUrl}
-              title={video.title}
-              className="w-full h-full border-0 block"
-              allowFullScreen
-              allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
-              data-testid="iframe-yt-player-fallback"
-            />
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/90 px-6" data-testid="div-stream-error">
+              <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center">
+                <X className="w-7 h-7 text-red-400" />
+              </div>
+              <div className="text-center">
+                <p className="text-white font-semibold text-sm mb-1">Stream Unavailable</p>
+                <p className="text-white/40 text-xs max-w-xs">This video couldn't be loaded through the proxy. You can watch it directly on YouTube.</p>
+              </div>
+              <a
+                href={`https://www.youtube.com/watch?v=${video.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                data-testid="link-watch-on-youtube"
+                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+              >
+                Watch on YouTube
+              </a>
+            </div>
           )}
         </div>
       </div>

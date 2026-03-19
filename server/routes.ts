@@ -1601,86 +1601,73 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 })();
 </script>`;
 
-  // ── Invidious-based video streaming (no JS evaluator needed) ─────────────────
-  // Cache resolved stream URLs so Range requests reuse the same URL
-  const streamCache = new Map<string, { url: string; mimeType: string; expires: number }>();
+  // ── Invidious-proxied video streaming ────────────────────────────────────────
+  // Preferred itags: 22=720p MP4, 18=360p MP4, 43=360p WebM, 17=144p 3gp
+  const ITAGS = [22, 18, 43, 17];
 
-  async function resolveStreamUrl(videoId: string): Promise<{ url: string; mimeType: string }> {
-    const cached = streamCache.get(videoId);
-    if (cached && Date.now() < cached.expires) return { url: cached.url, mimeType: cached.mimeType };
+  // Cache which (instance, itag) pair works for each videoId
+  const streamRouteCache = new Map<string, { instance: string; itag: number; expires: number }>();
+
+  async function findStreamRoute(videoId: string): Promise<{ instance: string; itag: number }> {
+    const cached = streamRouteCache.get(videoId);
+    if (cached && Date.now() < cached.expires) return cached;
 
     for (const instance of INVIDIOUS_INSTANCES) {
-      try {
-        const res = await fetch(`${instance}/api/v1/videos/${videoId}?fields=formatStreams,title`, {
-          headers: { "User-Agent": YT_UA },
-          signal: AbortSignal.timeout(8000),
-        });
-        if (!res.ok) continue;
-        const data = await res.json();
-        const formats: any[] = (data.formatStreams || []).sort((a: any, b: any) => {
-          const qa = parseInt(a.qualityLabel) || 0;
-          const qb = parseInt(b.qualityLabel) || 0;
-          return qb - qa;
-        });
-        if (!formats.length) continue;
-        // Prefer 720p, fall back to best available
-        const format =
-          formats.find((f: any) => f.qualityLabel?.startsWith("720")) ||
-          formats.find((f: any) => f.qualityLabel?.startsWith("480")) ||
-          formats.find((f: any) => f.qualityLabel?.startsWith("360")) ||
-          formats[0];
-        const result = { url: format.url as string, mimeType: (format.type || "video/mp4") as string };
-        streamCache.set(videoId, { ...result, expires: Date.now() + 25 * 60 * 1000 });
-        return result;
-      } catch {
-        // try next instance
+      for (const itag of ITAGS) {
+        try {
+          const proxyUrl = `${instance}/latest_version?id=${videoId}&itag=${itag}&local=true`;
+          // Probe with a tiny range request to check availability
+          const probe = await fetch(proxyUrl, {
+            headers: { "User-Agent": YT_UA, "Range": "bytes=0-0" },
+            signal: AbortSignal.timeout(7000),
+          });
+          if (probe.ok || probe.status === 206) {
+            const entry = { instance, itag, expires: Date.now() + 20 * 60 * 1000 };
+            streamRouteCache.set(videoId, entry);
+            console.log(`[yt-stream] found route: ${instance} itag=${itag} for ${videoId}`);
+            return entry;
+          }
+        } catch {
+          // try next
+        }
       }
     }
-    throw new Error("No stream available from any Invidious instance");
+    throw new Error("Video not streamable via any available proxy");
   }
 
-  // Returns info about available streams for a video
+  // Returns whether a stream is available for a video (used by frontend to decide HTML5 vs error)
   app.get("/api/yt-video-info/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     try {
-      const { url, mimeType } = await resolveStreamUrl(videoId);
+      const { instance, itag } = await findStreamRoute(videoId);
       res.json({
         videoId,
-        quality: mimeType.includes("720") ? "720p" : "360p",
-        mimeType,
+        quality: itag === 22 ? "720p" : "360p",
+        mimeType: itag === 43 ? "video/webm" : "video/mp4",
         streamUrl: `/api/yt-stream/${videoId}`,
       });
     } catch (e: any) {
-      res.status(500).json({ message: e.message });
+      res.status(503).json({ message: e.message });
     }
   });
 
-  // Proxies the actual YouTube video stream with Range support
+  // Proxies the video stream through the selected Invidious instance with Range support
   app.get("/api/yt-stream/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     try {
-      const { url, mimeType } = await resolveStreamUrl(videoId);
+      const { instance, itag } = await findStreamRoute(videoId);
+      const proxyUrl = `${instance}/latest_version?id=${videoId}&itag=${itag}&local=true`;
 
-      const upstreamHeaders: Record<string, string> = {
-        "User-Agent": YT_UA,
-        "Referer": "https://www.youtube.com/",
-        "Origin": "https://www.youtube.com",
-      };
-      if (req.headers["range"]) {
-        upstreamHeaders["Range"] = req.headers["range"];
-      }
+      const upstreamHeaders: Record<string, string> = { "User-Agent": YT_UA };
+      if (req.headers["range"]) upstreamHeaders["Range"] = req.headers["range"];
 
-      const upstream = await fetch(url, { headers: upstreamHeaders });
+      const upstream = await fetch(proxyUrl, { headers: upstreamHeaders, signal: AbortSignal.timeout(30000) });
 
-      res.setHeader("Content-Type", mimeType);
+      res.setHeader("Content-Type", itag === 43 ? "video/webm" : "video/mp4");
       res.setHeader("Accept-Ranges", "bytes");
       res.setHeader("Cache-Control", "no-cache");
-      if (upstream.headers.get("content-length")) {
-        res.setHeader("Content-Length", upstream.headers.get("content-length")!);
-      }
-      if (upstream.headers.get("content-range")) {
-        res.setHeader("Content-Range", upstream.headers.get("content-range")!);
-      }
+      if (upstream.headers.get("content-length")) res.setHeader("Content-Length", upstream.headers.get("content-length")!);
+      if (upstream.headers.get("content-range")) res.setHeader("Content-Range", upstream.headers.get("content-range")!);
       res.status(upstream.status);
 
       if (!upstream.body) { res.end(); return; }
