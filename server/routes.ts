@@ -1396,260 +1396,227 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     };
   }
 
+  function mapYtChannel(item: any) {
+    const snippet = item.snippet || {};
+    const stats = item.statistics || {};
+    const image = (item.brandingSettings || {}).image || {};
+    return {
+      id: item.id,
+      title: snippet.title || "",
+      description: snippet.description || "",
+      customUrl: snippet.customUrl || "",
+      thumbnail: snippet.thumbnails?.high?.url || snippet.thumbnails?.medium?.url || snippet.thumbnails?.default?.url || "",
+      banner: image.bannerExternalUrl || "",
+      subscriberCount: stats.subscriberCount || "0",
+      videoCount: stats.videoCount || "0",
+      publishedAt: snippet.publishedAt || "",
+    };
+  }
+
   async function ytVideoDetails(ids: string[]): Promise<any[]> {
     if (!ids.length) return [];
     const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", id: ids.join(","), key: YT_API_KEY });
     const res = await fetch(`${YT_API_BASE}/videos?${params}`);
-    if (!res.ok) throw new Error(`YouTube videos API error ${res.status}: ${await res.text()}`);
+    if (!res.ok) throw new Error(`YouTube videos API error ${res.status}`);
     const data = await res.json();
     return (data.items || []).map(mapYtItem);
   }
 
-  async function ytMostPopular(maxResults = 24): Promise<any[]> {
-    const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", chart: "mostPopular", regionCode: "US", maxResults: String(maxResults), key: YT_API_KEY });
-    const res = await fetch(`${YT_API_BASE}/videos?${params}`);
-    if (!res.ok) throw new Error(`YouTube popular error ${res.status}: ${await res.text()}`);
+  async function ytChannelsByIds(ids: string[]): Promise<any[]> {
+    if (!ids.length) return [];
+    const params = new URLSearchParams({ part: "snippet,statistics,brandingSettings", id: ids.join(","), key: YT_API_KEY });
+    const res = await fetch(`${YT_API_BASE}/channels?${params}`);
+    if (!res.ok) throw new Error(`YouTube channels API error ${res.status}`);
     const data = await res.json();
-    return (data.items || []).map(mapYtItem);
+    return (data.items || []).map(mapYtChannel);
+  }
+
+  async function ytMostPopular(maxResults = 20, pageToken?: string): Promise<{ videos: any[]; nextPageToken?: string }> {
+    const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", chart: "mostPopular", regionCode: "US", maxResults: String(maxResults), key: YT_API_KEY });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(`${YT_API_BASE}/videos?${params}`);
+    if (!res.ok) throw new Error(`YouTube popular error ${res.status}`);
+    const data = await res.json();
+    return { videos: (data.items || []).map(mapYtItem), nextPageToken: data.nextPageToken };
   }
 
   async function ytSearch(query: string, options: {
     order?: string; type?: string; videoDuration?: string;
     publishedAfter?: string; publishedBefore?: string;
     videoDefinition?: string; eventType?: string;
-    maxResults?: number;
-  } = {}): Promise<any[]> {
-    const { order = "relevance", type = "video", videoDuration, publishedAfter, publishedBefore, videoDefinition, eventType, maxResults = 24 } = options;
-    const params: Record<string, string> = { part: "id", q: query, type, order, maxResults: String(maxResults), key: YT_API_KEY };
+    maxResults?: number; pageToken?: string; channelId?: string;
+  } = {}): Promise<{ videos: any[]; nextPageToken?: string }> {
+    const { order = "relevance", type = "video", videoDuration, publishedAfter, publishedBefore, videoDefinition, eventType, maxResults = 20, pageToken, channelId } = options;
+    const params: Record<string, string> = { part: "id", type, order, maxResults: String(maxResults), key: YT_API_KEY };
+    if (query) params.q = query;
     if (videoDuration) params.videoDuration = videoDuration;
     if (publishedAfter) params.publishedAfter = publishedAfter;
     if (publishedBefore) params.publishedBefore = publishedBefore;
     if (videoDefinition) params.videoDefinition = videoDefinition;
     if (eventType) params.eventType = eventType;
+    if (pageToken) params.pageToken = pageToken;
+    if (channelId) params.channelId = channelId;
     const res = await fetch(`${YT_API_BASE}/search?${new URLSearchParams(params)}`);
-    if (!res.ok) throw new Error(`YouTube search error ${res.status}: ${await res.text()}`);
+    if (!res.ok) throw new Error(`YouTube search error ${res.status}`);
     const data = await res.json();
     const ids = (data.items || []).map((item: any) => item.id?.videoId || item.id).filter(Boolean);
-    return ytVideoDetails(ids);
+    const videos = await ytVideoDetails(ids);
+    return { videos, nextPageToken: data.nextPageToken };
   }
 
-  // ── Self-hosted YouTube proxy (all traffic stays on our domain) ───────────
-
-  // Domains we proxy through our server (browser never contacts these directly)
-  const YT_PROXY_HOSTS: Record<string, string> = {
-    "www.youtube-nocookie.com": "https://www.youtube-nocookie.com",
-    "www.youtube.com":          "https://www.youtube.com",
-    "s.ytimg.com":              "https://s.ytimg.com",
-    "i.ytimg.com":              "https://i.ytimg.com",
-    "yt3.ggpht.com":            "https://yt3.ggpht.com",
-    "yt3.googleusercontent.com":"https://yt3.googleusercontent.com",
-    "lh3.googleusercontent.com":"https://lh3.googleusercontent.com",
-  };
-
-  // Ad/tracking domains — block at proxy and also inject runtime blocker
-  const YT_AD_DOMAINS = [
-    "googlesyndication.com",
-    "doubleclick.net",
-    "googleadservices.com",
-    "imasdk.googleapis.com",
-    "googletagmanager.com",
-    "google-analytics.com",
-    "googletagservices.com",
-    "static.doubleclick.net",
-    "ad.doubleclick.net",
-  ];
-
-  // Injected at top of every proxied HTML page to block ads at runtime
-  const YT_AD_BLOCKER = `<script>
-(function(){
-  var AD=["googlesyndication.com","doubleclick.net","googleadservices.com","imasdk.googleapis.com","googletagmanager.com","google-analytics.com"];
-  function blocked(u){if(!u)return false;try{var h=new URL(String(u),location.href).hostname;return AD.some(function(d){return h===d||h.endsWith("."+d);});}catch(e){return false;}}
-  var oFetch=window.fetch;
-  window.fetch=function(u,o){if(blocked(u))return Promise.resolve(new Response("",{status:204}));return oFetch.apply(this,arguments);};
-  var oOpen=XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open=function(m,u){this._adBlocked=blocked(u);if(!this._adBlocked)return oOpen.apply(this,arguments);};
-  var oSend=XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.send=function(){if(this._adBlocked)return;return oSend.apply(this,arguments);};
-  var oCreate=document.createElement.bind(document);
-  document.createElement=function(t){
-    var el=oCreate(t);
-    if(/^(script|iframe)$/i.test(t)){
-      var oSA=el.setAttribute.bind(el);
-      el.setAttribute=function(n,v){if(n==="src"&&blocked(v))return;return oSA(n,v);};
-      var desc=Object.getOwnPropertyDescriptor(HTMLElement.prototype,"innerHTML")||{};
-      Object.defineProperty(el,"src",{get:function(){return el.getAttribute("src")||"";},set:function(v){if(!blocked(v))oSA("src",v);}});
-    }
-    return el;
-  };
-})();
-</script>`;
-
-  function rewriteYtContent(content: string): string {
-    let out = content;
-    for (const host of Object.keys(YT_PROXY_HOSTS)) {
-      // Replace https://HOST with /api/yt-proxy/HOST (path-based — no query-string ambiguity)
-      out = out.split(`https://${host}`).join(`/api/yt-proxy/${host}`);
-    }
-    // Strip ad script tags
-    for (const ad of YT_AD_DOMAINS) {
-      out = out.replace(new RegExp(`<script[^>]*${ad.replace(/\./g,"\\.")}[^>]*>[\\s\\S]*?<\\/script>`, "gi"), "");
-    }
-    return out;
+  async function ytSearchChannels(query: string, pageToken?: string, maxResults = 20): Promise<{ channels: any[]; nextPageToken?: string }> {
+    const params = new URLSearchParams({ part: "id,snippet", q: query, type: "channel", maxResults: String(maxResults), key: YT_API_KEY });
+    if (pageToken) params.set("pageToken", pageToken);
+    const res = await fetch(`${YT_API_BASE}/search?${params}`);
+    if (!res.ok) throw new Error(`YouTube channel search error ${res.status}`);
+    const data = await res.json();
+    const channelIds = (data.items || []).map((item: any) => item.id?.channelId || item.id).filter(Boolean);
+    const channels = await ytChannelsByIds(channelIds);
+    return { channels, nextPageToken: data.nextPageToken };
   }
 
-  async function ytProxyFetch(url: string, extraHeaders?: Record<string, string>): Promise<Response> {
-    return fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept-Encoding": "identity",
-        "Referer": "https://www.youtube-nocookie.com/",
-        "Origin": "https://www.youtube-nocookie.com",
-        ...extraHeaders,
-      },
-    });
-  }
-
-  // Main embed endpoint — browser only ever loads /api/yt-embed/:id (our domain)
-  app.get("/api/yt-embed/:videoId", async (req, res) => {
+  // Embed endpoint — serves a clean HTML page wrapping youtube-nocookie.com
+  // youtube-nocookie.com is YouTube's official privacy/ad-reduced embed domain
+  app.get("/api/yt-embed/:videoId", (req, res) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
-    const targetUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
-    try {
-      const response = await ytProxyFetch(targetUrl);
-      if (!response.ok) throw new Error(`Upstream HTTP ${response.status}`);
-      let html = await response.text();
-      // Inject ad blocker before anything else runs
-      html = html.includes("<head>")
-        ? html.replace("<head>", `<head>${YT_AD_BLOCKER}`)
-        : YT_AD_BLOCKER + html;
-      // Rewrite all YouTube domain URLs to go through our proxy
-      html = rewriteYtContent(html);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("X-Frame-Options", "SAMEORIGIN");
-      res.removeHeader("Content-Security-Policy");
-      res.send(html);
-    } catch (e: any) {
-      res.status(502).setHeader("Content-Type", "text/html").send(
-        `<html><body style="background:#111;color:#eee;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;flex-direction:column;gap:12px;text-align:center;padding:20px"><p>Could not load video.</p><small style="opacity:.6">${e.message}</small></body></html>`
-      );
-    }
+    const src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1&color=white`;
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>*{margin:0;padding:0;box-sizing:border-box}html,body{width:100%;height:100%;background:#000;overflow:hidden}iframe{width:100%;height:100%;border:0;display:block}</style></head><body><iframe src="${src}" allow="autoplay;fullscreen;encrypted-media;picture-in-picture;clipboard-write" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe><script>(function(){var sel=['.ytp-popup','.ytp-tooltip','.ytp-cards-teaser','.ytp-card-content','.ad-showing .video-ads'];var clean=function(){sel.forEach(function(s){document.querySelectorAll(s).forEach(function(el){el.remove();});});};new MutationObserver(clean).observe(document.documentElement,{childList:true,subtree:true});})();</script></body></html>`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("X-Frame-Options", "SAMEORIGIN");
+    res.removeHeader("Content-Security-Policy");
+    res.send(html);
   });
 
-  // Generic resource proxy — serves YouTube JS, CSS, images through our domain
-  app.use("/api/yt-proxy", async (req, res) => {
-    // req.url = '/s.ytimg.com/path?query=val'  (Express strips the mount prefix)
-    const raw = req.url.startsWith("/") ? req.url.slice(1) : req.url;
-    const slashIdx = raw.indexOf("/");
-    const targetHost = slashIdx === -1 ? raw.split("?")[0] : raw.slice(0, slashIdx);
-    const targetPath = slashIdx === -1 ? "/" : raw.slice(slashIdx);
-
-    const targetBase = YT_PROXY_HOSTS[targetHost];
-    if (!targetBase) return res.status(403).json({ error: `Blocked host: ${targetHost}` });
-    if (YT_AD_DOMAINS.some(d => targetHost.includes(d))) return res.status(204).end();
-
-    const targetUrl = `${targetBase}${targetPath}`;
+  app.get("/api/youtube/popular", async (req, res) => {
     try {
-      const response = await ytProxyFetch(targetUrl);
-      const ct = response.headers.get("content-type") || "application/octet-stream";
-      res.setHeader("Content-Type", ct);
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      const cacheControl = response.headers.get("cache-control");
-      if (cacheControl) res.setHeader("Cache-Control", cacheControl);
-
-      const isText = ct.includes("html") || ct.includes("javascript") || ct.includes("css") || ct.includes("json");
-      if (isText) {
-        let text = await response.text();
-        text = rewriteYtContent(text);
-        res.send(text);
-      } else {
-        const buf = await response.arrayBuffer();
-        res.end(Buffer.from(buf));
-      }
-    } catch (e: any) {
-      res.status(502).json({ error: e.message });
-    }
-  });
-
-  app.get("/api/youtube/popular", async (_req, res) => {
-    try {
-      const videos = await ytMostPopular(24);
-      res.json(videos);
+      const pageToken = req.query.pageToken as string | undefined;
+      const result = await ytMostPopular(20, pageToken);
+      res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/youtube/latest", async (_req, res) => {
+  app.get("/api/youtube/latest", async (req, res) => {
     try {
+      const pageToken = req.query.pageToken as string | undefined;
       const after = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString();
-      const videos = await ytSearch("trending", { order: "date", publishedAfter: after });
-      res.json(videos);
+      const result = await ytSearch("trending", { order: "date", publishedAfter: after, pageToken });
+      res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/youtube/newer", async (_req, res) => {
+  app.get("/api/youtube/newer", async (req, res) => {
     try {
+      const pageToken = req.query.pageToken as string | undefined;
       const after = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
-      const videos = await ytSearch("popular videos", { order: "date", publishedAfter: after });
-      res.json(videos);
+      const result = await ytSearch("popular videos", { order: "date", publishedAfter: after, pageToken });
+      res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/youtube/oldest", async (_req, res) => {
+  app.get("/api/youtube/oldest", async (req, res) => {
     try {
-      const videos = await ytSearch("classic viral videos most viewed all time", { order: "viewCount", publishedBefore: "2020-01-01T00:00:00Z" });
-      res.json(videos);
+      const pageToken = req.query.pageToken as string | undefined;
+      const result = await ytSearch("classic viral videos most viewed all time", { order: "viewCount", publishedBefore: "2020-01-01T00:00:00Z", pageToken });
+      res.json(result);
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
-  app.get("/api/youtube/shorts", async (_req, res) => {
+  app.get("/api/youtube/shorts", async (req, res) => {
     try {
-      const videos = await ytSearch("#shorts viral funny", { order: "viewCount", videoDuration: "short" });
-      const shortVideos = videos.filter(v => v.duration !== null && v.duration <= 180);
-      res.json((shortVideos.length >= 6 ? shortVideos : videos).slice(0, 20));
+      const pageToken = req.query.pageToken as string | undefined;
+      const result = await ytSearch("#shorts viral funny", { order: "viewCount", videoDuration: "short", pageToken });
+      const shortVideos = result.videos.filter((v: any) => v.duration !== null && v.duration <= 180);
+      res.json({ videos: (shortVideos.length >= 6 ? shortVideos : result.videos).slice(0, 20), nextPageToken: result.nextPageToken });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/youtube/search", async (req, res) => {
     const q = (req.query.q as string || "").trim();
-    if (!q) return res.json([]);
+    if (!q) return res.json({ videos: [], channels: [], nextPageToken: undefined });
     const typeParam = (req.query.type as string || "all").toLowerCase();
     const durationParam = (req.query.duration as string || "any").toLowerCase();
     const prioritize = (req.query.prioritize as string || "relevance").toLowerCase();
     const features = ((req.query.features as string) || "").split(",").filter(Boolean).map(f => f.toLowerCase());
+    const pageToken = req.query.pageToken as string | undefined;
 
     try {
-      const opts: Parameters<typeof ytSearch>[1] = {};
+      if (typeParam === "channels") {
+        const result = await ytSearchChannels(q, pageToken, 20);
+        return res.json({ videos: [], channels: result.channels, nextPageToken: result.nextPageToken });
+      }
 
+      const opts: Parameters<typeof ytSearch>[1] = { pageToken };
       if (prioritize === "popularity") opts.order = "viewCount";
       else if (prioritize === "date") opts.order = "date";
       else if (prioritize === "rating") opts.order = "rating";
       else opts.order = "relevance";
 
       if (typeParam === "videos") opts.type = "video";
-      else if (typeParam === "channels") opts.type = "channel";
       else if (typeParam === "playlists") opts.type = "playlist";
       else if (typeParam === "shorts") { opts.type = "video"; opts.videoDuration = "short"; }
       else opts.type = "video";
 
-      if (durationParam === "under 3 minutes" || durationParam === "short") opts.videoDuration = "short";
-      else if (durationParam === "3-20 minutes" || durationParam === "medium") opts.videoDuration = "medium";
-      else if (durationParam === "over 20 minutes" || durationParam === "long") opts.videoDuration = "long";
+      if (durationParam === "under 3 minutes") opts.videoDuration = "short";
+      else if (durationParam === "3-20 minutes") opts.videoDuration = "medium";
+      else if (durationParam === "over 20 minutes") opts.videoDuration = "long";
 
       if (features.includes("hd") || features.includes("4k")) opts.videoDefinition = "high";
       if (features.includes("live")) opts.eventType = "live";
 
       const dateUpload = (req.query.uploadDate as string || "").toLowerCase();
-      if (dateUpload === "last hour") opts.publishedAfter = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-      else if (dateUpload === "today") opts.publishedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+      if (dateUpload === "today") opts.publishedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       else if (dateUpload === "this week") opts.publishedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
       else if (dateUpload === "this month") opts.publishedAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
       else if (dateUpload === "this year") opts.publishedAfter = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
 
       let finalQuery = q;
-      if (features.includes("live")) finalQuery = q + " live";
-      if (features.includes("4k")) finalQuery = q + " 4K";
+      if (features.includes("live")) finalQuery += " live";
+      if (features.includes("4k")) finalQuery += " 4K";
 
-      const videos = await ytSearch(finalQuery, opts);
-      res.json(videos);
+      const result = await ytSearch(finalQuery, opts);
+      res.json({ videos: result.videos, channels: [], nextPageToken: result.nextPageToken });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/channel/:channelId", async (req, res) => {
+    try {
+      const channels = await ytChannelsByIds([req.params.channelId]);
+      if (!channels.length) return res.status(404).json({ message: "Channel not found" });
+      res.json(channels[0]);
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/channel/:channelId/videos", async (req, res) => {
+    try {
+      const { channelId } = req.params;
+      const order = (req.query.order as string) || "date";
+      const pageToken = req.query.pageToken as string | undefined;
+      const videoDuration = req.query.videoDuration as string | undefined;
+      const params = new URLSearchParams({ part: "id", channelId, type: "video", order, maxResults: "20", key: YT_API_KEY });
+      if (pageToken) params.set("pageToken", pageToken);
+      if (videoDuration) params.set("videoDuration", videoDuration);
+      const searchRes = await fetch(`${YT_API_BASE}/search?${params}`);
+      if (!searchRes.ok) throw new Error(`Channel videos error ${searchRes.status}`);
+      const data = await searchRes.json();
+      const ids = (data.items || []).map((item: any) => item.id?.videoId).filter(Boolean);
+      const videos = await ytVideoDetails(ids);
+      res.json({ videos, nextPageToken: data.nextPageToken });
+    } catch (e: any) { res.status(500).json({ message: e.message }); }
+  });
+
+  app.get("/api/youtube/channel/:channelId/shorts", async (req, res) => {
+    try {
+      const { channelId } = req.params;
+      const pageToken = req.query.pageToken as string | undefined;
+      const params = new URLSearchParams({ part: "id", channelId, type: "video", videoDuration: "short", order: "date", maxResults: "20", key: YT_API_KEY });
+      if (pageToken) params.set("pageToken", pageToken);
+      const searchRes = await fetch(`${YT_API_BASE}/search?${params}`);
+      if (!searchRes.ok) throw new Error(`Channel shorts error ${searchRes.status}`);
+      const data = await searchRes.json();
+      const ids = (data.items || []).map((item: any) => item.id?.videoId).filter(Boolean);
+      const videos = await ytVideoDetails(ids);
+      const shorts = videos.filter((v: any) => v.duration !== null && v.duration <= 180);
+      res.json({ videos: shorts.length >= 3 ? shorts : videos, nextPageToken: data.nextPageToken });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
