@@ -1489,19 +1489,59 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return { channels, nextPageToken: data.nextPageToken };
   }
 
-  // ── RSS-based search: 0 quota units (YouTube Data API search costs 100 per call) ──
-  async function ytSearchViaRSS(query: string): Promise<string[]> {
-    const url = `https://www.youtube.com/feeds/videos.xml?search_query=${encodeURIComponent(query)}`;
-    const res = await fetch(url, {
-      headers: { "User-Agent": YT_UA, "Accept": "application/atom+xml,application/xml,text/xml,*/*" },
-    });
-    if (!res.ok) throw new Error(`RSS error ${res.status}`);
-    const xml = await res.text();
-    const ids: string[] = [];
-    const rx = /<yt:videoId>([^<]+)<\/yt:videoId>/g;
-    let m;
-    while ((m = rx.exec(xml)) !== null) ids.push(m[1]);
-    return ids;
+  // ── Invidious-based search: free, no API key needed, multiple fallback instances ──
+  const INVIDIOUS_INSTANCES = [
+    "https://inv.nadeko.net",
+    "https://invidious.nerdvpn.de",
+    "https://invidious.privacydev.net",
+    "https://iv.melmac.space",
+    "https://invidious.fdn.fr",
+    "https://yt.artemislena.eu",
+  ];
+
+  async function ytSearchViaInvidious(query: string, page = 1): Promise<{ videos: any[]; nextPage?: number }> {
+    for (const instance of INVIDIOUS_INSTANCES) {
+      try {
+        const params = new URLSearchParams({ q: query, type: "video", page: String(page) });
+        const res = await fetch(`${instance}/api/v1/search?${params}`, {
+          headers: { "User-Agent": YT_UA, "Accept": "application/json" },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!res.ok) continue;
+        const items = await res.json();
+        if (!Array.isArray(items)) continue;
+        const videos = items
+          .filter((item: any) => item.type === "video")
+          .map((item: any) => {
+            const thumb =
+              item.videoThumbnails?.find((t: any) => t.quality === "maxresdefault") ||
+              item.videoThumbnails?.find((t: any) => t.quality === "maxres") ||
+              item.videoThumbnails?.find((t: any) => t.quality === "high") ||
+              item.videoThumbnails?.[0];
+            const publishedAt = item.published ? new Date(item.published * 1000).toISOString() : "";
+            const uploadedDate = publishedAt
+              ? new Date(publishedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
+              : (item.publishedText || "");
+            return {
+              id: item.videoId,
+              kind: "youtube#video",
+              title: item.title || "",
+              description: item.description || "",
+              thumbnail: thumb?.url || `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`,
+              channelTitle: item.author || "",
+              channelId: item.authorId || "",
+              publishedAt,
+              uploadedDate,
+              viewCount: item.viewCount != null ? String(item.viewCount) : null,
+              likeCount: item.likeCount != null ? String(item.likeCount) : null,
+              duration: item.lengthSeconds || null,
+            };
+          });
+        const nextPage = videos.length >= 15 ? page + 1 : undefined;
+        return { videos, nextPage };
+      } catch {}
+    }
+    throw new Error("Search unavailable — please try again in a moment");
   }
 
   // ── YouTube Full Proxy (Eaglercraft-style — browser never sees YouTube domains) ──
@@ -1764,19 +1804,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         return res.json({ videos: [], channels: result.channels, nextPageToken: result.nextPageToken });
       }
 
-      // Video search via RSS — costs 0 quota units (vs 100 for Search API)
+      // Video search via Invidious — free, no quota used
       let searchQuery = q;
       if (features.includes("live")) searchQuery += " live";
       if (features.includes("4k")) searchQuery += " 4K";
       if (typeParam === "shorts") searchQuery += " #shorts";
 
-      const videoIds = await ytSearchViaRSS(searchQuery);
-      if (!videoIds.length) return res.json({ videos: [], channels: [], nextPageToken: undefined });
+      const pageNum = parseInt((req.query.pageToken as string) || "1") || 1;
+      const { videos: rawVideos, nextPage } = await ytSearchViaInvidious(searchQuery, pageNum);
+      let videos = rawVideos;
 
-      // Get full details for those IDs — costs 1 quota unit total
-      let videos = await ytVideoDetails(videoIds);
-
-      // Apply client-side filters since RSS doesn't support them natively
+      // Apply client-side filters
       if (durationParam === "under 3 minutes") videos = videos.filter(v => v.duration !== null && v.duration <= 180);
       else if (durationParam === "3-20 minutes") videos = videos.filter(v => v.duration !== null && v.duration > 180 && v.duration <= 1200);
       else if (durationParam === "over 20 minutes") videos = videos.filter(v => v.duration !== null && v.duration > 1200);
@@ -1795,7 +1833,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         videos = videos.filter(v => new Date(v.publishedAt).getTime() > cutoff);
       }
 
-      res.json({ videos, channels: [], nextPageToken: undefined });
+      res.json({ videos, channels: [], nextPageToken: nextPage ? String(nextPage) : undefined });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
