@@ -255,7 +255,7 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isShort = video.duration !== null && video.duration <= 180;
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1&color=white`;
+  const embedUrl = `/api/yt-embed/${video.id}`;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -276,7 +276,7 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
-      <div ref={containerRef} className={`relative bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col ${isShort ? "w-full max-w-sm" : "w-full max-w-5xl"}`} style={{ maxHeight: "92vh" }}>
+      <div ref={containerRef} className={`relative bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col ${isShort ? "w-full max-w-sm" : "w-full max-w-5xl"}`} style={{ height: "92vh" }}>
         <div className="flex items-center gap-3 px-4 py-3 bg-black/90 border-b border-white/5 flex-shrink-0">
           <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -292,11 +292,11 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
             </button>
           </div>
         </div>
-        <div className="relative w-full" style={isShort ? { paddingBottom: "177.78%" } : { paddingBottom: "56.25%", minHeight: 280 }}>
+        <div className="flex-1 min-h-0 overflow-hidden" style={isShort ? { aspectRatio: "9/16", maxWidth: "100%", alignSelf: "center" } : {}}>
           <iframe
             src={embedUrl}
             title={video.title}
-            className="absolute inset-0 w-full h-full border-0"
+            className="w-full h-full border-0 block"
             allowFullScreen
             allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
             data-testid="iframe-yt-player"
@@ -512,7 +512,11 @@ function usePagedFetch(baseUrl: string) {
     fetch(`${baseUrl}${sep}pageToken=${nextToken}`, { credentials: "include" })
       .then(r => r.json())
       .then((data: PagedVideos) => {
-        setVideos(prev => [...prev, ...(data.videos || [])]);
+        setVideos(prev => {
+          const seen = new Set(prev.map(v => v.id));
+          const fresh = (data.videos || []).filter(v => !seen.has(v.id));
+          return [...prev, ...fresh];
+        });
         setNextToken(data.nextPageToken);
         setHasMore(!!data.nextPageToken);
         setIsFetchingMore(false);
@@ -600,6 +604,7 @@ export default function HorizonTubePage() {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [fetchingMoreSearch, setFetchingMoreSearch] = useState(false);
   const [hasMoreSearch, setHasMoreSearch] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
 
   const buildSearchUrl = useCallback((pageToken?: string) => {
     const params = new URLSearchParams({ q: debouncedSearch, type: filters.type, duration: filters.duration, uploadDate: filters.uploadDate, prioritize: filters.prioritize });
@@ -613,6 +618,7 @@ export default function HorizonTubePage() {
       setSearchVideos([]);
       setSearchChannels([]);
       setHasMoreSearch(false);
+      setSearchError(null);
       return;
     }
     let cancelled = false;
@@ -620,17 +626,28 @@ export default function HorizonTubePage() {
     setSearchChannels([]);
     setLoadingSearch(true);
     setHasMoreSearch(false);
+    setSearchError(null);
     fetch(buildSearchUrl(), { credentials: "include" })
-      .then(r => r.json())
-      .then((data: PagedChannels) => {
+      .then(async r => {
+        const data = await r.json();
         if (cancelled) return;
+        if (!r.ok || data.message) {
+          const msg: string = data.message || `Error ${r.status}`;
+          if (msg.includes("403") || msg.toLowerCase().includes("quota")) {
+            setSearchError("YouTube search quota reached — try again tomorrow or adjust your filters");
+          } else {
+            setSearchError(msg);
+          }
+          setLoadingSearch(false);
+          return;
+        }
         setSearchVideos(data.videos || []);
         setSearchChannels(data.channels || []);
         setSearchNextToken(data.nextPageToken);
         setHasMoreSearch(!!data.nextPageToken);
         setLoadingSearch(false);
       })
-      .catch(() => { if (!cancelled) setLoadingSearch(false); });
+      .catch(() => { if (!cancelled) { setSearchError("Network error — please try again"); setLoadingSearch(false); } });
     return () => { cancelled = true; };
   }, [debouncedSearch, filters]);
 
@@ -751,7 +768,7 @@ export default function HorizonTubePage() {
               <h2 className="text-base font-bold text-white tracking-wide">
                 Results for <span className="text-red-400">"{debouncedSearch}"</span>
               </h2>
-              {!loadingSearch && (
+              {!loadingSearch && !searchError && (
                 <span className="text-xs text-white/30 ml-1">
                   {isChannelSearch ? searchChannels.length : searchVideos.length} result{(isChannelSearch ? searchChannels.length : searchVideos.length) !== 1 ? "s" : ""}
                 </span>
@@ -782,6 +799,12 @@ export default function HorizonTubePage() {
                   {fetchingMoreSearch && <div className="flex justify-center py-4"><div className="w-6 h-6 border-2 border-red-500 border-t-transparent rounded-full animate-spin" /></div>}
                 </>
               )
+            ) : searchError ? (
+              <div className="flex flex-col items-center justify-center py-24 text-white/30">
+                <Youtube className="w-12 h-12 mb-4 opacity-50" />
+                <p className="text-base font-semibold text-yellow-400/80">Search unavailable</p>
+                <p className="text-sm mt-1 text-center max-w-sm">{searchError}</p>
+              </div>
             ) : searchVideos.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-24 text-white/30">
                 <Youtube className="w-12 h-12 mb-4 opacity-50" />

@@ -1502,6 +1502,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const YT_PROXY_PATH = "/api/yt-proxy";
   const YT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
+  // Cache static proxy assets (JS/CSS/fonts) for 4 hours — they don't change often
+  const ytProxyCache = new Map<string, { ct: string; buf: Buffer; ts: number }>();
+  const YT_PROXY_CACHE_TTL = 4 * 60 * 60 * 1000;
+  function ytProxyCacheGet(key: string) {
+    const e = ytProxyCache.get(key);
+    if (!e) return null;
+    if (Date.now() - e.ts > YT_PROXY_CACHE_TTL) { ytProxyCache.delete(key); return null; }
+    return e;
+  }
+
   function rewriteYtUrls(text: string): string {
     let out = text;
     for (const [prefix, origin] of Object.entries(YT_ORIGINS)) {
@@ -1550,6 +1560,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const origin = YT_ORIGINS[prefix];
     if (!origin) return res.status(403).send("Unknown proxy target");
     const targetUrl = `${origin}${subPath}${query}`;
+
+    // Serve from cache for static assets
+    const isCacheable = req.method === "GET" && (subPath.includes(".js") || subPath.includes(".css") || subPath.includes(".woff") || subPath.includes(".ttf") || subPath.includes(".png") || subPath.includes(".jpg") || subPath.includes(".svg"));
+    const cacheKey = `${prefix}${subPath}${query}`;
+    if (isCacheable) {
+      const cached = ytProxyCacheGet(cacheKey);
+      if (cached) {
+        res.setHeader("Content-Type", cached.ct);
+        res.setHeader("Cache-Control", "public, max-age=14400");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        return res.send(cached.buf);
+      }
+    }
+
     try {
       const upstreamRes = await fetch(targetUrl, {
         method: req.method,
@@ -1579,9 +1603,12 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         let text = await upstreamRes.text();
         text = rewriteYtUrls(text);
         res.setHeader("Content-Type", contentType);
-        res.send(text);
+        const buf = Buffer.from(text, "utf8");
+        if (isCacheable && upstreamRes.status === 200) ytProxyCache.set(cacheKey, { ct: contentType, buf, ts: Date.now() });
+        res.send(buf);
       } else {
         const buf = Buffer.from(await upstreamRes.arrayBuffer());
+        if (isCacheable && upstreamRes.status === 200) ytProxyCache.set(cacheKey, { ct: contentType, buf, ts: Date.now() });
         res.send(buf);
       }
     } catch (e: any) {
