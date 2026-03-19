@@ -1601,6 +1601,96 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 })();
 </script>`;
 
+  // ── Innertube-based video streaming (nettleweb-style direct stream) ──────────
+  let innertubeInstance: any = null;
+  async function getInnertube() {
+    if (innertubeInstance) return innertubeInstance;
+    const { Innertube } = await import("youtubei.js");
+    innertubeInstance = await Innertube.create({ retrieve_player: true });
+    return innertubeInstance;
+  }
+
+  // Returns info about available streams for a video
+  app.get("/api/yt-video-info/:videoId", async (req: any, res: any) => {
+    const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
+    try {
+      const yt = await getInnertube();
+      const info = await yt.getInfo(videoId);
+      const formats = info.streaming_data?.formats || [];
+      const adaptiveFormats = info.streaming_data?.adaptive_formats || [];
+
+      // Find best combined video+audio format (360p or 720p)
+      const combined = [...formats]
+        .filter((f: any) => f.has_audio && f.has_video)
+        .sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
+
+      if (!combined.length) {
+        return res.status(404).json({ message: "No combined stream available" });
+      }
+
+      const best = combined[0];
+      res.json({
+        videoId,
+        title: info.basic_info?.title || "",
+        quality: `${best.height || "?"}p`,
+        mimeType: best.mime_type || "video/mp4",
+        streamUrl: `/api/yt-stream/${videoId}`,
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Proxies the actual YouTube video stream (combined video+audio) with Range support
+  app.get("/api/yt-stream/:videoId", async (req: any, res: any) => {
+    const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
+    try {
+      const yt = await getInnertube();
+      const info = await yt.getInfo(videoId);
+      const formats = info.streaming_data?.formats || [];
+
+      const combined = [...formats]
+        .filter((f: any) => f.has_audio && f.has_video)
+        .sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
+
+      if (!combined.length) throw new Error("No combined stream found");
+
+      const best = combined[0];
+      const streamUrl: string = best.decipher(yt.session.player);
+
+      const upstreamHeaders: Record<string, string> = {
+        "User-Agent": YT_UA,
+        "Referer": "https://www.youtube.com/",
+        "Origin": "https://www.youtube.com",
+      };
+      if (req.headers["range"]) {
+        upstreamHeaders["Range"] = req.headers["range"];
+      }
+
+      const upstream = await fetch(streamUrl, { headers: upstreamHeaders });
+
+      res.setHeader("Content-Type", best.mime_type || "video/mp4");
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Cache-Control", "no-cache");
+      if (upstream.headers.get("content-length")) {
+        res.setHeader("Content-Length", upstream.headers.get("content-length")!);
+      }
+      if (upstream.headers.get("content-range")) {
+        res.setHeader("Content-Range", upstream.headers.get("content-range")!);
+      }
+      res.status(upstream.status);
+
+      if (!upstream.body) { res.end(); return; }
+      const { Readable } = await import("node:stream");
+      const nodeStream = Readable.fromWeb(upstream.body as any);
+      nodeStream.pipe(res);
+      req.on("close", () => nodeStream.destroy());
+    } catch (e: any) {
+      console.error("[yt-stream] error:", e.message);
+      if (!res.headersSent) res.status(502).json({ message: e.message });
+    }
+  });
+
   app.get("/api/yt-embed/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1&color=white`;

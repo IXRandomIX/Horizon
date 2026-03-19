@@ -253,9 +253,11 @@ function HScrollSection({ title, icon, videos, isLoading, onVideoClick, onChanne
 
 function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [streamReady, setStreamReady] = useState<"loading" | "ok" | "error">("loading");
   const containerRef = useRef<HTMLDivElement>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
   const isShort = video.duration !== null && video.duration <= 180;
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1&color=white`;
+  const streamSrc = `/api/yt-stream/${video.id}`;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -274,11 +276,26 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
+  // Check if stream is accessible before committing
+  useEffect(() => {
+    let cancelled = false;
+    setStreamReady("loading");
+    fetch(`/api/yt-video-info/${video.id}`)
+      .then(r => {
+        if (cancelled) return;
+        setStreamReady(r.ok ? "ok" : "error");
+      })
+      .catch(() => { if (!cancelled) setStreamReady("error"); });
+    return () => { cancelled = true; };
+  }, [video.id]);
+
+  const fallbackUrl = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1`;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div ref={containerRef} className={`relative bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col ${isShort ? "w-full max-w-sm" : "w-full max-w-5xl"}`} style={{ height: "92vh" }}>
         <div className="flex items-center gap-3 px-4 py-3 bg-black/90 border-b border-white/5 flex-shrink-0">
-          <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0" />
+          <div className="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 animate-pulse" />
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold truncate text-sm">{video.title}</p>
             <p className="text-white/40 text-xs truncate">{video.channelTitle}</p>
@@ -292,15 +309,38 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
             </button>
           </div>
         </div>
-        <div className="flex-1 min-h-0 overflow-hidden" style={isShort ? { aspectRatio: "9/16", maxWidth: "100%", alignSelf: "center" } : {}}>
-          <iframe
-            src={embedUrl}
-            title={video.title}
-            className="w-full h-full border-0 block"
-            allowFullScreen
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
-            data-testid="iframe-yt-player"
-          />
+
+        <div className="flex-1 min-h-0 overflow-hidden relative" style={isShort ? { aspectRatio: "9/16", maxWidth: "100%", alignSelf: "center" } : {}}>
+          {streamReady === "loading" && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black z-10">
+              <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-white/40 text-xs">Loading stream...</p>
+            </div>
+          )}
+
+          {streamReady === "ok" && (
+            <video
+              ref={videoRef}
+              src={streamSrc}
+              autoPlay
+              controls
+              controlsList="nodownload"
+              className="w-full h-full bg-black"
+              data-testid="video-yt-player"
+              onError={() => setStreamReady("error")}
+            />
+          )}
+
+          {streamReady === "error" && (
+            <iframe
+              src={fallbackUrl}
+              title={video.title}
+              className="w-full h-full border-0 block"
+              allowFullScreen
+              allow="autoplay; fullscreen; encrypted-media; picture-in-picture; clipboard-write"
+              data-testid="iframe-yt-player-fallback"
+            />
+          )}
         </div>
       </div>
     </div>
