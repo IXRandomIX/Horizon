@@ -1489,6 +1489,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return { channels, nextPageToken: data.nextPageToken };
   }
 
+  // ── RSS-based search: 0 quota units (YouTube Data API search costs 100 per call) ──
+  async function ytSearchViaRSS(query: string): Promise<string[]> {
+    const url = `https://www.youtube.com/feeds/videos.xml?search_query=${encodeURIComponent(query)}`;
+    const res = await fetch(url, {
+      headers: { "User-Agent": YT_UA, "Accept": "application/atom+xml,application/xml,text/xml,*/*" },
+    });
+    if (!res.ok) throw new Error(`RSS error ${res.status}`);
+    const xml = await res.text();
+    const ids: string[] = [];
+    const rx = /<yt:videoId>([^<]+)<\/yt:videoId>/g;
+    let m;
+    while ((m = rx.exec(xml)) !== null) ids.push(m[1]);
+    return ids;
+  }
+
   // ── YouTube Full Proxy (Eaglercraft-style — browser never sees YouTube domains) ──
   const YT_ORIGINS: Record<string, string> = {
     "noco":   "https://www.youtube-nocookie.com",
@@ -1498,6 +1513,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     "yt3":    "https://yt3.ggpht.com",
     "yt3guc": "https://yt3.googleusercontent.com",
     "lh3":    "https://lh3.googleusercontent.com",
+    "gstatic": "https://www.gstatic.com",
+    "fonts":   "https://fonts.gstatic.com",
   };
   const YT_PROXY_PATH = "/api/yt-proxy";
   const YT_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -1525,6 +1542,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return out;
   }
 
+  // Intercept script injected into YouTube embed to proxy googlevideo.com streams
+  const GV_INTERCEPTOR = `<script>
+(function(){
+  var P='/api/yt-gvideo?u=';
+  var GV=/^https?:\\/\\/[a-z0-9.-]+\\.googlevideo\\.com/;
+  var _f=window.fetch;
+  window.fetch=function(url,opts){
+    if(typeof url==='string'&&GV.test(url))url=P+encodeURIComponent(url);
+    else if(url&&url.url&&GV.test(url.url))url=new Request(P+encodeURIComponent(url.url),url);
+    return _f.call(this,url,opts);
+  };
+  var _o=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(m,url){
+    if(typeof url==='string'&&GV.test(url))url=P+encodeURIComponent(url);
+    return _o.apply(this,[m,url].concat([].slice.call(arguments,2)));
+  };
+})();
+</script>`;
+
   app.get("/api/yt-embed/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     const embedUrl = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1&iv_load_policy=3&fs=1&color=white`;
@@ -1542,6 +1578,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       if (!upstream.ok) throw new Error(`Upstream ${upstream.status}`);
       let html = await upstream.text();
       html = rewriteYtUrls(html);
+      // Inject interceptor right before </head> so it runs before YouTube's JS
+      html = html.replace("</head>", GV_INTERCEPTOR + "</head>");
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Frame-Options", "SAMEORIGIN");
       res.removeHeader("Content-Security-Policy");
@@ -1549,6 +1587,38 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     } catch (e: any) {
       console.error("[yt-embed] error:", e.message);
       res.status(502).send(`<html><body style="background:#111;color:#eee;display:flex;height:100vh;align-items:center;justify-content:center;font-family:sans-serif;text-align:center"><div><p style="font-size:1.2rem">Could not load video</p><small>${e.message}</small></div></body></html>`);
+    }
+  });
+
+  // Streaming proxy for googlevideo.com (actual video data — must stream, not buffer)
+  app.get("/api/yt-gvideo", async (req: any, res: any) => {
+    const rawUrl = req.query.u as string;
+    if (!rawUrl || !/^https?:\/\/[a-z0-9.-]+\.googlevideo\.com/.test(rawUrl)) {
+      return res.status(403).send("Forbidden");
+    }
+    try {
+      const upstream = await fetch(rawUrl, {
+        headers: {
+          "User-Agent": YT_UA,
+          "Referer": "https://www.youtube-nocookie.com/",
+          "Origin": "https://www.youtube-nocookie.com",
+          ...(req.headers.range ? { "Range": req.headers.range } : {}),
+        },
+        redirect: "follow",
+      });
+      res.status(upstream.status);
+      const passHeaders = ["content-type", "content-length", "content-range", "accept-ranges", "cache-control", "expires"];
+      for (const h of passHeaders) {
+        const v = upstream.headers.get(h);
+        if (v) res.setHeader(h, v);
+      }
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      if (!upstream.body) return res.end();
+      const { Readable } = await import("stream");
+      Readable.fromWeb(upstream.body as any).pipe(res);
+    } catch (e: any) {
+      console.error("[yt-gvideo] error:", e.message);
+      if (!res.headersSent) res.status(502).json({ message: "Video stream error" });
     }
   });
 
@@ -1684,46 +1754,48 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!q) return res.json({ videos: [], channels: [], nextPageToken: undefined });
     const typeParam = (req.query.type as string || "all").toLowerCase();
     const durationParam = (req.query.duration as string || "any").toLowerCase();
-    const prioritize = (req.query.prioritize as string || "relevance").toLowerCase();
     const features = ((req.query.features as string) || "").split(",").filter(Boolean).map(f => f.toLowerCase());
-    const pageToken = req.query.pageToken as string | undefined;
 
     try {
+      // Channel search still uses API (no RSS alternative), costs 100 units but channels are rare
       if (typeParam === "channels") {
+        const pageToken = req.query.pageToken as string | undefined;
         const result = await ytSearchChannels(q, pageToken, 20);
         return res.json({ videos: [], channels: result.channels, nextPageToken: result.nextPageToken });
       }
 
-      const opts: Parameters<typeof ytSearch>[1] = { pageToken };
-      if (prioritize === "popularity") opts.order = "viewCount";
-      else if (prioritize === "date") opts.order = "date";
-      else if (prioritize === "rating") opts.order = "rating";
-      else opts.order = "relevance";
+      // Video search via RSS — costs 0 quota units (vs 100 for Search API)
+      let searchQuery = q;
+      if (features.includes("live")) searchQuery += " live";
+      if (features.includes("4k")) searchQuery += " 4K";
+      if (typeParam === "shorts") searchQuery += " #shorts";
 
-      if (typeParam === "videos") opts.type = "video";
-      else if (typeParam === "playlists") opts.type = "playlist";
-      else if (typeParam === "shorts") { opts.type = "video"; opts.videoDuration = "short"; }
-      else opts.type = "video";
+      const videoIds = await ytSearchViaRSS(searchQuery);
+      if (!videoIds.length) return res.json({ videos: [], channels: [], nextPageToken: undefined });
 
-      if (durationParam === "under 3 minutes") opts.videoDuration = "short";
-      else if (durationParam === "3-20 minutes") opts.videoDuration = "medium";
-      else if (durationParam === "over 20 minutes") opts.videoDuration = "long";
+      // Get full details for those IDs — costs 1 quota unit total
+      let videos = await ytVideoDetails(videoIds);
 
-      if (features.includes("hd") || features.includes("4k")) opts.videoDefinition = "high";
-      if (features.includes("live")) opts.eventType = "live";
+      // Apply client-side filters since RSS doesn't support them natively
+      if (durationParam === "under 3 minutes") videos = videos.filter(v => v.duration !== null && v.duration <= 180);
+      else if (durationParam === "3-20 minutes") videos = videos.filter(v => v.duration !== null && v.duration > 180 && v.duration <= 1200);
+      else if (durationParam === "over 20 minutes") videos = videos.filter(v => v.duration !== null && v.duration > 1200);
+      if (typeParam === "shorts") videos = videos.filter(v => v.duration !== null && v.duration <= 180);
+      if (features.includes("live")) videos = videos.filter(v => v.duration === null || v.duration > 3600);
 
       const dateUpload = (req.query.uploadDate as string || "").toLowerCase();
-      if (dateUpload === "today") opts.publishedAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-      else if (dateUpload === "this week") opts.publishedAfter = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
-      else if (dateUpload === "this month") opts.publishedAfter = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-      else if (dateUpload === "this year") opts.publishedAfter = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString();
+      if (dateUpload === "today") {
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        videos = videos.filter(v => new Date(v.publishedAt).getTime() > cutoff);
+      } else if (dateUpload === "this week") {
+        const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+        videos = videos.filter(v => new Date(v.publishedAt).getTime() > cutoff);
+      } else if (dateUpload === "this month") {
+        const cutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+        videos = videos.filter(v => new Date(v.publishedAt).getTime() > cutoff);
+      }
 
-      let finalQuery = q;
-      if (features.includes("live")) finalQuery += " live";
-      if (features.includes("4k")) finalQuery += " 4K";
-
-      const result = await ytSearch(finalQuery, opts);
-      res.json({ videos: result.videos, channels: [], nextPageToken: result.nextPageToken });
+      res.json({ videos, channels: [], nextPageToken: undefined });
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 

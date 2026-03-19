@@ -547,8 +547,8 @@ function InfiniteVideoGrid({ baseUrl, onVideoClick, onChannelClick, emptyText }:
   if (error) return (
     <div className="flex flex-col items-center justify-center py-24 text-white/30">
       <Youtube className="w-12 h-12 mb-4 opacity-50" />
-      <p className="text-base font-semibold">YouTube API limit reached</p>
-      <p className="text-sm mt-1 text-white/20">Quota resets daily — check back soon</p>
+      <p className="text-base font-semibold">Could not load videos</p>
+      <p className="text-sm mt-1 text-white/20">Check your connection or try refreshing</p>
     </div>
   );
 
@@ -631,13 +631,9 @@ export default function HorizonTubePage() {
       .then(async r => {
         const data = await r.json();
         if (cancelled) return;
-        if (!r.ok || data.message) {
+        if (!r.ok || (data.message && !data.videos)) {
           const msg: string = data.message || `Error ${r.status}`;
-          if (msg.includes("403") || msg.toLowerCase().includes("quota")) {
-            setSearchError("YouTube search quota reached — try again tomorrow or adjust your filters");
-          } else {
-            setSearchError(msg);
-          }
+          setSearchError(msg.includes("403") ? "Search is temporarily unavailable — try again in a moment" : msg);
           setLoadingSearch(false);
           return;
         }
