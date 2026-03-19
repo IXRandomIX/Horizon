@@ -1601,48 +1601,53 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 })();
 </script>`;
 
-  // ── Innertube-based video streaming (nettleweb-style direct stream) ──────────
-  let innertubeInstance: any = null;
-  async function getInnertube() {
-    if (innertubeInstance) return innertubeInstance;
-    const { Innertube } = await import("youtubei.js");
-    const vm = await import("node:vm");
-    innertubeInstance = await Innertube.create({
-      retrieve_player: true,
-      generate_session_locally: true,
-      runtime: {
-        js: {
-          evaluate: (script: string) => ({ result: vm.runInNewContext(script, {}) }),
-        },
-      },
-    } as any);
-    return innertubeInstance;
+  // ── Invidious-based video streaming (no JS evaluator needed) ─────────────────
+  // Cache resolved stream URLs so Range requests reuse the same URL
+  const streamCache = new Map<string, { url: string; mimeType: string; expires: number }>();
+
+  async function resolveStreamUrl(videoId: string): Promise<{ url: string; mimeType: string }> {
+    const cached = streamCache.get(videoId);
+    if (cached && Date.now() < cached.expires) return { url: cached.url, mimeType: cached.mimeType };
+
+    for (const instance of INVIDIOUS_INSTANCES) {
+      try {
+        const res = await fetch(`${instance}/api/v1/videos/${videoId}?fields=formatStreams,title`, {
+          headers: { "User-Agent": YT_UA },
+          signal: AbortSignal.timeout(8000),
+        });
+        if (!res.ok) continue;
+        const data = await res.json();
+        const formats: any[] = (data.formatStreams || []).sort((a: any, b: any) => {
+          const qa = parseInt(a.qualityLabel) || 0;
+          const qb = parseInt(b.qualityLabel) || 0;
+          return qb - qa;
+        });
+        if (!formats.length) continue;
+        // Prefer 720p, fall back to best available
+        const format =
+          formats.find((f: any) => f.qualityLabel?.startsWith("720")) ||
+          formats.find((f: any) => f.qualityLabel?.startsWith("480")) ||
+          formats.find((f: any) => f.qualityLabel?.startsWith("360")) ||
+          formats[0];
+        const result = { url: format.url as string, mimeType: (format.type || "video/mp4") as string };
+        streamCache.set(videoId, { ...result, expires: Date.now() + 25 * 60 * 1000 });
+        return result;
+      } catch {
+        // try next instance
+      }
+    }
+    throw new Error("No stream available from any Invidious instance");
   }
 
   // Returns info about available streams for a video
   app.get("/api/yt-video-info/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     try {
-      const yt = await getInnertube();
-      const info = await yt.getInfo(videoId);
-      const formats = info.streaming_data?.formats || [];
-      const adaptiveFormats = info.streaming_data?.adaptive_formats || [];
-
-      // Find best combined video+audio format (360p or 720p)
-      const combined = [...formats]
-        .filter((f: any) => f.has_audio && f.has_video)
-        .sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
-
-      if (!combined.length) {
-        return res.status(404).json({ message: "No combined stream available" });
-      }
-
-      const best = combined[0];
+      const { url, mimeType } = await resolveStreamUrl(videoId);
       res.json({
         videoId,
-        title: info.basic_info?.title || "",
-        quality: `${best.height || "?"}p`,
-        mimeType: best.mime_type || "video/mp4",
+        quality: mimeType.includes("720") ? "720p" : "360p",
+        mimeType,
         streamUrl: `/api/yt-stream/${videoId}`,
       });
     } catch (e: any) {
@@ -1650,22 +1655,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  // Proxies the actual YouTube video stream (combined video+audio) with Range support
+  // Proxies the actual YouTube video stream with Range support
   app.get("/api/yt-stream/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     try {
-      const yt = await getInnertube();
-      const info = await yt.getInfo(videoId);
-      const formats = info.streaming_data?.formats || [];
-
-      const combined = [...formats]
-        .filter((f: any) => f.has_audio && f.has_video)
-        .sort((a: any, b: any) => (b.height || 0) - (a.height || 0));
-
-      if (!combined.length) throw new Error("No combined stream found");
-
-      const best = combined[0];
-      const streamUrl: string = await best.decipher(yt.session.player);
+      const { url, mimeType } = await resolveStreamUrl(videoId);
 
       const upstreamHeaders: Record<string, string> = {
         "User-Agent": YT_UA,
@@ -1676,9 +1670,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         upstreamHeaders["Range"] = req.headers["range"];
       }
 
-      const upstream = await fetch(streamUrl, { headers: upstreamHeaders });
+      const upstream = await fetch(url, { headers: upstreamHeaders });
 
-      res.setHeader("Content-Type", best.mime_type || "video/mp4");
+      res.setHeader("Content-Type", mimeType);
       res.setHeader("Accept-Ranges", "bytes");
       res.setHeader("Cache-Control", "no-cache");
       if (upstream.headers.get("content-length")) {
