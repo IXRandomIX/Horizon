@@ -1601,107 +1601,109 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 })();
 </script>`;
 
-  // ── yt-dlp video streaming (most reliable — handles YouTube auth/signing) ────
-  // Cache: videoId → { url, contentType, expires }
-  const ytUrlCache = new Map<string, { url: string; contentType: string; expires: number }>();
+  // ── yt-dlp video streaming ────────────────────────────────────────────────
+  // Architecture: yt-dlp spawned as child process, stdout piped directly to
+  // the HTTP response. This avoids the IP-binding problem — YouTube signs CDN
+  // URLs to the requesting IP. When yt-dlp both resolves AND downloads in one
+  // process the IP never changes, so 403s are eliminated.
+  //
+  // ffmpeg (available in the Nix environment) is used to merge DASH video+audio
+  // into a fragmented MP4 so the browser can start playing without buffering
+  // the entire file. Progressive (combined) streams are passed through as-is.
 
-  async function getYtStreamUrl(videoId: string): Promise<{ url: string; contentType: string }> {
-    const cached = ytUrlCache.get(videoId);
+  // Quick probe: verify video exists and is playable before the browser tries to stream
+  const ytInfoCache = new Map<string, { ok: boolean; expires: number }>();
+
+  app.get("/api/yt-video-info/:videoId", async (req: any, res: any) => {
+    const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
+    const cached = ytInfoCache.get(videoId);
     if (cached && Date.now() < cached.expires) {
-      console.log(`[yt-dlp] cache hit for ${videoId}`);
-      return cached;
+      if (cached.ok) return res.json({ videoId, quality: "720p", mimeType: "video/mp4", streamUrl: `/api/yt-stream/${videoId}` });
+      return res.status(503).json({ message: "Video unavailable" });
     }
 
     const { exec } = await import("child_process");
     const { promisify } = await import("util");
     const execAsync = promisify(exec);
-
-    // IMPORTANT: Never use bestvideo+bestaudio (DASH) — that yields two separate URLs which
-    // HTML5 <video> can't play without MSE. Only pick combined single-file formats.
-    // itag 22 = 720p MP4 combined, itag 18 = 360p MP4 combined (most reliable)
-    const fmt = "best[height<=720][ext=mp4]/best[ext=mp4][height<=480]/best[ext=mp4]/best[ext=webm]/best";
-    const cmd = `yt-dlp --get-url --format "${fmt}" --no-warnings --no-playlist "https://www.youtube.com/watch?v=${videoId}"`;
-    console.log(`[yt-dlp] extracting URL for ${videoId}...`);
-
-    const { stdout, stderr } = await execAsync(cmd, { timeout: 45000 });
-    if (stderr) console.log(`[yt-dlp] stderr: ${stderr.trim().slice(0, 200)}`);
-
-    const lines = stdout.trim().split("\n").filter(Boolean);
-    if (!lines.length) throw new Error("yt-dlp returned no URLs");
-
-    const url = lines[0].trim();
-    console.log(`[yt-dlp] got URL for ${videoId} (${lines.length} line(s)): ${url.slice(0, 100)}...`);
-
-    if (lines.length > 1) {
-      // Shouldn't happen with our format selector, but log if it does
-      console.error(`[yt-dlp] WARNING: got ${lines.length} URLs (DASH?) for ${videoId} — only using first`);
-    }
-
-    // Detect content type from URL mime parameter or default to mp4
-    const isMp4 = !url.includes("mime=video%2Fwebm") && !url.includes("mime=video/webm");
-    const contentType = isMp4 ? "video/mp4" : "video/webm";
-
-    const entry = { url, contentType, expires: Date.now() + 3 * 60 * 60 * 1000 }; // 3 hours
-    ytUrlCache.set(videoId, entry);
-    return entry;
-  }
-
-  // Returns whether a stream is available for a video (used by frontend to decide HTML5 vs error)
-  app.get("/api/yt-video-info/:videoId", async (req: any, res: any) => {
-    const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     try {
-      const { contentType } = await getYtStreamUrl(videoId);
-      res.json({
-        videoId,
-        quality: "best",
-        mimeType: contentType,
-        streamUrl: `/api/yt-stream/${videoId}`,
-      });
+      const { stdout } = await execAsync(
+        `yt-dlp --print title --no-warnings --no-playlist "https://www.youtube.com/watch?v=${videoId}"`,
+        { timeout: 30000 }
+      );
+      const title = stdout.trim();
+      console.log(`[yt-dlp] probe ok for ${videoId}: "${title.slice(0, 60)}"`);
+      ytInfoCache.set(videoId, { ok: true, expires: Date.now() + 30 * 60 * 1000 }); // 30 min
+      res.json({ videoId, quality: "720p", mimeType: "video/mp4", streamUrl: `/api/yt-stream/${videoId}` });
     } catch (e: any) {
-      console.error(`[yt-dlp] failed for ${videoId}:`, e.message);
-      res.status(503).json({ message: e.message });
+      console.error(`[yt-dlp] probe failed for ${videoId}:`, e.message?.slice(0, 200));
+      ytInfoCache.set(videoId, { ok: false, expires: Date.now() + 5 * 60 * 1000 }); // 5 min negative cache
+      res.status(503).json({ message: "Video unavailable" });
     }
   });
 
-  // Proxies the video stream — browser only ever talks to our domain
-  app.get("/api/yt-stream/:videoId", async (req: any, res: any) => {
+  // Stream handler: spawns yt-dlp, pipes stdout directly to the browser.
+  // No URL caching, no second HTTP request — same process handles everything.
+  app.get("/api/yt-stream/:videoId", (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
-    try {
-      const { url, contentType } = await getYtStreamUrl(videoId);
+    const { spawn } = require("child_process");
 
-      const upstreamHeaders: Record<string, string> = { "User-Agent": YT_UA };
-      if (req.headers["range"]) upstreamHeaders["Range"] = req.headers["range"] as string;
+    // Format selector: prefer combined (progressive) streams first — these are
+    // passed through as-is with moov atom at the start, allowing instant playback.
+    // Fallback to DASH (bestvideo+bestaudio) which ffmpeg merges into frag MP4.
+    const fmt = [
+      "best[height<=720][ext=mp4]",
+      "best[ext=mp4][height<=480]",
+      "best[ext=mp4]",
+      "bestvideo[height<=720][vcodec^=avc1]+bestaudio[acodec^=mp4a]",
+      "bestvideo[height<=720]+bestaudio",
+      "bestvideo+bestaudio",
+      "best",
+    ].join("/");
 
-      console.log(`[yt-stream] fetching ${videoId} range="${req.headers["range"] || "none"}"`);
-      const upstream = await fetch(url, { headers: upstreamHeaders, redirect: "follow" });
+    const args = [
+      "-f", fmt,
+      "--merge-output-format", "mp4",
+      // fragmented MP4: moov at front so browser can start playing before download finishes
+      "--postprocessor-args", "Merger:-movflags frag_keyframe+empty_moov+default_base_minfrag",
+      "--no-warnings",
+      "--no-playlist",
+      "-o", "-",
+      `https://www.youtube.com/watch?v=${videoId}`,
+    ];
 
-      const upstreamCT = upstream.headers.get("content-type") || contentType;
-      console.log(`[yt-stream] upstream status=${upstream.status} ct="${upstreamCT}"`);
+    console.log(`[yt-stream] spawning yt-dlp pipe for ${videoId}`);
+    const proc = spawn("yt-dlp", args, { stdio: ["ignore", "pipe", "pipe"] });
 
-      // If the cached URL expired (403/401), clear and return 502 so browser retries
-      if (upstream.status === 403 || upstream.status === 401 || upstream.status === 410) {
-        ytUrlCache.delete(videoId);
-        console.error(`[yt-stream] URL expired for ${videoId} (${upstream.status}), cache cleared`);
-        if (!res.headersSent) res.status(502).json({ message: "Stream URL expired — please retry" });
-        return;
-      }
+    res.setHeader("Content-Type", "video/mp4");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Transfer-Encoding", "chunked");
 
-      res.setHeader("Content-Type", upstreamCT);
-      res.setHeader("Accept-Ranges", "bytes");
-      res.setHeader("Cache-Control", "no-cache");
-      if (upstream.headers.get("content-length")) res.setHeader("Content-Length", upstream.headers.get("content-length")!);
-      if (upstream.headers.get("content-range")) res.setHeader("Content-Range", upstream.headers.get("content-range")!);
-      res.status(upstream.status);
+    let started = false;
+    proc.stdout.on("data", (chunk: Buffer) => {
+      if (!started) { started = true; console.log(`[yt-stream] first bytes for ${videoId}`); }
+      if (!res.writableEnded) res.write(chunk);
+    });
 
-      if (!upstream.body) { res.end(); return; }
-      const { Readable } = await import("node:stream");
-      const nodeStream = Readable.fromWeb(upstream.body as any);
-      nodeStream.pipe(res);
-      req.on("close", () => nodeStream.destroy());
-    } catch (e: any) {
-      console.error("[yt-stream] error:", e.message);
+    proc.stderr.on("data", (d: Buffer) => {
+      const line = d.toString().trim();
+      if (line && !line.startsWith("[debug]")) console.log(`[yt-dlp] ${videoId}: ${line.slice(0, 200)}`);
+    });
+
+    proc.on("error", (e: Error) => {
+      console.error(`[yt-stream] spawn error for ${videoId}:`, e.message);
       if (!res.headersSent) res.status(502).json({ message: e.message });
-    }
+      else if (!res.writableEnded) res.end();
+    });
+
+    proc.on("close", (code: number | null) => {
+      console.log(`[yt-stream] yt-dlp done for ${videoId}, exit=${code}`);
+      if (!res.writableEnded) res.end();
+    });
+
+    req.on("close", () => {
+      console.log(`[yt-stream] client closed for ${videoId}, killing yt-dlp`);
+      proc.kill("SIGTERM");
+    });
   });
 
   app.get("/api/yt-embed/:videoId", async (req: any, res: any) => {
