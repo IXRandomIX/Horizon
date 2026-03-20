@@ -1601,75 +1601,92 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 })();
 </script>`;
 
-  // ── Invidious-proxied video streaming ────────────────────────────────────────
-  // Preferred itags: 22=720p MP4, 18=360p MP4, 43=360p WebM, 17=144p 3gp
-  const ITAGS = [22, 18, 43, 17];
+  // ── yt-dlp video streaming (most reliable — handles YouTube auth/signing) ────
+  // Cache: videoId → { url, contentType, expires }
+  const ytUrlCache = new Map<string, { url: string; contentType: string; expires: number }>();
 
-  // Cache which (instance, itag) pair works for each videoId
-  const streamRouteCache = new Map<string, { instance: string; itag: number; contentType: string; expires: number }>();
-
-  async function findStreamRoute(videoId: string): Promise<{ instance: string; itag: number; contentType: string }> {
-    const cached = streamRouteCache.get(videoId);
-    if (cached && Date.now() < cached.expires) return cached;
-
-    for (const instance of INVIDIOUS_INSTANCES) {
-      for (const itag of ITAGS) {
-        try {
-          const proxyUrl = `${instance}/latest_version?id=${videoId}&itag=${itag}&local=true`;
-          const probe = await fetch(proxyUrl, {
-            headers: { "User-Agent": YT_UA, "Range": "bytes=0-0" },
-            signal: AbortSignal.timeout(7000),
-            redirect: "follow",
-          });
-          const ct = probe.headers.get("content-type") || "";
-          console.log(`[yt-probe] ${instance} itag=${itag} status=${probe.status} ct="${ct}"`);
-          // Must be a real video response, not an HTML error page
-          if ((probe.ok || probe.status === 206) && ct.startsWith("video/")) {
-            // Drain the 1-byte probe body to free the connection
-            await probe.body?.cancel();
-            const entry = { instance, itag, contentType: ct, expires: Date.now() + 20 * 60 * 1000 };
-            streamRouteCache.set(videoId, entry);
-            console.log(`[yt-stream] found route: ${instance} itag=${itag} ct="${ct}" for ${videoId}`);
-            return entry;
-          }
-          await probe.body?.cancel();
-        } catch (e: any) {
-          console.log(`[yt-probe] ${instance} itag=${itag} error: ${e.message}`);
-        }
-      }
+  async function getYtStreamUrl(videoId: string): Promise<{ url: string; contentType: string }> {
+    const cached = ytUrlCache.get(videoId);
+    if (cached && Date.now() < cached.expires) {
+      console.log(`[yt-dlp] cache hit for ${videoId}`);
+      return cached;
     }
-    throw new Error("Video not streamable via any available proxy");
+
+    const { exec } = await import("child_process");
+    const { promisify } = await import("util");
+    const execAsync = promisify(exec);
+
+    // IMPORTANT: Never use bestvideo+bestaudio (DASH) — that yields two separate URLs which
+    // HTML5 <video> can't play without MSE. Only pick combined single-file formats.
+    // itag 22 = 720p MP4 combined, itag 18 = 360p MP4 combined (most reliable)
+    const fmt = "best[height<=720][ext=mp4]/best[ext=mp4][height<=480]/best[ext=mp4]/best[ext=webm]/best";
+    const cmd = `yt-dlp --get-url --format "${fmt}" --no-warnings --no-playlist "https://www.youtube.com/watch?v=${videoId}"`;
+    console.log(`[yt-dlp] extracting URL for ${videoId}...`);
+
+    const { stdout, stderr } = await execAsync(cmd, { timeout: 45000 });
+    if (stderr) console.log(`[yt-dlp] stderr: ${stderr.trim().slice(0, 200)}`);
+
+    const lines = stdout.trim().split("\n").filter(Boolean);
+    if (!lines.length) throw new Error("yt-dlp returned no URLs");
+
+    const url = lines[0].trim();
+    console.log(`[yt-dlp] got URL for ${videoId} (${lines.length} line(s)): ${url.slice(0, 100)}...`);
+
+    if (lines.length > 1) {
+      // Shouldn't happen with our format selector, but log if it does
+      console.error(`[yt-dlp] WARNING: got ${lines.length} URLs (DASH?) for ${videoId} — only using first`);
+    }
+
+    // Detect content type from URL mime parameter or default to mp4
+    const isMp4 = !url.includes("mime=video%2Fwebm") && !url.includes("mime=video/webm");
+    const contentType = isMp4 ? "video/mp4" : "video/webm";
+
+    const entry = { url, contentType, expires: Date.now() + 3 * 60 * 60 * 1000 }; // 3 hours
+    ytUrlCache.set(videoId, entry);
+    return entry;
   }
 
   // Returns whether a stream is available for a video (used by frontend to decide HTML5 vs error)
   app.get("/api/yt-video-info/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     try {
-      const { instance, itag } = await findStreamRoute(videoId);
+      const { contentType } = await getYtStreamUrl(videoId);
       res.json({
         videoId,
-        quality: itag === 22 ? "720p" : "360p",
-        mimeType: itag === 43 ? "video/webm" : "video/mp4",
+        quality: "best",
+        mimeType: contentType,
         streamUrl: `/api/yt-stream/${videoId}`,
       });
     } catch (e: any) {
+      console.error(`[yt-dlp] failed for ${videoId}:`, e.message);
       res.status(503).json({ message: e.message });
     }
   });
 
-  // Proxies the video stream through the selected Invidious instance with Range support
+  // Proxies the video stream — browser only ever talks to our domain
   app.get("/api/yt-stream/:videoId", async (req: any, res: any) => {
     const videoId = req.params.videoId.replace(/[^a-zA-Z0-9_-]/g, "");
     try {
-      const { instance, itag } = await findStreamRoute(videoId);
-      const proxyUrl = `${instance}/latest_version?id=${videoId}&itag=${itag}&local=true`;
+      const { url, contentType } = await getYtStreamUrl(videoId);
 
       const upstreamHeaders: Record<string, string> = { "User-Agent": YT_UA };
-      if (req.headers["range"]) upstreamHeaders["Range"] = req.headers["range"];
+      if (req.headers["range"]) upstreamHeaders["Range"] = req.headers["range"] as string;
 
-      const upstream = await fetch(proxyUrl, { headers: upstreamHeaders, signal: AbortSignal.timeout(30000) });
+      console.log(`[yt-stream] fetching ${videoId} range="${req.headers["range"] || "none"}"`);
+      const upstream = await fetch(url, { headers: upstreamHeaders, redirect: "follow" });
 
-      res.setHeader("Content-Type", itag === 43 ? "video/webm" : "video/mp4");
+      const upstreamCT = upstream.headers.get("content-type") || contentType;
+      console.log(`[yt-stream] upstream status=${upstream.status} ct="${upstreamCT}"`);
+
+      // If the cached URL expired (403/401), clear and return 502 so browser retries
+      if (upstream.status === 403 || upstream.status === 401 || upstream.status === 410) {
+        ytUrlCache.delete(videoId);
+        console.error(`[yt-stream] URL expired for ${videoId} (${upstream.status}), cache cleared`);
+        if (!res.headersSent) res.status(502).json({ message: "Stream URL expired — please retry" });
+        return;
+      }
+
+      res.setHeader("Content-Type", upstreamCT);
       res.setHeader("Accept-Ranges", "bytes");
       res.setHeader("Cache-Control", "no-cache");
       if (upstream.headers.get("content-length")) res.setHeader("Content-Length", upstream.headers.get("content-length")!);

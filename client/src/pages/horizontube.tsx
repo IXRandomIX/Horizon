@@ -254,6 +254,7 @@ function HScrollSection({ title, icon, videos, isLoading, onVideoClick, onChanne
 function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [streamReady, setStreamReady] = useState<"loading" | "ok" | "error">("loading");
+  const [retryCount, setRetryCount] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const isShort = video.duration !== null && video.duration <= 180;
@@ -276,7 +277,7 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
-  // Check if stream is accessible before committing
+  // Check if stream is accessible before committing; re-runs on retry
   useEffect(() => {
     let cancelled = false;
     setStreamReady("loading");
@@ -287,7 +288,7 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
       })
       .catch(() => { if (!cancelled) setStreamReady("error"); });
     return () => { cancelled = true; };
-  }, [video.id]);
+  }, [video.id, retryCount]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -319,13 +320,24 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
           {streamReady === "ok" && (
             <video
               ref={videoRef}
-              src={streamSrc}
+              src={`${streamSrc}?r=${retryCount}`}
               autoPlay
               controls
               controlsList="nodownload"
               className="w-full h-full bg-black"
               data-testid="video-yt-player"
-              onError={() => setStreamReady("error")}
+              onError={(e) => {
+                const vid = e.currentTarget;
+                const code = vid.error?.code;
+                const msg = vid.error?.message;
+                console.error(`[video-error] code=${code} msg="${msg}" retry=${retryCount}`);
+                // Auto-retry up to 2 times (each retry re-probes the server for a fresh route)
+                if (retryCount < 2) {
+                  setRetryCount(c => c + 1);
+                } else {
+                  setStreamReady("error");
+                }
+              }}
             />
           )}
 
@@ -338,15 +350,24 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
                 <p className="text-white font-semibold text-sm mb-1">Stream Unavailable</p>
                 <p className="text-white/40 text-xs max-w-xs">This video couldn't be loaded through the proxy. You can watch it directly on YouTube.</p>
               </div>
-              <a
-                href={`https://www.youtube.com/watch?v=${video.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                data-testid="link-watch-on-youtube"
-                className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
-              >
-                Watch on YouTube
-              </a>
+              <div className="flex items-center gap-3">
+                <button
+                  data-testid="button-retry-stream"
+                  onClick={() => { setRetryCount(0); setStreamReady("loading"); }}
+                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Try Again
+                </button>
+                <a
+                  href={`https://www.youtube.com/watch?v=${video.id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  data-testid="link-watch-on-youtube"
+                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+                >
+                  Watch on YouTube
+                </a>
+              </div>
             </div>
           )}
         </div>

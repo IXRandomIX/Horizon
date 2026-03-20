@@ -45,6 +45,15 @@
 - `global_messages` — Global Inbox posts
 - `proxies`, `pages`
 
+### HorizonTube Video Streaming
+- **Architecture**: yt-dlp (server-side) → extract signed YouTube CDN URL → proxy all bytes through `/api/yt-stream/:videoId` → HTML5 `<video>` tag
+- **Content-blocker bypass**: Browser only contacts the app's own domain. YouTube/googlevideo.com URLs are never exposed to the browser.
+- **yt-dlp** is installed as a system dependency. It handles all YouTube auth/signing.
+- Format selector: `best[height<=720][ext=mp4]/best[ext=mp4]/...` — always picks a single combined (progressive) URL, never DASH (which would require two URLs).
+- Stream URLs cached 3 hours; on 403/410 the cache is cleared and the browser auto-retries.
+- Frontend retries up to 2 times automatically on video error before showing error UI.
+- **Do NOT revert to Invidious `/latest_version` or youtubei.js** — both have proven unreliable.
+
 ## Running
 ```
 npm run dev       # Start dev server (port 5000)
