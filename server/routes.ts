@@ -1370,10 +1370,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   function injectPopupBlocker(html: string, pageOrigin: string): string {
     const script = `<script>(function(){
-window.open=function(){return null;};
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});}catch(e){}
+var _wo=window.open.bind(window);
+window.open=function(url,name,features){
+  var u=url?String(url):'';
+  if(!u||u===''||u==='about:blank'||u.startsWith('javascript:'))return _wo(url,name,features);
+  return null;
+};
 document.addEventListener('click',function(e){var a=e.target.closest('a');if(a&&(a.target==="_blank"||a.target==="_new")){e.preventDefault();e.stopPropagation();}},true);
 }());</script><base href="${pageOrigin}/">`;
     if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);

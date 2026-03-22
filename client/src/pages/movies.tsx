@@ -48,8 +48,7 @@ function getYear(m: Media) {
 }
 
 function getEmbedUrl(m: Media) {
-  const slug = getTitle(m).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  return `https://bcine.app/${m.media_type}/${m.id}-${slug}`;
+  return `/api/movies/embed?type=${m.media_type}&id=${m.id}&title=${encodeURIComponent(getTitle(m))}`;
 }
 
 function saveToHistory(m: Media) {
