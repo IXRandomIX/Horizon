@@ -49,14 +49,13 @@ function getYear(m: Media) {
 }
 
 const SOURCES = [
-  { label: "Source 1", movie: (id: number) => `https://vidsrc.me/embed/movie?tmdb=${id}`, tv: (id: number) => `https://vidsrc.me/embed/tv?tmdb=${id}` },
-  { label: "Source 2", movie: (id: number) => `https://multiembed.mov/?video_id=${id}&tmdb=1`, tv: (id: number) => `https://multiembed.mov/?video_id=${id}&tmdb=1&s=1&e=1` },
-  { label: "Source 3", movie: (id: number) => `https://www.2embed.cc/embed/${id}`, tv: (id: number) => `https://www.2embed.cc/embedtv/${id}&s=1&e=1` },
+  { label: "Source 1" },
+  { label: "Source 2" },
+  { label: "Source 3" },
 ];
 
 function getEmbedUrl(m: Media, sourceIdx: number) {
-  const src = SOURCES[sourceIdx] ?? SOURCES[0];
-  return m.media_type === "tv" ? src.tv(m.id) : src.movie(m.id);
+  return `/api/movies/embed?type=${m.media_type}&id=${m.id}&src=${sourceIdx}`;
 }
 
 function saveToHistory(m: Media) {

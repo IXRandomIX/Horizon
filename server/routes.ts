@@ -1356,6 +1356,124 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  // ── Movie Embed Proxy ─────────────────────────────────────────────────────
+  const EMBED_SOURCES = [
+    {
+      movie: (id: string) => `https://vidsrc.me/embed/movie?tmdb=${id}`,
+      tv:    (id: string) => `https://vidsrc.me/embed/tv?tmdb=${id}`,
+    },
+    {
+      movie: (id: string) => `https://multiembed.mov/?video_id=${id}&tmdb=1`,
+      tv:    (id: string) => `https://multiembed.mov/?video_id=${id}&tmdb=1&s=1&e=1`,
+    },
+    {
+      movie: (id: string) => `https://www.2embed.cc/embed/${id}`,
+      tv:    (id: string) => `https://www.2embed.cc/embedtv/${id}&s=1&e=1`,
+    },
+  ];
+
+  const RELAY_BASE = "/api/movies/relay?url=";
+
+  function rewriteHtml(html: string, pageOrigin: string): string {
+    const interceptor = `<script>(function(){
+var R='/api/movies/relay?url=';
+function ru(u){
+  if(!u||typeof u!=='string')return u;
+  if(u.startsWith('blob:')||u.startsWith('data:')||u.startsWith('#')||u.startsWith('javascript:'))return u;
+  if(u.startsWith('//')){ u='https:'+u; }
+  if(u.startsWith('http')){return R+encodeURIComponent(u);}
+  return u;
+}
+var oF=window.fetch;
+window.fetch=function(u,o){try{u=ru(typeof u==='string'?u:u instanceof Request?u.url:u);}catch(e){}return oF(u,o);};
+var oX=XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open=function(m,u){u=ru(String(u));return oX.apply(this,[m,u].concat(Array.prototype.slice.call(arguments,2)));};
+window.open=function(){return null;};
+}());</script>`;
+    const base = `<base href="${pageOrigin}/">`;
+    if (/<head[^>]*>/i.test(html)) {
+      html = html.replace(/(<head[^>]*>)/i, `$1${base}${interceptor}`);
+    } else {
+      html = interceptor + html;
+    }
+    const rewrite = (url: string) => {
+      if (!url) return url;
+      if (url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("#") || url.startsWith("javascript:")) return url;
+      if (url.startsWith("//")) url = "https:" + url;
+      if (url.startsWith("http")) return RELAY_BASE + encodeURIComponent(url);
+      return url;
+    };
+    html = html.replace(/((?:src|href|action|data-src)=["'])([^"']+)(["'])/g, (m, pre, url, suf) => `${pre}${rewrite(url)}${suf}`);
+    return html;
+  }
+
+  app.get("/api/movies/relay", async (req, res) => {
+    const urlParam = req.query.url as string;
+    if (!urlParam) return res.status(400).send("Bad request");
+    let targetUrl: string;
+    try {
+      targetUrl = decodeURIComponent(urlParam);
+      if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) return res.status(400).send("Invalid URL");
+    } catch { return res.status(400).send("Invalid URL"); }
+    try {
+      const origin = new URL(targetUrl).origin;
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Referer": origin + "/",
+          "Origin": origin,
+          "Accept": "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        redirect: "follow",
+      });
+      const contentType = response.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("X-Frame-Options", "ALLOWALL");
+      res.removeHeader("Content-Security-Policy");
+      if (contentType.includes("text/html")) {
+        const html = await response.text();
+        const rewritten = rewriteHtml(html, new URL(response.url).origin);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.send(rewritten);
+      } else {
+        res.setHeader("Content-Type", contentType);
+        const buf = await response.arrayBuffer();
+        res.send(Buffer.from(buf));
+      }
+    } catch (e: any) {
+      res.status(502).send("Relay error: " + e.message);
+    }
+  });
+
+  app.get("/api/movies/embed", async (req, res) => {
+    const { type, id, src } = req.query as Record<string, string>;
+    if (!id) return res.status(400).send("Missing id");
+    const srcIdx = Math.min(parseInt(src || "0") || 0, EMBED_SOURCES.length - 1);
+    const source = EMBED_SOURCES[srcIdx];
+    const targetUrl = type === "tv" ? source.tv(id) : source.movie(id);
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        redirect: "follow",
+      });
+      const html = await response.text();
+      const pageOrigin = new URL(response.url).origin;
+      const rewritten = rewriteHtml(html, pageOrigin);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("X-Frame-Options", "ALLOWALL");
+      res.removeHeader("Content-Security-Policy");
+      res.send(rewritten);
+    } catch (e: any) {
+      res.status(502).send(`<html><body style="background:#000;color:#fff;font-family:sans-serif;padding:2rem"><h2>Source unavailable</h2><p>${e.message}</p><p>Try switching to another source.</p></body></html>`);
+    }
+  });
+
   // ── HorizonTube (YouTube Data API v3) ────────────────────────────────────
   const YT_API_KEY = process.env.YOUTUBE_API_KEY || "";
   const YT_API_BASE = "https://www.googleapis.com/youtube/v3";
