@@ -48,11 +48,15 @@ function getYear(m: Media) {
   return d ? d.substring(0, 4) : "";
 }
 
-function getEmbedUrl(m: Media) {
-  if (m.media_type === "tv") {
-    return `https://vidlink.pro/tv/${m.id}`;
-  }
-  return `https://vidlink.pro/movie/${m.id}`;
+const SOURCES = [
+  { label: "Source 1", movie: (id: number) => `https://vidsrc.me/embed/movie?tmdb=${id}`, tv: (id: number) => `https://vidsrc.me/embed/tv?tmdb=${id}` },
+  { label: "Source 2", movie: (id: number) => `https://multiembed.mov/?video_id=${id}&tmdb=1`, tv: (id: number) => `https://multiembed.mov/?video_id=${id}&tmdb=1&s=1&e=1` },
+  { label: "Source 3", movie: (id: number) => `https://www.2embed.cc/embed/${id}`, tv: (id: number) => `https://www.2embed.cc/embedtv/${id}&s=1&e=1` },
+];
+
+function getEmbedUrl(m: Media, sourceIdx: number) {
+  const src = SOURCES[sourceIdx] ?? SOURCES[0];
+  return m.media_type === "tv" ? src.tv(m.id) : src.movie(m.id);
 }
 
 function saveToHistory(m: Media) {
@@ -135,9 +139,10 @@ function isBlockedUrl(url: string): boolean {
 
 function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [sourceIdx, setSourceIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const url = getEmbedUrl(media);
+  const url = getEmbedUrl(media, sourceIdx);
 
   useEffect(() => {
     saveToHistory(media);
@@ -205,6 +210,20 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             <p className="text-white/40 text-xs">{getYear(media)} · {media.media_type === "tv" ? "TV Series" : "Movie"}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            {SOURCES.map((s, i) => (
+              <button
+                key={i}
+                data-testid={`button-source-${i}`}
+                onClick={() => setSourceIdx(i)}
+                className={`px-2 py-1 rounded text-[10px] font-bold transition-colors ${
+                  sourceIdx === i
+                    ? "bg-primary text-white"
+                    : "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
             <button
               data-testid="button-fullscreen"
               onClick={toggleFullscreen}
@@ -263,7 +282,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by VidLink</span>
+              <span className="text-[10px] text-white/30">{SOURCES[sourceIdx].label}</span>
             </div>
           </div>
         </div>
@@ -321,7 +340,7 @@ export default function MoviesPage() {
             <Film className="w-6 h-6 text-primary flex-shrink-0" />
             <div>
               <h1 className="text-xl font-black tracking-wide text-white">Movies</h1>
-              <p className="text-[11px] text-white/30 tracking-wider">Powered by VidLink</p>
+              <p className="text-[11px] text-white/30 tracking-wider">Multiple Sources Available</p>
             </div>
           </div>
           <div className="relative flex-1 max-w-md">
