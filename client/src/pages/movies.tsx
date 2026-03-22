@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p/w342";
 const TMDB_BACKDROP = "https://image.tmdb.org/t/p/w780";
@@ -120,16 +119,6 @@ function MediaCard({ m, onClick }: { m: Media; onClick: () => void }) {
   );
 }
 
-const BLOCKED_DOMAINS = ["youtube.com", "youtu.be", "www.youtube.com", "m.youtube.com"];
-
-function isBlockedUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return BLOCKED_DOMAINS.some(d => parsed.hostname === d || parsed.hostname.endsWith("." + d));
-  } catch {
-    return false;
-  }
-}
 
 function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -143,21 +132,8 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
 
   useEffect(() => {
     const origOpen = window.open;
-    window.open = (urlArg?: string | URL, ...rest: any[]) => {
-      const urlStr = urlArg ? String(urlArg) : "";
-      if (isBlockedUrl(urlStr)) return null;
-      return origOpen(urlArg as any, ...rest);
-    };
+    window.open = () => null;
     return () => { window.open = origOpen; };
-  }, []);
-
-  useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data && typeof e.data === "string" && isBlockedUrl(e.data)) return;
-      if (e.data && typeof e.data === "object" && e.data.url && isBlockedUrl(e.data.url)) return;
-    };
-    window.addEventListener("message", handler);
-    return () => window.removeEventListener("message", handler);
   }, []);
 
   useEffect(() => {
