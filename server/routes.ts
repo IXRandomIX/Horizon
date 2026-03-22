@@ -1359,16 +1359,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Movie Embed Proxy ─────────────────────────────────────────────────────
   const EMBED_SOURCES = [
     {
-      movie: (id: string) => `https://vidsrc.me/embed/movie?tmdb=${id}`,
-      tv:    (id: string) => `https://vidsrc.me/embed/tv?tmdb=${id}`,
-    },
-    {
-      movie: (id: string) => `https://multiembed.mov/?video_id=${id}&tmdb=1`,
-      tv:    (id: string) => `https://multiembed.mov/?video_id=${id}&tmdb=1&s=1&e=1`,
-    },
-    {
-      movie: (id: string) => `https://www.2embed.cc/embed/${id}`,
-      tv:    (id: string) => `https://www.2embed.cc/embedtv/${id}&s=1&e=1`,
+      url: (type: string, id: string, title: string) => {
+        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+        return `https://bcine.app/${type}/${id}-${slug}`;
+      },
     },
   ];
 
@@ -1376,6 +1370,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   function rewriteHtml(html: string, pageOrigin: string): string {
     const interceptor = `<script>(function(){
+try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
+try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
+try{if(window.frameElement){window.frameElement.removeAttribute('sandbox');}}catch(e){}
 var R='/api/movies/relay?url=';
 function ru(u){
   if(!u||typeof u!=='string')return u;
@@ -1447,11 +1444,10 @@ window.open=function(){return null;};
   });
 
   app.get("/api/movies/embed", async (req, res) => {
-    const { type, id, src } = req.query as Record<string, string>;
+    const { type, id, title = "" } = req.query as Record<string, string>;
     if (!id) return res.status(400).send("Missing id");
-    const srcIdx = Math.min(parseInt(src || "0") || 0, EMBED_SOURCES.length - 1);
-    const source = EMBED_SOURCES[srcIdx];
-    const targetUrl = type === "tv" ? source.tv(id) : source.movie(id);
+    const source = EMBED_SOURCES[0];
+    const targetUrl = source.url(type || "movie", id, title);
     try {
       const response = await fetch(targetUrl, {
         headers: {

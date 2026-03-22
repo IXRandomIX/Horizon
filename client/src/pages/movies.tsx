@@ -48,14 +48,9 @@ function getYear(m: Media) {
   return d ? d.substring(0, 4) : "";
 }
 
-const SOURCES = [
-  { label: "Source 1" },
-  { label: "Source 2" },
-  { label: "Source 3" },
-];
-
-function getEmbedUrl(m: Media, sourceIdx: number) {
-  return `/api/movies/embed?type=${m.media_type}&id=${m.id}&src=${sourceIdx}`;
+function getEmbedUrl(m: Media) {
+  const title = encodeURIComponent(m.title || m.name || "");
+  return `/api/movies/embed?type=${m.media_type}&id=${m.id}&title=${title}`;
 }
 
 function saveToHistory(m: Media) {
@@ -138,10 +133,9 @@ function isBlockedUrl(url: string): boolean {
 
 function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [sourceIdx, setSourceIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const url = getEmbedUrl(media, sourceIdx);
+  const url = getEmbedUrl(media);
 
   useEffect(() => {
     saveToHistory(media);
@@ -209,20 +203,6 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             <p className="text-white/40 text-xs">{getYear(media)} · {media.media_type === "tv" ? "TV Series" : "Movie"}</p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            {SOURCES.map((s, i) => (
-              <button
-                key={i}
-                data-testid={`button-source-${i}`}
-                onClick={() => setSourceIdx(i)}
-                className={`px-2 py-1 rounded text-[10px] font-bold transition-colors ${
-                  sourceIdx === i
-                    ? "bg-primary text-white"
-                    : "bg-white/10 text-white/50 hover:bg-white/20 hover:text-white"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
             <button
               data-testid="button-fullscreen"
               onClick={toggleFullscreen}
@@ -281,7 +261,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">{SOURCES[sourceIdx].label}</span>
+              <span className="text-[10px] text-white/30">Powered by bCine</span>
             </div>
           </div>
         </div>
@@ -339,7 +319,7 @@ export default function MoviesPage() {
             <Film className="w-6 h-6 text-primary flex-shrink-0" />
             <div>
               <h1 className="text-xl font-black tracking-wide text-white">Movies</h1>
-              <p className="text-[11px] text-white/30 tracking-wider">Multiple Sources Available</p>
+              <p className="text-[11px] text-white/30 tracking-wider">Powered by bCine</p>
             </div>
           </div>
           <div className="relative flex-1 max-w-md">
