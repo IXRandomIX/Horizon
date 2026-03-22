@@ -1377,9 +1377,17 @@ var _wo=window.open.bind(window);
 window.open=function(url,name,features){
   var u=url?String(url):'';
   if(!u||u===''||u==='about:blank'||u.startsWith('javascript:'))return _wo(url,name,features);
-  return null;
+  return _wo('/api/movies/relay?url='+encodeURIComponent(u),name,features);
 };
-document.addEventListener('click',function(e){var a=e.target.closest('a');if(a&&(a.target==="_blank"||a.target==="_new")){e.preventDefault();e.stopPropagation();}},true);
+document.addEventListener('click',function(e){
+  var a=e.target.closest('a');
+  if(!a)return;
+  var href=a.getAttribute('href')||'';
+  if(a.target==="_blank"||a.target==="_new"){
+    e.preventDefault();e.stopPropagation();
+    if(href&&href!==''&&!href.startsWith('javascript:'))_wo('/api/movies/relay?url='+encodeURIComponent(href.startsWith('http')?href:'${pageOrigin}'+href));
+  }
+},true);
 }());</script><base href="${pageOrigin}/">`;
     if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);
     return script + html;
