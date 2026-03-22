@@ -1368,40 +1368,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   const RELAY_BASE = "/api/movies/relay?url=";
 
-  function rewriteHtml(html: string, pageOrigin: string): string {
-    const interceptor = `<script>(function(){
+  function injectPopupBlocker(html: string, pageOrigin: string): string {
+    const script = `<script>(function(){
+window.open=function(){return null;};
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
-try{if(window.frameElement){window.frameElement.removeAttribute('sandbox');}}catch(e){}
-var R='/api/movies/relay?url=';
-function ru(u){
-  if(!u||typeof u!=='string')return u;
-  if(u.startsWith('blob:')||u.startsWith('data:')||u.startsWith('#')||u.startsWith('javascript:'))return u;
-  if(u.startsWith('//')){ u='https:'+u; }
-  if(u.startsWith('http')){return R+encodeURIComponent(u);}
-  return u;
-}
-var oF=window.fetch;
-window.fetch=function(u,o){try{u=ru(typeof u==='string'?u:u instanceof Request?u.url:u);}catch(e){}return oF(u,o);};
-var oX=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(m,u){u=ru(String(u));return oX.apply(this,[m,u].concat(Array.prototype.slice.call(arguments,2)));};
-window.open=function(){return null;};
-}());</script>`;
-    const base = `<base href="${pageOrigin}/">`;
-    if (/<head[^>]*>/i.test(html)) {
-      html = html.replace(/(<head[^>]*>)/i, `$1${base}${interceptor}`);
-    } else {
-      html = interceptor + html;
-    }
-    const rewrite = (url: string) => {
-      if (!url) return url;
-      if (url.startsWith("blob:") || url.startsWith("data:") || url.startsWith("#") || url.startsWith("javascript:")) return url;
-      if (url.startsWith("//")) url = "https:" + url;
-      if (url.startsWith("http")) return RELAY_BASE + encodeURIComponent(url);
-      return url;
-    };
-    html = html.replace(/((?:src|href|action|data-src)=["'])([^"']+)(["'])/g, (m, pre, url, suf) => `${pre}${rewrite(url)}${suf}`);
-    return html;
+document.addEventListener('click',function(e){var a=e.target.closest('a');if(a&&(a.target==="_blank"||a.target==="_new")){e.preventDefault();e.stopPropagation();}},true);
+}());</script><base href="${pageOrigin}/">`;
+    if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);
+    return script + html;
   }
 
   app.get("/api/movies/relay", async (req, res) => {
@@ -1430,7 +1405,7 @@ window.open=function(){return null;};
       res.removeHeader("Content-Security-Policy");
       if (contentType.includes("text/html")) {
         const html = await response.text();
-        const rewritten = rewriteHtml(html, new URL(response.url).origin);
+        const rewritten = injectPopupBlocker(html, new URL(response.url).origin);
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.send(rewritten);
       } else {
@@ -1459,7 +1434,7 @@ window.open=function(){return null;};
       });
       const html = await response.text();
       const pageOrigin = new URL(response.url).origin;
-      const rewritten = rewriteHtml(html, pageOrigin);
+      const rewritten = injectPopupBlocker(html, pageOrigin);
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("X-Frame-Options", "ALLOWALL");
