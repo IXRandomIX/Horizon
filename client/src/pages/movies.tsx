@@ -49,10 +49,8 @@ function getYear(m: Media) {
 }
 
 function getEmbedUrl(m: Media) {
-  if (m.media_type === "tv") {
-    return `https://embed.su/embed/tv/${m.id}`;
-  }
-  return `https://embed.su/embed/movie/${m.id}`;
+  const slug = getTitle(m).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `https://bcine.app/${m.media_type}/${m.id}-${slug}`;
 }
 
 function saveToHistory(m: Media) {
@@ -264,7 +262,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by embed.su</span>
+              <span className="text-[10px] text-white/30">Powered by bCine</span>
             </div>
           </div>
         </div>
@@ -322,7 +320,7 @@ export default function MoviesPage() {
             <Film className="w-6 h-6 text-primary flex-shrink-0" />
             <div>
               <h1 className="text-xl font-black tracking-wide text-white">Movies</h1>
-              <p className="text-[11px] text-white/30 tracking-wider">Powered by embed.su</p>
+              <p className="text-[11px] text-white/30 tracking-wider">Powered by bCine</p>
             </div>
           </div>
           <div className="relative flex-1 max-w-md">
