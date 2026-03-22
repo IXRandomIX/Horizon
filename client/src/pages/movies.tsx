@@ -236,7 +236,6 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
             allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-fullscreen allow-presentation"
             data-testid="iframe-player"
           />
         </div>
