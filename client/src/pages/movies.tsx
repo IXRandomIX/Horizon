@@ -50,9 +50,9 @@ function getYear(m: Media) {
 
 function getEmbedUrl(m: Media) {
   if (m.media_type === "tv") {
-    return `https://vidsrc.to/embed/tv/${m.id}`;
+    return `https://embed.su/embed/tv/${m.id}`;
   }
-  return `https://vidsrc.to/embed/movie/${m.id}`;
+  return `https://embed.su/embed/movie/${m.id}`;
 }
 
 function saveToHistory(m: Media) {
@@ -237,9 +237,8 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             title={getTitle(media)}
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
-            allow="fullscreen; autoplay; encrypted-media"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-fullscreen"
-            referrerPolicy="no-referrer"
+            allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-fullscreen allow-presentation"
             data-testid="iframe-player"
           />
         </div>
@@ -265,7 +264,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by VidSrc</span>
+              <span className="text-[10px] text-white/30">Powered by embed.su</span>
             </div>
           </div>
         </div>
@@ -323,7 +322,7 @@ export default function MoviesPage() {
             <Film className="w-6 h-6 text-primary flex-shrink-0" />
             <div>
               <h1 className="text-xl font-black tracking-wide text-white">Movies</h1>
-              <p className="text-[11px] text-white/30 tracking-wider">Powered by VidSrc</p>
+              <p className="text-[11px] text-white/30 tracking-wider">Powered by embed.su</p>
             </div>
           </div>
           <div className="relative flex-1 max-w-md">
