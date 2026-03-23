@@ -62,9 +62,9 @@ function getEmbedUrl(m: Media, season?: number, episode?: number) {
   if (m.media_type === "tv") {
     const s = season || 1;
     const e = episode || 1;
-    return `https://multiembed.mov/?video_id=${m.id}&tmdb=1&s=${s}&e=${e}`;
+    return `/api/movies/embed?type=tv&id=${m.id}&s=${s}&e=${e}`;
   }
-  return `https://multiembed.mov/?video_id=${m.id}&tmdb=1`;
+  return `/api/movies/embed?type=movie&id=${m.id}`;
 }
 
 function saveToHistory(m: Media) {

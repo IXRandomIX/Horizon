@@ -1441,31 +1441,65 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     },
   ];
 
-  const RELAY_BASE = "/api/movies/relay?url=";
+  const RELAY_SELF = "/api/movies/relay?url=";
 
-  function injectPopupBlocker(html: string, pageOrigin: string): string {
+  function rewriteUrls(html: string, pageOrigin: string): string {
+    // Rewrite absolute URLs in src/href/action/data attributes to go through relay
+    return html
+      .replace(/(src|href|action|data-src)=(["'])(https?:\/\/[^"' >]+)\2/gi, (_m, attr, q, url) => {
+        return `${attr}=${q}${RELAY_SELF}${encodeURIComponent(url)}${q}`;
+      })
+      .replace(/url\((["']?)(https?:\/\/[^)"' ]+)\1\)/gi, (_m, q, url) => {
+        return `url(${q}${RELAY_SELF}${encodeURIComponent(url)}${q})`;
+      });
+  }
+
+  function injectNetworkProxy(html: string, pageOrigin: string): string {
     const script = `<script>(function(){
+var _relay='/api/movies/relay?url=';
+function relay(u){return typeof u==='string'&&(u.startsWith('http://')||u.startsWith('https://'))?_relay+encodeURIComponent(u):u;}
+/* Sandbox top/parent/frameElement */
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});}catch(e){}
-var _wo=window.open.bind(window);
-window.open=function(url,name,features){
-  var u=url?String(url):'';
-  if(!u||u===''||u==='about:blank'||u.startsWith('javascript:'))return _wo(url,name,features);
-  return _wo('/api/movies/relay?url='+encodeURIComponent(u),name,features);
+/* Block popups */
+window.open=function(){return null;};
+/* Proxy fetch */
+var _fetch=window.fetch.bind(window);
+window.fetch=function(input,init){
+  if(typeof input==='string')input=relay(input);
+  else if(input&&input.url){var r=new Request(relay(input.url),input);input=r;}
+  return _fetch(input,init);
 };
-document.addEventListener('click',function(e){
-  var a=e.target.closest('a');
-  if(!a)return;
-  var href=a.getAttribute('href')||'';
-  if(a.target==="_blank"||a.target==="_new"){
-    e.preventDefault();e.stopPropagation();
-    if(href&&href!==''&&!href.startsWith('javascript:'))_wo('/api/movies/relay?url='+encodeURIComponent(href.startsWith('http')?href:'${pageOrigin}'+href));
+/* Proxy XHR */
+var _XHRopen=XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open=function(m,u){
+  var args=Array.prototype.slice.call(arguments);
+  args[1]=relay(args[1]);
+  return _XHRopen.apply(this,args);
+};
+/* Rewrite dynamic script/link insertion */
+var _createElement=document.createElement.bind(document);
+document.createElement=function(tag){
+  var el=_createElement(tag);
+  if(tag.toLowerCase()==='script'||tag.toLowerCase()==='link'||tag.toLowerCase()==='img'||tag.toLowerCase()==='iframe'){
+    var desc=Object.getOwnPropertyDescriptor(el.__proto__,'src')||Object.getOwnPropertyDescriptor(HTMLElement.prototype,'src');
+    if(desc){
+      Object.defineProperty(el,'src',{
+        set:function(v){Object.getOwnPropertyDescriptor(el.__proto__,'src')?Object.getOwnPropertyDescriptor(el.__proto__,'src').set.call(el,relay(v)):el.setAttribute('src',relay(v));},
+        get:function(){return el.getAttribute('src');}
+      });
+    }
   }
-},true);
+  return el;
+};
 }());</script><base href="${pageOrigin}/">`;
     if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);
     return script + html;
+  }
+
+  function injectPopupBlocker(html: string, pageOrigin: string): string {
+    return injectNetworkProxy(rewriteUrls(html, pageOrigin), pageOrigin);
   }
 
   app.get("/api/movies/relay", async (req, res) => {
@@ -1507,15 +1541,39 @@ document.addEventListener('click',function(e){
     }
   });
 
-  app.get("/api/movies/embed", (req, res) => {
+  app.get("/api/movies/embed", async (req, res) => {
     const { type, id, s, e } = req.query as Record<string, string>;
     if (!id) return res.status(400).send("Missing id");
-    if (type === "tv" && s && e) {
-      res.redirect(302, `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`);
-    } else if (type === "tv") {
-      res.redirect(302, `https://multiembed.mov/?video_id=${id}&tmdb=1&s=1&e=1`);
+    let targetUrl: string;
+    if (type === "tv") {
+      const season = s || "1";
+      const episode = e || "1";
+      targetUrl = `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${season}&e=${episode}`;
     } else {
-      res.redirect(302, `https://multiembed.mov/?video_id=${id}&tmdb=1`);
+      targetUrl = `https://multiembed.mov/?video_id=${id}&tmdb=1`;
+    }
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "identity",
+        },
+        redirect: "follow",
+      });
+      const finalUrl = response.url;
+      const pageOrigin = new URL(finalUrl).origin;
+      const html = await response.text();
+      const rewritten = injectPopupBlocker(html, pageOrigin);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("X-Frame-Options", "ALLOWALL");
+      res.removeHeader("Content-Security-Policy");
+      res.removeHeader("X-Content-Type-Options");
+      res.send(rewritten);
+    } catch (e: any) {
+      res.status(502).send(`<html><body style="background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="color:#a855f7">Unable to load player</h2><p style="color:#888">${e.message}</p></div></body></html>`);
     }
   });
 
