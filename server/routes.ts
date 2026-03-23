@@ -1441,52 +1441,21 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
   }
 
-  function injectNetworkProxy(html: string, pageOrigin: string): string {
+  function injectSafeProxy(html: string, pageOrigin: string): string {
+    // Only inject a lightweight script: block popups and sandbox frame references.
+    // Avoid overriding document.createElement or anything that loops — those crash the tab.
     const script = `<script>(function(){
-var _relay='/api/movies/relay?url=';
-function relay(u){return typeof u==='string'&&(u.startsWith('http://')||u.startsWith('https://'))?_relay+encodeURIComponent(u):u;}
-/* Sandbox top/parent/frameElement */
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});}catch(e){}
-/* Block popups */
 window.open=function(){return null;};
-/* Proxy fetch */
-var _fetch=window.fetch.bind(window);
-window.fetch=function(input,init){
-  if(typeof input==='string')input=relay(input);
-  else if(input&&input.url){var r=new Request(relay(input.url),input);input=r;}
-  return _fetch(input,init);
-};
-/* Proxy XHR */
-var _XHRopen=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(m,u){
-  var args=Array.prototype.slice.call(arguments);
-  args[1]=relay(args[1]);
-  return _XHRopen.apply(this,args);
-};
-/* Rewrite dynamic script/link insertion */
-var _createElement=document.createElement.bind(document);
-document.createElement=function(tag){
-  var el=_createElement(tag);
-  if(tag.toLowerCase()==='script'||tag.toLowerCase()==='link'||tag.toLowerCase()==='img'||tag.toLowerCase()==='iframe'){
-    var desc=Object.getOwnPropertyDescriptor(el.__proto__,'src')||Object.getOwnPropertyDescriptor(HTMLElement.prototype,'src');
-    if(desc){
-      Object.defineProperty(el,'src',{
-        set:function(v){Object.getOwnPropertyDescriptor(el.__proto__,'src')?Object.getOwnPropertyDescriptor(el.__proto__,'src').set.call(el,relay(v)):el.setAttribute('src',relay(v));},
-        get:function(){return el.getAttribute('src');}
-      });
-    }
-  }
-  return el;
-};
 }());</script><base href="${pageOrigin}/">`;
     if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);
     return script + html;
   }
 
   function injectPopupBlocker(html: string, pageOrigin: string): string {
-    return injectNetworkProxy(rewriteUrls(html, pageOrigin), pageOrigin);
+    return injectSafeProxy(rewriteUrls(html, pageOrigin), pageOrigin);
   }
 
   app.get("/api/movies/relay", async (req, res) => {
