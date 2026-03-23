@@ -62,9 +62,9 @@ function getEmbedUrl(m: Media, season?: number, episode?: number) {
   if (m.media_type === "tv") {
     const s = season || 1;
     const e = episode || 1;
-    return `/api/movies/embed?type=tv&id=${m.id}&s=${s}&e=${e}`;
+    return `https://vidsrc.to/embed/tv/${m.id}/${s}/${e}`;
   }
-  return `/api/movies/embed?type=movie&id=${m.id}`;
+  return `https://vidsrc.to/embed/movie/${m.id}`;
 }
 
 function saveToHistory(m: Media) {
@@ -315,6 +315,8 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
             allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+            referrerPolicy="no-referrer"
             data-testid="iframe-player"
           />
         </div>
@@ -340,7 +342,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by multiembed · HLS streaming</span>
+              <span className="text-[10px] text-white/30">Powered by vidsrc</span>
             </div>
           </div>
         </div>
