@@ -1340,16 +1340,91 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
+  app.get("/api/movies/category/movies", async (req, res) => {
+    const page = req.query.page || 1;
+    try {
+      const [trending, popular, topRated, nowPlaying] = await Promise.all([
+        tmdbFetch(`/trending/movie/week?api_key=${TMDB_KEY}&page=${page}`),
+        tmdbFetch(`/movie/popular?api_key=${TMDB_KEY}&page=${page}`),
+        tmdbFetch(`/movie/top_rated?api_key=${TMDB_KEY}&page=${page}`),
+        tmdbFetch(`/movie/now_playing?api_key=${TMDB_KEY}&page=1`),
+      ]);
+      res.json({
+        trending: trending.results.map((m: any) => ({ ...m, media_type: "movie" })),
+        popular: popular.results.map((m: any) => ({ ...m, media_type: "movie" })),
+        topRated: topRated.results.map((m: any) => ({ ...m, media_type: "movie" })),
+        nowPlaying: nowPlaying.results.map((m: any) => ({ ...m, media_type: "movie" })),
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/movies/category/shows", async (req, res) => {
+    const page = req.query.page || 1;
+    try {
+      const [trending, popular, topRated, onAir] = await Promise.all([
+        tmdbFetch(`/trending/tv/week?api_key=${TMDB_KEY}&page=${page}`),
+        tmdbFetch(`/tv/popular?api_key=${TMDB_KEY}&page=${page}`),
+        tmdbFetch(`/tv/top_rated?api_key=${TMDB_KEY}&page=${page}`),
+        tmdbFetch(`/tv/on_the_air?api_key=${TMDB_KEY}&page=1`),
+      ]);
+      res.json({
+        trending: trending.results.map((m: any) => ({ ...m, media_type: "tv" })),
+        popular: popular.results.map((m: any) => ({ ...m, media_type: "tv" })),
+        topRated: topRated.results.map((m: any) => ({ ...m, media_type: "tv" })),
+        onAir: onAir.results.map((m: any) => ({ ...m, media_type: "tv" })),
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/movies/category/anime", async (req, res) => {
+    const page = req.query.page || 1;
+    try {
+      const [trending, popular, topRated, movies] = await Promise.all([
+        tmdbFetch(`/trending/tv/week?api_key=${TMDB_KEY}&page=${page}&with_genres=16&with_origin_country=JP`),
+        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=${page}`),
+        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=vote_average.desc&vote_count.gte=200&page=${page}`),
+        tmdbFetch(`/discover/movie?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=${page}`),
+      ]);
+      res.json({
+        trending: trending.results.map((m: any) => ({ ...m, media_type: "tv" })),
+        popular: popular.results.map((m: any) => ({ ...m, media_type: "tv" })),
+        topRated: topRated.results.map((m: any) => ({ ...m, media_type: "tv" })),
+        movies: movies.results.map((m: any) => ({ ...m, media_type: "movie" })),
+      });
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
   app.get("/api/movies/search/:q", async (req, res) => {
     const q = (req.params.q || "").trim();
+    const type = req.query.type as string | undefined;
     if (!q) return res.json([]);
     try {
-      const data = await tmdbFetch(
-        `/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false`
-      );
-      const results = (data.results || []).filter(
-        (r: any) => r.media_type === "movie" || r.media_type === "tv"
-      );
+      let results: any[] = [];
+      if (type === "anime") {
+        const [tvData, movieData] = await Promise.all([
+          tmdbFetch(`/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false&with_genres=16`),
+          tmdbFetch(`/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false&with_genres=16`),
+        ]);
+        results = [
+          ...(tvData.results || []).map((r: any) => ({ ...r, media_type: "tv" })),
+          ...(movieData.results || []).map((r: any) => ({ ...r, media_type: "movie" })),
+        ].sort((a, b) => b.popularity - a.popularity);
+      } else if (type === "movie") {
+        const data = await tmdbFetch(`/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false`);
+        results = (data.results || []).map((r: any) => ({ ...r, media_type: "movie" }));
+      } else if (type === "tv") {
+        const data = await tmdbFetch(`/search/tv?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false`);
+        results = (data.results || []).map((r: any) => ({ ...r, media_type: "tv" }));
+      } else {
+        const data = await tmdbFetch(`/search/multi?api_key=${TMDB_KEY}&query=${encodeURIComponent(q)}&include_adult=false`);
+        results = (data.results || []).filter((r: any) => r.media_type === "movie" || r.media_type === "tv");
+      }
       res.json(results);
     } catch (e: any) {
       res.status(500).json({ message: e.message });
