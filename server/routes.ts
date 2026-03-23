@@ -1434,9 +1434,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ── Movie Embed Proxy ─────────────────────────────────────────────────────
   const EMBED_SOURCES = [
     {
-      url: (type: string, id: string, title: string) => {
-        const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-        return `https://bcine.app/${type}/${id}-${slug}`;
+      url: (type: string, id: string, _season?: string, _episode?: string) => {
+        const t = type === "movie" ? "movie" : "tv";
+        return `https://vidsrc.to/embed/${t}/${id}`;
       },
     },
   ];
@@ -1507,31 +1507,12 @@ document.addEventListener('click',function(e){
     }
   });
 
-  app.get("/api/movies/embed", async (req, res) => {
-    const { type, id, title = "" } = req.query as Record<string, string>;
+  app.get("/api/movies/embed", (req, res) => {
+    const { type, id } = req.query as Record<string, string>;
     if (!id) return res.status(400).send("Missing id");
-    const source = EMBED_SOURCES[0];
-    const targetUrl = source.url(type || "movie", id, title);
-    try {
-      const response = await fetch(targetUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
-        redirect: "follow",
-      });
-      const html = await response.text();
-      const pageOrigin = new URL(response.url).origin;
-      const rewritten = injectPopupBlocker(html, pageOrigin);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("X-Frame-Options", "ALLOWALL");
-      res.removeHeader("Content-Security-Policy");
-      res.send(rewritten);
-    } catch (e: any) {
-      res.status(502).send(`<html><body style="background:#000;color:#fff;font-family:sans-serif;padding:2rem"><h2>Source unavailable</h2><p>${e.message}</p><p>Try switching to another source.</p></body></html>`);
-    }
+    const t = type === "movie" ? "movie" : "tv";
+    const targetUrl = `https://vidsrc.to/embed/${t}/${id}`;
+    res.redirect(302, targetUrl);
   });
 
   // ── HorizonTube (YouTube Data API v3) ────────────────────────────────────

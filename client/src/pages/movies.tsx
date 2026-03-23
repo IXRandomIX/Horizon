@@ -59,7 +59,8 @@ function getYear(m: Media) {
 }
 
 function getEmbedUrl(m: Media) {
-  return `/api/movies/embed?type=${m.media_type}&id=${m.id}&title=${encodeURIComponent(getTitle(m))}`;
+  const t = m.media_type === "movie" ? "movie" : "tv";
+  return `https://vidsrc.to/embed/${t}/${m.id}`;
 }
 
 function saveToHistory(m: Media) {
@@ -251,7 +252,8 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             title={getTitle(media)}
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
-            allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
+            allow="fullscreen; autoplay; encrypted-media; picture-in-picture; accelerometer; gyroscope"
+            referrerPolicy="origin"
             data-testid="iframe-player"
           />
         </div>
@@ -276,7 +278,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by bCine</span>
+              <span className="text-[10px] text-white/30">Powered by vidsrc</span>
             </div>
           </div>
         </div>
