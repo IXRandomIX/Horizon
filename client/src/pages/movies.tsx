@@ -58,9 +58,13 @@ function getYear(m: Media) {
   return d ? d.substring(0, 4) : "";
 }
 
-function getEmbedUrl(m: Media) {
-  const t = m.media_type === "movie" ? "movie" : "tv";
-  return `https://vidsrc.to/embed/${t}/${m.id}`;
+function getEmbedUrl(m: Media, season?: number, episode?: number) {
+  if (m.media_type === "tv") {
+    const s = season || 1;
+    const e = episode || 1;
+    return `https://multiembed.mov/?video_id=${m.id}&tmdb=1&s=${s}&e=${e}`;
+  }
+  return `https://multiembed.mov/?video_id=${m.id}&tmdb=1`;
 }
 
 function saveToHistory(m: Media) {
@@ -163,21 +167,37 @@ function SkeletonGrid() {
   );
 }
 
+interface SeasonInfo {
+  number: number;
+  name: string;
+  episodeCount: number;
+}
+
 function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [season, setSeason] = useState(1);
+  const [episode, setEpisode] = useState(1);
   const containerRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const url = getEmbedUrl(media);
+  const isTV = media.media_type === "tv";
+
+  const { data: seasons = [] } = useQuery<SeasonInfo[]>({
+    queryKey: ["/api/movies/tv", media.id, "seasons"],
+    queryFn: async () => {
+      const res = await fetch(`/api/movies/tv/${media.id}/seasons`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: isTV,
+  });
+
+  const currentSeason = seasons.find(s => s.number === season);
+  const maxEpisodes = currentSeason?.episodeCount || 24;
+  const url = getEmbedUrl(media, season, episode);
 
   useEffect(() => {
     saveToHistory(media);
   }, [media]);
-
-  useEffect(() => {
-    const origOpen = window.open;
-    window.open = () => null;
-    return () => { window.open = origOpen; };
-  }, []);
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -201,24 +221,22 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
 
-  const backdrop = media.backdrop_path
-    ? `${TMDB_BACKDROP}${media.backdrop_path}`
-    : null;
+  const backdrop = media.backdrop_path ? `${TMDB_BACKDROP}${media.backdrop_path}` : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-2 sm:p-4">
       <div
         ref={containerRef}
         className="relative w-full max-w-5xl bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col"
-        style={{ maxHeight: "90vh" }}
+        style={{ maxHeight: "95vh" }}
       >
-        <div
-          className="flex items-center gap-3 px-4 py-3 absolute top-0 left-0 right-0 z-10"
-          style={{ background: "linear-gradient(to bottom, rgba(0,0,0,0.9), transparent)" }}
-        >
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 py-3 bg-black/95 border-b border-white/5 flex-shrink-0">
           <div className="flex-1 min-w-0">
             <p className="text-white font-bold truncate text-sm">{getTitle(media)}</p>
-            <p className="text-white/40 text-xs">{getYear(media)} · {media.media_type === "tv" ? "TV Series" : "Movie"}</p>
+            <p className="text-white/40 text-xs">
+              {getYear(media)} · {isTV ? `TV Series${isTV ? ` · S${season} E${episode}` : ""}` : "Movie"}
+            </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
@@ -238,27 +256,71 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
           </div>
         </div>
 
-        <div className="relative w-full" style={{ paddingBottom: "56.25%", minHeight: 300 }}>
+        {/* Season / Episode picker for TV */}
+        {isTV && (
+          <div className="flex items-center gap-3 px-4 py-2 bg-black/80 border-b border-white/5 flex-shrink-0 flex-wrap">
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] text-white/40 uppercase tracking-widest">Season</label>
+              <select
+                data-testid="select-season"
+                value={season}
+                onChange={e => { setSeason(Number(e.target.value)); setEpisode(1); }}
+                className="bg-white/10 border border-white/15 text-white text-sm rounded-lg px-2 py-1 focus:outline-none focus:border-primary/50"
+              >
+                {seasons.length > 0
+                  ? seasons.map(s => (
+                      <option key={s.number} value={s.number} className="bg-black">{s.name || `Season ${s.number}`}</option>
+                    ))
+                  : Array.from({ length: 10 }, (_, i) => (
+                      <option key={i + 1} value={i + 1} className="bg-black">Season {i + 1}</option>
+                    ))
+                }
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-[11px] text-white/40 uppercase tracking-widest">Episode</label>
+              <select
+                data-testid="select-episode"
+                value={episode}
+                onChange={e => setEpisode(Number(e.target.value))}
+                className="bg-white/10 border border-white/15 text-white text-sm rounded-lg px-2 py-1 focus:outline-none focus:border-primary/50"
+              >
+                {Array.from({ length: maxEpisodes }, (_, i) => (
+                  <option key={i + 1} value={i + 1} className="bg-black">Episode {i + 1}</option>
+                ))}
+              </select>
+            </div>
+            {episode < maxEpisodes && (
+              <button
+                data-testid="button-next-episode"
+                onClick={() => setEpisode(e => e + 1)}
+                className="ml-auto text-xs bg-primary/20 hover:bg-primary/40 text-primary border border-primary/30 px-3 py-1 rounded-lg transition-colors font-semibold"
+              >
+                Next Ep →
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Video */}
+        <div className="relative w-full flex-shrink-0" style={{ paddingBottom: "56.25%", minHeight: 280 }}>
           {backdrop && (
-            <img
-              src={backdrop}
-              alt=""
-              className="absolute inset-0 w-full h-full object-cover opacity-20"
-            />
+            <img src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
           )}
           <iframe
             ref={iframeRef}
+            key={url}
             src={url}
             title={getTitle(media)}
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
-            allow="fullscreen; autoplay; encrypted-media; picture-in-picture; accelerometer; gyroscope"
-            referrerPolicy="origin"
+            allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
             data-testid="iframe-player"
           />
         </div>
 
-        <div className="px-4 py-3 bg-black/80 border-t border-white/5 flex items-start gap-3">
+        {/* Info strip */}
+        <div className="px-4 py-3 bg-black/80 border-t border-white/5 flex items-start gap-3 flex-shrink-0">
           {media.poster_path && (
             <img
               src={`${TMDB_IMG}${media.poster_path}`}
@@ -278,7 +340,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by vidsrc</span>
+              <span className="text-[10px] text-white/30">Powered by multiembed · HLS streaming</span>
             </div>
           </div>
         </div>

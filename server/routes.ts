@@ -1508,11 +1508,27 @@ document.addEventListener('click',function(e){
   });
 
   app.get("/api/movies/embed", (req, res) => {
-    const { type, id } = req.query as Record<string, string>;
+    const { type, id, s, e } = req.query as Record<string, string>;
     if (!id) return res.status(400).send("Missing id");
-    const t = type === "movie" ? "movie" : "tv";
-    const targetUrl = `https://vidsrc.to/embed/${t}/${id}`;
-    res.redirect(302, targetUrl);
+    if (type === "tv" && s && e) {
+      res.redirect(302, `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`);
+    } else if (type === "tv") {
+      res.redirect(302, `https://multiembed.mov/?video_id=${id}&tmdb=1&s=1&e=1`);
+    } else {
+      res.redirect(302, `https://multiembed.mov/?video_id=${id}&tmdb=1`);
+    }
+  });
+
+  app.get("/api/movies/tv/:id/seasons", async (req, res) => {
+    try {
+      const data = await tmdbFetch(`/tv/${req.params.id}?api_key=${TMDB_KEY}`);
+      const seasons = (data.seasons || [])
+        .filter((s: any) => s.season_number > 0)
+        .map((s: any) => ({ number: s.season_number, name: s.name, episodeCount: s.episode_count }));
+      res.json(seasons);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
   });
 
   // ── HorizonTube (YouTube Data API v3) ────────────────────────────────────
