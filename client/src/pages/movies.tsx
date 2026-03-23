@@ -349,44 +349,53 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   );
 }
 
-function MoviesTab({ onSelect }: { onSelect: (m: Media) => void }) {
-  const { data, isLoading } = useQuery<CategoryData>({ queryKey: ["/api/movies/category/movies"] });
+function MoviesTab({ active, onSelect }: { active: boolean; onSelect: (m: Media) => void }) {
+  const { data, isLoading } = useQuery<CategoryData>({
+    queryKey: ["/api/movies/category/movies"],
+    enabled: active,
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!active) return null;
   if (isLoading) return <SkeletonGrid />;
   if (!data) return null;
   return (
     <div className="space-y-10">
-      <MediaRow title="🔥 Trending This Week" items={data.trending} onSelect={onSelect} />
-      <MediaRow title="🎬 Now Playing" items={data.nowPlaying || []} onSelect={onSelect} />
-      <MediaRow title="⭐ Popular" items={data.popular} onSelect={onSelect} />
-      <MediaRow title="🏆 Top Rated" items={data.topRated} onSelect={onSelect} />
+      <MediaRow title="🔥 Trending This Week" items={data.trending || []} onSelect={onSelect} />
+      <MediaRow title="🏆 Top Rated" items={data.topRated || []} onSelect={onSelect} />
     </div>
   );
 }
 
-function ShowsTab({ onSelect }: { onSelect: (m: Media) => void }) {
-  const { data, isLoading } = useQuery<CategoryData>({ queryKey: ["/api/movies/category/shows"] });
+function ShowsTab({ active, onSelect }: { active: boolean; onSelect: (m: Media) => void }) {
+  const { data, isLoading } = useQuery<CategoryData>({
+    queryKey: ["/api/movies/category/shows"],
+    enabled: active,
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!active) return null;
   if (isLoading) return <SkeletonGrid />;
   if (!data) return null;
   return (
     <div className="space-y-10">
-      <MediaRow title="🔥 Trending This Week" items={data.trending} onSelect={onSelect} />
-      <MediaRow title="📺 Currently On Air" items={data.onAir || []} onSelect={onSelect} />
-      <MediaRow title="⭐ Popular" items={data.popular} onSelect={onSelect} />
-      <MediaRow title="🏆 Top Rated" items={data.topRated} onSelect={onSelect} />
+      <MediaRow title="🔥 Trending This Week" items={data.trending || []} onSelect={onSelect} />
+      <MediaRow title="🏆 Top Rated" items={data.topRated || []} onSelect={onSelect} />
     </div>
   );
 }
 
-function AnimeTab({ onSelect }: { onSelect: (m: Media) => void }) {
-  const { data, isLoading } = useQuery<CategoryData>({ queryKey: ["/api/movies/category/anime"] });
+function AnimeTab({ active, onSelect }: { active: boolean; onSelect: (m: Media) => void }) {
+  const { data, isLoading } = useQuery<CategoryData>({
+    queryKey: ["/api/movies/category/anime"],
+    enabled: active,
+    staleTime: 5 * 60 * 1000,
+  });
+  if (!active) return null;
   if (isLoading) return <SkeletonGrid />;
   if (!data) return null;
   return (
     <div className="space-y-10">
-      <MediaRow title="🔥 Trending Anime" items={data.trending} onSelect={onSelect} />
-      <MediaRow title="⭐ Most Popular" items={data.popular} onSelect={onSelect} />
-      <MediaRow title="🏆 Top Rated" items={data.topRated} onSelect={onSelect} />
-      <MediaRow title="🎬 Anime Movies" items={data.movies || []} onSelect={onSelect} />
+      <MediaRow title="⭐ Most Popular" items={data.popular || []} onSelect={onSelect} />
+      <MediaRow title="🏆 Top Rated" items={data.topRated || []} onSelect={onSelect} />
     </div>
   );
 }
@@ -562,9 +571,9 @@ export default function MoviesPage() {
           </section>
         ) : (
           <>
-            {activeTab === "movies" && <MoviesTab onSelect={setSelected} />}
-            {activeTab === "shows" && <ShowsTab onSelect={setSelected} />}
-            {activeTab === "anime" && <AnimeTab onSelect={setSelected} />}
+            <MoviesTab active={activeTab === "movies"} onSelect={setSelected} />
+            <ShowsTab active={activeTab === "shows"} onSelect={setSelected} />
+            <AnimeTab active={activeTab === "anime"} onSelect={setSelected} />
           </>
         )}
       </div>

@@ -1340,60 +1340,47 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
   });
 
-  app.get("/api/movies/category/movies", async (req, res) => {
-    const page = req.query.page || 1;
+  const SECTION_LIMIT = 12;
+
+  app.get("/api/movies/category/movies", async (_req, res) => {
     try {
-      const [trending, popular, topRated, nowPlaying] = await Promise.all([
-        tmdbFetch(`/trending/movie/week?api_key=${TMDB_KEY}&page=${page}`),
-        tmdbFetch(`/movie/popular?api_key=${TMDB_KEY}&page=${page}`),
-        tmdbFetch(`/movie/top_rated?api_key=${TMDB_KEY}&page=${page}`),
-        tmdbFetch(`/movie/now_playing?api_key=${TMDB_KEY}&page=1`),
+      const [trending, topRated] = await Promise.all([
+        tmdbFetch(`/trending/movie/week?api_key=${TMDB_KEY}&page=1`),
+        tmdbFetch(`/movie/top_rated?api_key=${TMDB_KEY}&page=1`),
       ]);
       res.json({
-        trending: trending.results.map((m: any) => ({ ...m, media_type: "movie" })),
-        popular: popular.results.map((m: any) => ({ ...m, media_type: "movie" })),
-        topRated: topRated.results.map((m: any) => ({ ...m, media_type: "movie" })),
-        nowPlaying: nowPlaying.results.map((m: any) => ({ ...m, media_type: "movie" })),
+        trending: trending.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "movie" })),
+        topRated: topRated.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "movie" })),
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
 
-  app.get("/api/movies/category/shows", async (req, res) => {
-    const page = req.query.page || 1;
+  app.get("/api/movies/category/shows", async (_req, res) => {
     try {
-      const [trending, popular, topRated, onAir] = await Promise.all([
-        tmdbFetch(`/trending/tv/week?api_key=${TMDB_KEY}&page=${page}`),
-        tmdbFetch(`/tv/popular?api_key=${TMDB_KEY}&page=${page}`),
-        tmdbFetch(`/tv/top_rated?api_key=${TMDB_KEY}&page=${page}`),
-        tmdbFetch(`/tv/on_the_air?api_key=${TMDB_KEY}&page=1`),
+      const [trending, topRated] = await Promise.all([
+        tmdbFetch(`/trending/tv/week?api_key=${TMDB_KEY}&page=1`),
+        tmdbFetch(`/tv/top_rated?api_key=${TMDB_KEY}&page=1`),
       ]);
       res.json({
-        trending: trending.results.map((m: any) => ({ ...m, media_type: "tv" })),
-        popular: popular.results.map((m: any) => ({ ...m, media_type: "tv" })),
-        topRated: topRated.results.map((m: any) => ({ ...m, media_type: "tv" })),
-        onAir: onAir.results.map((m: any) => ({ ...m, media_type: "tv" })),
+        trending: trending.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
+        topRated: topRated.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
 
-  app.get("/api/movies/category/anime", async (req, res) => {
-    const page = req.query.page || 1;
+  app.get("/api/movies/category/anime", async (_req, res) => {
     try {
-      const [trending, popular, topRated, movies] = await Promise.all([
-        tmdbFetch(`/trending/tv/week?api_key=${TMDB_KEY}&page=${page}&with_genres=16&with_origin_country=JP`),
-        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=${page}`),
-        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=vote_average.desc&vote_count.gte=200&page=${page}`),
-        tmdbFetch(`/discover/movie?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=${page}`),
+      const [popular, topRated] = await Promise.all([
+        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=1`),
+        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=vote_average.desc&vote_count.gte=200&page=1`),
       ]);
       res.json({
-        trending: trending.results.map((m: any) => ({ ...m, media_type: "tv" })),
-        popular: popular.results.map((m: any) => ({ ...m, media_type: "tv" })),
-        topRated: topRated.results.map((m: any) => ({ ...m, media_type: "tv" })),
-        movies: movies.results.map((m: any) => ({ ...m, media_type: "movie" })),
+        popular: popular.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
+        topRated: topRated.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
@@ -1523,17 +1510,36 @@ document.createElement=function(tag){
         redirect: "follow",
       });
       const contentType = response.headers.get("content-type") || "application/octet-stream";
+      const finalUrl = response.url;
+
+      // For binary/video/audio content, redirect the browser directly to the source.
+      // Buffering video segments through Node.js crashes the server.
+      const isBinary = contentType.includes("video/") ||
+        contentType.includes("audio/") ||
+        contentType.includes("application/octet-stream") ||
+        /\.(ts|mp4|m3u8|m4s|webm|mp3|aac|ogg|flac)(\?|$)/i.test(finalUrl);
+
+      if (isBinary) {
+        return res.redirect(302, finalUrl);
+      }
+
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("X-Frame-Options", "ALLOWALL");
       res.removeHeader("Content-Security-Policy");
+
       if (contentType.includes("text/html")) {
         const html = await response.text();
-        const rewritten = injectPopupBlocker(html, new URL(response.url).origin);
+        const rewritten = injectPopupBlocker(html, new URL(finalUrl).origin);
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.send(rewritten);
-      } else {
+      } else if (contentType.includes("javascript") || contentType.includes("css") || contentType.includes("json") || contentType.includes("text/")) {
+        const text = await response.text();
         res.setHeader("Content-Type", contentType);
+        res.send(text);
+      } else {
+        // For small assets (images, fonts, etc.) — buffer and send
         const buf = await response.arrayBuffer();
+        res.setHeader("Content-Type", contentType);
         res.send(Buffer.from(buf));
       }
     } catch (e: any) {
