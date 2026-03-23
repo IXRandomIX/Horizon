@@ -59,12 +59,16 @@ function getYear(m: Media) {
 }
 
 function getEmbedUrl(m: Media, season?: number, episode?: number) {
+  const base = window.location.origin;
+  let m3u8Url: string;
   if (m.media_type === "tv") {
     const s = season || 1;
     const e = episode || 1;
-    return `https://vidsrc.to/embed/tv/${m.id}/${s}/${e}`;
+    m3u8Url = `${base}/api/movies/m3u8?type=tv&id=${m.id}&s=${s}&e=${e}`;
+  } else {
+    m3u8Url = `${base}/api/movies/m3u8?type=movie&id=${m.id}`;
   }
-  return `https://vidsrc.to/embed/movie/${m.id}`;
+  return `https://hlsplayer.net/?url=${encodeURIComponent(m3u8Url)}`;
 }
 
 function saveToHistory(m: Media) {
@@ -315,8 +319,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             className="absolute inset-0 w-full h-full border-0"
             allowFullScreen
             allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-            referrerPolicy="no-referrer"
+            sandbox="allow-scripts allow-same-origin allow-forms allow-presentation allow-popups"
             data-testid="iframe-player"
           />
         </div>
@@ -342,7 +345,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Powered by vidsrc</span>
+              <span className="text-[10px] text-white/30">Powered by HLSPlayer · multiembed</span>
             </div>
           </div>
         </div>

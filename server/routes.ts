@@ -1481,12 +1481,34 @@ window.open=function(){return null;};
       const contentType = response.headers.get("content-type") || "application/octet-stream";
       const finalUrl = response.url;
 
+      // M3U8 playlists: proxy & rewrite segment URLs so HLSPlayer.net can resolve them
+      const isM3U8 = contentType.includes("mpegurl") || /\.m3u8(\?|$)/i.test(finalUrl);
+      if (isM3U8) {
+        const playlist = await response.text();
+        const selfBase = `${req.protocol}://${req.get("host")}`;
+        const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf("/") + 1);
+        const rewritten = playlist.split("\n").map(line => {
+          const t = line.trim();
+          if (!t || t.startsWith("#")) return line;
+          const abs = t.startsWith("http") ? t : baseUrl + t;
+          if (/\.m3u8(\?|$)/i.test(abs)) {
+            return `${selfBase}/api/movies/relay?url=${encodeURIComponent(abs)}`;
+          }
+          return `${selfBase}/api/movies/relay?url=${encodeURIComponent(abs)}`;
+        }).join("\n");
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Headers", "*");
+        res.setHeader("Cache-Control", "no-cache");
+        return res.send(rewritten);
+      }
+
       // For binary/video/audio content, redirect the browser directly to the source.
       // Buffering video segments through Node.js crashes the server.
       const isBinary = contentType.includes("video/") ||
         contentType.includes("audio/") ||
         contentType.includes("application/octet-stream") ||
-        /\.(ts|mp4|m3u8|m4s|webm|mp3|aac|ogg|flac)(\?|$)/i.test(finalUrl);
+        /\.(ts|mp4|m4s|webm|mp3|aac|ogg|flac)(\?|$)/i.test(finalUrl);
 
       if (isBinary) {
         return res.redirect(302, finalUrl);
@@ -1514,6 +1536,78 @@ window.open=function(){return null;};
     } catch (e: any) {
       res.status(502).send("Relay error: " + e.message);
     }
+  });
+
+  // ── M3U8 Stream Proxy for HLSPlayer.net ────────────────────────────────────
+  app.get("/api/movies/m3u8", async (req, res) => {
+    const { type, id, s, e, url } = req.query as Record<string, string>;
+    const selfBase = `${req.protocol}://${req.get("host")}`;
+
+    // If a raw URL is passed (sub-playlist case), just relay it
+    let sourceUrl: string;
+    if (url) {
+      try { sourceUrl = decodeURIComponent(url); } catch { return res.status(400).send("Bad url"); }
+    } else {
+      if (!id) return res.status(400).json({ error: "Missing id" });
+      if (type === "tv") {
+        const season = s || "1";
+        const episode = e || "1";
+        sourceUrl = `https://multiembed.mov/directstream.php?video_id=${id}&tmdb=1&s=${season}&e=${episode}`;
+      } else {
+        sourceUrl = `https://multiembed.mov/directstream.php?video_id=${id}&tmdb=1`;
+      }
+    }
+
+    try {
+      const response = await fetch(sourceUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Referer": "https://multiembed.mov/",
+          "Origin": "https://multiembed.mov",
+          "Accept": "*/*",
+        },
+        redirect: "follow",
+      });
+
+      const finalUrl = response.url;
+      const contentType = response.headers.get("content-type") || "";
+      const isM3U8 = contentType.includes("mpegurl") || /\.m3u8(\?|$)/i.test(finalUrl);
+
+      if (!isM3U8) {
+        return res.status(502).json({ error: "Stream not found or not an M3U8", contentType, finalUrl });
+      }
+
+      const playlist = await response.text();
+      const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf("/") + 1);
+
+      // Rewrite segment and sub-playlist URLs to go through our relay/m3u8 endpoints
+      const rewritten = playlist.split("\n").map(line => {
+        const t = line.trim();
+        if (!t || t.startsWith("#")) return line;
+        const abs = t.startsWith("http") ? t : baseUrl + t;
+        if (/\.m3u8(\?|$)/i.test(abs)) {
+          // Sub-playlist: proxy through our m3u8 endpoint so segments get rewritten too
+          return `${selfBase}/api/movies/m3u8?url=${encodeURIComponent(abs)}`;
+        }
+        // TS segments: relay redirects them directly to CDN
+        return `${selfBase}/api/movies/relay?url=${encodeURIComponent(abs)}`;
+      }).join("\n");
+
+      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "*");
+      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+      res.setHeader("Cache-Control", "no-cache");
+      res.send(rewritten);
+    } catch (err: any) {
+      res.status(502).json({ error: err.message });
+    }
+  });
+
+  app.options("/api/movies/m3u8", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Headers", "*");
+    res.sendStatus(204);
   });
 
   app.get("/api/movies/embed", async (req, res) => {
