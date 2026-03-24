@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, ChevronRight, AlertCircle, Loader2 } from "lucide-react";
+import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, ChevronRight, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import Hls from "hls.js";
 
@@ -65,6 +65,17 @@ function getStreamUrl(m: Media, season?: number, episode?: number) {
   }
   return `/api/movies/m3u8?type=movie&id=${m.id}`;
 }
+
+function getEmbedUrl(m: Media, season?: number, episode?: number) {
+  const s = season || 1;
+  const e = episode || 1;
+  if (m.media_type === "tv") {
+    return `https://multiembed.mov/?video_id=${m.id}&tmdb=1&s=${s}&e=${e}`;
+  }
+  return `https://multiembed.mov/?video_id=${m.id}&tmdb=1`;
+}
+
+const POPUP_BLOCKER = `(function(){var _wo=window.open;window.open=function(){return null};})();`;
 
 function saveToHistory(m: Media) {
   try {
@@ -172,97 +183,112 @@ interface SeasonInfo {
   episodeCount: number;
 }
 
-function HlsVideoPlayer({ streamUrl, backdrop }: { streamUrl: string; backdrop: string | null }) {
+function HlsVideoPlayer({
+  streamUrl,
+  embedUrl,
+  backdrop,
+}: {
+  streamUrl: string;
+  embedUrl: string;
+  backdrop: string | null;
+}) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
-  const [errorMsg, setErrorMsg] = useState("");
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const [status, setStatus] = useState<"loading" | "hls" | "iframe">("loading");
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
     setStatus("loading");
-    setErrorMsg("");
 
-    // Destroy any previous hls instance
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
+    const fallback = () => setStatus("iframe");
+
     if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: false,
-        maxBufferLength: 30,
-      });
+      const hls = new Hls({ enableWorker: true, maxBufferLength: 30 });
       hlsRef.current = hls;
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setStatus("ready");
+        setStatus("hls");
         video.play().catch(() => {});
       });
 
       hls.on(Hls.Events.ERROR, (_evt, data) => {
-        if (data.fatal) {
-          setStatus("error");
-          setErrorMsg(data.details || "Stream failed to load");
-        }
+        if (data.fatal) fallback();
       });
 
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // Safari native HLS
       video.src = streamUrl;
       video.addEventListener("loadedmetadata", () => {
-        setStatus("ready");
+        setStatus("hls");
         video.play().catch(() => {});
-      });
-      video.addEventListener("error", () => {
-        setStatus("error");
-        setErrorMsg("Stream failed to load");
-      });
+      }, { once: true });
+      video.addEventListener("error", fallback, { once: true });
     } else {
-      setStatus("error");
-      setErrorMsg("HLS is not supported in this browser");
+      fallback();
     }
 
+    // If the M3U8 doesn't resolve in 8 seconds, fall back
+    const timeout = setTimeout(fallback, 8000);
+
     return () => {
+      clearTimeout(timeout);
       hlsRef.current?.destroy();
       hlsRef.current = null;
     };
   }, [streamUrl]);
 
+  // Inject popup blocker into iframe once it loads
+  const onIframeLoad = () => {
+    try {
+      const win = iframeRef.current?.contentWindow;
+      if (win) win.eval(POPUP_BLOCKER);
+    } catch { /* cross-origin, nothing to do */ }
+  };
+
   return (
     <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%", minHeight: 280 }}>
-      {backdrop && status !== "ready" && (
+      {backdrop && status === "loading" && (
         <img src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
       )}
 
+      {/* Native HLS video element */}
       <video
         ref={videoRef}
         className="absolute inset-0 w-full h-full"
         controls
-        autoPlay
         playsInline
         data-testid="video-player"
-        style={{ display: status === "error" ? "none" : "block" }}
+        style={{ display: status === "hls" ? "block" : "none" }}
       />
+
+      {/* Iframe fallback */}
+      {status === "iframe" && (
+        <iframe
+          ref={iframeRef}
+          key={embedUrl}
+          src={embedUrl}
+          onLoad={onIframeLoad}
+          className="absolute inset-0 w-full h-full border-0"
+          allowFullScreen
+          allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
+          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
+          data-testid="iframe-player"
+        />
+      )}
 
       {status === "loading" && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
           <Loader2 className="w-10 h-10 text-primary animate-spin" />
           <p className="text-white/60 text-sm">Loading stream…</p>
-        </div>
-      )}
-
-      {status === "error" && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10 p-6">
-          <AlertCircle className="w-10 h-10 text-red-400" />
-          <p className="text-white font-semibold">Stream unavailable</p>
-          <p className="text-white/50 text-xs text-center">{errorMsg}</p>
         </div>
       )}
     </div>
@@ -289,6 +315,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const currentSeason = seasons.find(s => s.number === season);
   const maxEpisodes = currentSeason?.episodeCount || 24;
   const streamUrl = getStreamUrl(media, season, episode);
+  const embedUrl = getEmbedUrl(media, season, episode);
 
   useEffect(() => {
     saveToHistory(media);
@@ -398,7 +425,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
         )}
 
         {/* HLS Video Player */}
-        <HlsVideoPlayer key={streamUrl} streamUrl={streamUrl} backdrop={backdrop} />
+        <HlsVideoPlayer key={streamUrl} streamUrl={streamUrl} embedUrl={embedUrl} backdrop={backdrop} />
 
         {/* Info strip */}
         <div className="px-4 py-3 bg-black/80 border-t border-white/5 flex items-start gap-3 flex-shrink-0">

@@ -1558,47 +1558,112 @@ window.open=function(){return null;};
       }
     }
 
+    const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+    async function fetchAndRewriteM3U8(m3u8Url: string, referer: string): Promise<string | null> {
+      try {
+        const r = await fetch(m3u8Url, {
+          headers: { "User-Agent": UA, "Referer": referer, "Origin": new URL(referer).origin, "Accept": "*/*" },
+          redirect: "follow",
+        });
+        if (!r.ok) return null;
+        const playlist = await r.text();
+        const baseUrl = r.url.substring(0, r.url.lastIndexOf("/") + 1);
+        return playlist.split("\n").map(line => {
+          const t = line.trim();
+          if (!t || t.startsWith("#")) return line;
+          const abs = t.startsWith("http") ? t : baseUrl + t;
+          if (/\.m3u8(\?|$)/i.test(abs)) {
+            return `${selfBase}/api/movies/m3u8?url=${encodeURIComponent(abs)}`;
+          }
+          return `${selfBase}/api/movies/relay?url=${encodeURIComponent(abs)}`;
+        }).join("\n");
+      } catch { return null; }
+    }
+
     try {
-      const response = await fetch(sourceUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Referer": "https://multiembed.mov/",
-          "Origin": "https://multiembed.mov",
-          "Accept": "*/*",
-        },
-        redirect: "follow",
-      });
+      const controller = new AbortController();
+      const fetchTimeout = setTimeout(() => controller.abort(), 6000);
+
+      let response: Response;
+      try {
+        response = await fetch(sourceUrl, {
+          headers: {
+            "User-Agent": UA,
+            "Referer": "https://multiembed.mov/",
+            "Origin": "https://multiembed.mov",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          },
+          redirect: "follow",
+          signal: controller.signal,
+        });
+      } finally {
+        clearTimeout(fetchTimeout);
+      }
 
       const finalUrl = response.url;
       const contentType = response.headers.get("content-type") || "";
       const isM3U8 = contentType.includes("mpegurl") || /\.m3u8(\?|$)/i.test(finalUrl);
 
-      if (!isM3U8) {
-        return res.status(502).json({ error: "Stream not found or not an M3U8", contentType, finalUrl });
+      if (isM3U8) {
+        // Direct M3U8 — rewrite and return
+        const playlist = await response.text();
+        const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf("/") + 1);
+        const rewritten = playlist.split("\n").map(line => {
+          const t = line.trim();
+          if (!t || t.startsWith("#")) return line;
+          const abs = t.startsWith("http") ? t : baseUrl + t;
+          if (/\.m3u8(\?|$)/i.test(abs)) {
+            return `${selfBase}/api/movies/m3u8?url=${encodeURIComponent(abs)}`;
+          }
+          return `${selfBase}/api/movies/relay?url=${encodeURIComponent(abs)}`;
+        }).join("\n");
+
+        res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Headers", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+        res.setHeader("Cache-Control", "no-cache");
+        return res.send(rewritten);
       }
 
-      const playlist = await response.text();
-      const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf("/") + 1);
+      // HTML player page — extract the M3U8 URL from the script/source
+      if (contentType.includes("text/html") || contentType.includes("application/json") || true) {
+        const html = await response.text();
 
-      // Rewrite segment and sub-playlist URLs to go through our relay/m3u8 endpoints
-      const rewritten = playlist.split("\n").map(line => {
-        const t = line.trim();
-        if (!t || t.startsWith("#")) return line;
-        const abs = t.startsWith("http") ? t : baseUrl + t;
-        if (/\.m3u8(\?|$)/i.test(abs)) {
-          // Sub-playlist: proxy through our m3u8 endpoint so segments get rewritten too
-          return `${selfBase}/api/movies/m3u8?url=${encodeURIComponent(abs)}`;
+        // Try multiple common patterns for embedded M3U8 URLs
+        const patterns = [
+          /["'`](https?:\/\/[^"'`\s]+\.m3u8(?:\?[^"'`\s]*)?)[`"']/i,
+          /file\s*:\s*["'](https?:\/\/[^"'\s]+\.m3u8[^"'\s]*)['"]/i,
+          /src\s*:\s*["'](https?:\/\/[^"'\s]+\.m3u8[^"'\s]*)['"]/i,
+          /["']?(https?:\/\/[^"'<>\s]+\.m3u8(?:\?[^"'<>\s]*)?)/i,
+        ];
+
+        let m3u8Url: string | null = null;
+        for (const pat of patterns) {
+          const m = html.match(pat);
+          if (m) { m3u8Url = m[1]; break; }
         }
-        // TS segments: relay redirects them directly to CDN
-        return `${selfBase}/api/movies/relay?url=${encodeURIComponent(abs)}`;
-      }).join("\n");
 
-      res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("Access-Control-Allow-Headers", "*");
-      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
-      res.setHeader("Cache-Control", "no-cache");
-      res.send(rewritten);
+        if (m3u8Url) {
+          const rewritten = await fetchAndRewriteM3U8(m3u8Url, finalUrl);
+          if (rewritten) {
+            res.setHeader("Content-Type", "application/vnd.apple.mpegurl");
+            res.setHeader("Access-Control-Allow-Origin", "*");
+            res.setHeader("Access-Control-Allow-Headers", "*");
+            res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS");
+            res.setHeader("Cache-Control", "no-cache");
+            return res.send(rewritten);
+          }
+        }
+
+        // Log what we got for debugging
+        console.log("[m3u8] Failed to find M3U8 in HTML from:", finalUrl);
+        console.log("[m3u8] HTML snippet:", html.substring(0, 500));
+        return res.status(502).json({ error: "Could not extract stream URL from player page", finalUrl, htmlSnippet: html.substring(0, 300) });
+      }
+
+      return res.status(502).json({ error: "Stream not found or not an M3U8", contentType, finalUrl });
     } catch (err: any) {
       res.status(502).json({ error: err.message });
     }
