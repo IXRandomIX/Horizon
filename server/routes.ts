@@ -609,6 +609,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(messages);
   });
 
+  const MESSAGE_COOLDOWN_MS = 5000;
+  const lastMessageAt = new Map<string, number>();
+
   app.post("/api/chat/channels/:channelId/messages", async (req, res) => {
     const sessionUsername = await getSessionUser(req);
     if (!sessionUsername) return res.status(401).json({ message: "Unauthorized" });
@@ -619,6 +622,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allowed = await requirePermission("talk_in_private", req, res);
       if (!allowed) return;
     }
+    // 5-second spam cooldown (skip for privileged users)
+    const isPriv = await isPrivileged(sessionUsername);
+    if (!isPriv) {
+      const last = lastMessageAt.get(sessionUsername) ?? 0;
+      const elapsed = Date.now() - last;
+      if (elapsed < MESSAGE_COOLDOWN_MS) {
+        const remaining = Math.ceil((MESSAGE_COOLDOWN_MS - elapsed) / 1000);
+        return res.status(429).json({ message: "Slow down!", remaining });
+      }
+    }
+    lastMessageAt.set(sessionUsername, Date.now());
     const { content, replyToId, replyToUsername, replyToContent } = req.body;
     const username = sessionUsername;
     const user = await storage.getUser(username);

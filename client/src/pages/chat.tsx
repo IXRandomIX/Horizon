@@ -104,6 +104,8 @@ export default function Chat() {
   const [activeChannel, setActiveChannel] = useState<Channel | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  const [cooldown, setCooldown] = useState(0);
+  const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -432,9 +434,24 @@ export default function Chat() {
     }
   };
 
+  const startCooldown = (seconds: number) => {
+    if (cooldownRef.current) clearInterval(cooldownRef.current);
+    setCooldown(seconds);
+    cooldownRef.current = setInterval(() => {
+      setCooldown(prev => {
+        if (prev <= 1) {
+          clearInterval(cooldownRef.current!);
+          cooldownRef.current = null;
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  };
+
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !user || !activeChannel) return;
+    if (!newMessage.trim() || !user || !activeChannel || cooldown > 0) return;
     const token = getSessionToken();
     if (!token) return;
 
@@ -456,6 +473,9 @@ export default function Chat() {
       setReplyingTo(null);
       justSentRef.current = true;
       fetchMessages(activeChannel.id);
+    } else if (res.status === 429) {
+      const data = await res.json().catch(() => ({ remaining: 5 }));
+      startCooldown(data.remaining ?? 5);
     }
   };
 
@@ -1040,14 +1060,25 @@ export default function Chat() {
             </Dialog>
 
             <Input 
-              placeholder={activeChannel ? (!canPostInChannel(activeChannel) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`) : "Select a channel"} 
+              placeholder={
+                cooldown > 0
+                  ? `Slow down! Wait ${cooldown}s...`
+                  : activeChannel
+                    ? (!canPostInChannel(activeChannel) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`)
+                    : "Select a channel"
+              }
               value={newMessage} 
               onChange={(e) => setNewMessage(e.target.value)}
-              className="bg-transparent border-none focus-visible:ring-0 text-lg h-10"
-              disabled={!activeChannel || !canPostInChannel(activeChannel)}
+              className={`bg-transparent border-none focus-visible:ring-0 text-lg h-10 ${cooldown > 0 ? "placeholder:text-red-400/70" : ""}`}
+              disabled={!activeChannel || !canPostInChannel(activeChannel) || cooldown > 0}
             />
-            <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel || !canPostInChannel(activeChannel)}>
-              <Send className="w-5 h-5" />
+            <Button
+              type="submit"
+              size="icon"
+              className={`text-white shadow-lg transition-all ${cooldown > 0 ? "bg-red-500/60 hover:bg-red-500/60 shadow-red-500/10 w-10 min-w-[2.5rem]" : "bg-primary hover:bg-primary/90 shadow-primary/20"}`}
+              disabled={!newMessage.trim() || !activeChannel || !canPostInChannel(activeChannel) || cooldown > 0}
+            >
+              {cooldown > 0 ? <span className="text-xs font-black">{cooldown}s</span> : <Send className="w-5 h-5" />}
             </Button>
           </form>
         </div>
