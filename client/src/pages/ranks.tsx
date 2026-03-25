@@ -14,7 +14,6 @@ const QUEST_TYPE_LABELS: Record<string, string> = {
   games_played: "Games",
   messages_sent: "Chat",
   movies_visited: "Movies",
-  tube_visited: "HorizonTube",
   proxies_visited: "Proxies",
 };
 

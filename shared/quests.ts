@@ -44,10 +44,6 @@ export const QUESTS = [
   { id: "movies_1", type: "movies_visited", title: "Visit the Movies page", description: "Check out our Movies & Shows section", target: 1, xp: 50 },
   { id: "movies_5", type: "movies_visited", title: "Visit the Movies page 5 times", description: "Return to Movies 5 separate times", target: 5, xp: 150 },
   { id: "movies_10", type: "movies_visited", title: "Visit Movies 10 times", description: "A movie buff — visit Movies 10 times", target: 10, xp: 400 },
-  // HorizonTube visits
-  { id: "tube_1", type: "tube_visited", title: "Watch on HorizonTube", description: "Open the HorizonTube video player", target: 1, xp: 100 },
-  { id: "tube_5", type: "tube_visited", title: "Use HorizonTube 5 times", description: "Come back to HorizonTube 5 times", target: 5, xp: 350 },
-  { id: "tube_10", type: "tube_visited", title: "Use HorizonTube 10 times", description: "Regular viewer — 10 HorizonTube visits", target: 10, xp: 800 },
   // Proxy visits
   { id: "proxies_1", type: "proxies_visited", title: "Use a Proxy", description: "Visit the Proxies page", target: 1, xp: 75 },
   { id: "proxies_5", type: "proxies_visited", title: "Use a Proxy 5 times", description: "Visit Proxies 5 times", target: 5, xp: 250 },
