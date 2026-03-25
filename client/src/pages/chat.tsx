@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type React from "react";
-import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink, Ban, Clock, Bot } from "lucide-react";
+import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Sparkles, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink, Ban, Clock, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -15,66 +15,6 @@ import { useNotifications } from "@/context/notifications";
 import { ProfileModal } from "@/components/profile-modal";
 import { EmojiPicker } from "@/components/emoji-picker";
 
-const FONTS = [
-  "Adios Script Pro", "Affair", "Aphrodite Pro", "Belluccia Pro", "Burges Script",
-  "Cantoni Pro", "Carolyna Pro Black", "Feel Script", "Melany Lane", "Parfumerie Script",
-  "Vunder Script™", "Halo Handletter", "Parisienne", "Nickainley", "Samantha Brandon Handwritten Font",
-  "Canva", "Canva +3", "Sophisticated Serif & Display Fonts", "Instrument Serif", "Playfair Display",
-  "Bodoni Moda", "Didot", "Cormorant", "EB Garamond", "Libre Baskerville", "Royalis",
-  "Royal Affair", "Bauer Bodoni", "Alberobello Serif", "Ginetta Marriage Serif Font",
-  "Stardust Celestina Modern Serif Font", "Le Murmure", "Mazius Display"
-];
-
-const COLORS = [
-  { name: "Cool Blue", hex: "#D7EFFF", desc: "A frosty, icy blue." },
-  { name: "Jade", hex: "#AEB8A0", desc: "A serene, moody mint-moss green." },
-  { name: "Plum Noir", hex: "#351E28", desc: "A deep, decadent dark purple." },
-  { name: "Wasabi", hex: "#E9F056", desc: "An electric chartreuse neon." },
-  { name: "Persimmon", hex: "#E2725B", desc: "A vibrant, warm orange-red." },
-  { name: "Transformative Teal", hex: "#008080", desc: "A deep, eco-conscious teal." },
-  { name: "Electric Fuchsia", hex: "#FD4FFF", desc: "A fluorescent, high-energy pink." },
-  { name: "Blue Aura", hex: "#A0B0C0", desc: "A soft, hazy, pastel-gray blue." },
-  { name: "Amber Haze", hex: "#FFBF00", desc: "A glowing, warm yellow-amber." },
-  { name: "Jelly Mint", hex: "#A0E6DA", desc: "A bright, fresh, minty green." },
-  { name: "Mocha Mousse", hex: "#A47864", desc: "A rich, warm, earthy brown." },
-  { name: "Cloud Dancer", hex: "#F0EFE9", desc: "A warm, airy, off-white." },
-  { name: "Universal Khaki", hex: "#C2B280", desc: "A versatile, mid-tone tan." },
-  { name: "Cocoa Powder", hex: "#4B3621", desc: "A deep, dark brown alternative to black." },
-  { name: "Sage Green", hex: "#9CACA0", desc: "A soft, natural, calming green." },
-  { name: "Terracotta Red", hex: "#E2725B", desc: "A sun-baked, clay-like, rust color." },
-  { name: "Warm Taupe", hex: "#A09080", desc: "A gentle, grounded gray-brown." },
-  { name: "Almond", hex: "#EFDECD", desc: "A warm, soft, neutral cream." },
-  { name: "Dusty Rose", hex: "#D58D8D", desc: "A muted, mature, pink-beige." },
-  { name: "Burnt Sienna", hex: "#E97451", desc: "A rusty, earthy red-brown." },
-  { name: "Digital Lavender", hex: "#A78BFA", desc: "A serene, tech-inspired purple." },
-  { name: "Verdant Green", hex: "#4CAF50", desc: "A vibrant, emerald-like green." },
-  { name: "Sunny Yellow", hex: "#FFDD44", desc: "A bold, high-contrast, nostalgic yellow." },
-  { name: "Neon Magenta", hex: "#FF00FF", desc: "A high-voltage, digital pop color." },
-  { name: "Cyber Blue", hex: "#0000FF", desc: "A standard, high-contrast blue screen color." },
-  { name: "Midnight Blue", hex: "#101585", desc: "A deep, luxurious navy." },
-  { name: "Charcoal", hex: "#333333", desc: "A dark, soft alternative to absolute black." },
-  { name: "Pearlescent Purple", hex: "#C3B1E1", desc: "An iridescent, dreamy shade." },
-  { name: "Mineral Blue", hex: "#48AAAD", desc: "A clear, saturated, ocean blue." },
-  { name: "Burnished Lilac", hex: "#A295C1", desc: "A smoky, vintage-modern lavender." }
-];
-
-const ANIMATIONS = [
-  "Kinetic Type", "Handwriting Signature", "Glitch Reveal", "Morphing Shape", "3D Pop-up",
-  "Gradient Stroke", "Neon Glow", "Slide & Fade", "Liquid Morph", "Typewriter Effect",
-  "Paper Plane Reveal", "Rotating Cube", "Particles/Dust Formation", "Draw-on (SVG)",
-  "Layered 3D Extrusion", "Stop-Motion Effect", "Zoom-In/Zoom-Out", "Scan Line Reveal",
-  "Elastic/Bounce", "Wave/Wavy Movement"
-];
-
-const GRADIENTS = [
-  "Electric Magenta to Deep Blue", "Incandescent Red to Electric Orange", "Neon Cyan to Deep Purple",
-  "Acid Yellow (Wasabi) to Charcoal", "Neon Green on Black", "Pearlescent Purple to Soft Teal",
-  "Iridescent Aqua to Silver", "Mint Green to Dusty Rose", "Lavender Blue to Icy White",
-  "Cyan to Soft Magenta", "Tangerine Orange to Warm Rust", "Butter Yellow to Deep Mocha",
-  "Dusty Pink to Warm Gray", "Cream to Dark Cocoa", "Terracotta to Sand",
-  "Emerald Green to Deep Teal", "Deep Sapphire to Royal Purple", "Ocean Blue to Deep Aqua",
-  "Magenta to Hot Pink", "White to Light Gray (with neon glow)"
-];
 
 // ── Username Gradient Colors ──────────────────────────────────────────────
 const UGC_COLORS = [
@@ -469,23 +409,6 @@ export default function Chat() {
   const fetchProxies = async () => {
     const res = await fetch("/api/proxies");
     if (res.ok) setProxies(await res.json());
-  };
-
-  const handleUpdateUser = async (updates: any) => {
-    if (!user) return;
-    const res = await authFetch(`/api/chat/users/${user.username}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-    if (res.ok) {
-      const updatedUser = await res.json();
-      const merged = { ...user, ...updatedUser };
-      setUser(merged);
-      updateAuthUser(updatedUser);
-      localStorage.setItem("horizon_chat_user", JSON.stringify(merged));
-      toast({ title: "Customization updated" });
-    }
   };
 
   const applyUserAppearance = async () => {
@@ -1783,87 +1706,6 @@ export default function Chat() {
                     </Dialog>
                   </div>
                   )}
-                  <div className="space-y-4">
-                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Customization</label>
-                    <div className="grid grid-cols-1 gap-2">
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Type className="w-4 h-4" /> 30 Fanciest Fonts</Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
-                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">THE FANCIEST FONTS</DialogTitle></DialogHeader>
-                          <ScrollArea className="h-full pr-4">
-                            <div className="grid grid-cols-2 gap-2 p-1">
-                              {FONTS.map((font, i) => (
-                                <Button key={i} variant="ghost" className="justify-start h-auto py-3 text-white/70 hover:text-white hover:bg-white/5 font-sans" onClick={() => handleUpdateUser({ font })}>
-                                  {i + 1}. {font}
-                                </Button>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </DialogContent>
-                      </Dialog>
-
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Palette className="w-4 h-4" /> 30 Master Colors</Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
-                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">MASTER COLORS</DialogTitle></DialogHeader>
-                          <ScrollArea className="h-full pr-4">
-                            <div className="grid grid-cols-1 gap-2 p-1">
-                              {COLORS.map((color, i) => (
-                                <div key={i} className="flex items-center gap-4 p-3 rounded-xl bg-white/5 border border-white/5 group hover:border-primary/50 transition-all cursor-pointer" onClick={() => handleUpdateUser({ roleColor: color.hex })}>
-                                  <div className="w-10 h-10 rounded-lg shadow-lg" style={{ backgroundColor: color.hex }} />
-                                  <div>
-                                    <p className="font-bold text-white">{color.name} <span className="text-xs font-mono text-muted-foreground ml-2">{color.hex}</span></p>
-                                    <p className="text-xs text-muted-foreground italic">{color.desc}</p>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </DialogContent>
-                      </Dialog>
-
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Sparkles className="w-4 h-4" /> 20 Elite Animations</Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
-                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">ELITE ANIMATIONS</DialogTitle></DialogHeader>
-                          <ScrollArea className="h-full pr-4">
-                            <div className="grid grid-cols-1 gap-2 p-1">
-                              {ANIMATIONS.map((anim, i) => (
-                                <Button key={i} variant="ghost" className="justify-start h-12 text-white/70 hover:text-white hover:bg-white/5 px-4 rounded-xl border border-white/5" onClick={() => handleUpdateUser({ animation: anim })}>
-                                  <span className="w-6 text-primary font-mono text-xs">{i + 1}</span> {anim}
-                                </Button>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </DialogContent>
-                      </Dialog>
-
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Paintbrush className="w-4 h-4" /> 20 Color through Color</Button>
-                        </DialogTrigger>
-                        <DialogContent className="bg-black border-white/10 max-w-2xl max-h-[80vh]">
-                          <DialogHeader><DialogTitle className="text-gradient-animated font-display">COLOR THROUGH COLOR</DialogTitle></DialogHeader>
-                          <ScrollArea className="h-full pr-4">
-                            <div className="grid grid-cols-1 gap-2 p-1">
-                              {GRADIENTS.map((grad, i) => (
-                                <Button key={i} variant="ghost" className="justify-start h-14 text-white/70 hover:text-white hover:bg-white/5 px-4 rounded-xl border border-white/5 group" onClick={() => handleUpdateUser({ animation: "gradient-" + i, roleColor: "gradient" })}>
-                                  <span className="w-6 text-primary font-mono text-xs">{i + 1}</span> 
-                                  <span className="text-gradient-animated font-bold tracking-tight">{grad}</span>
-                                </Button>
-                              ))}
-                            </div>
-                          </ScrollArea>
-                        </DialogContent>
-                      </Dialog>
-                    </div>
-                  </div>
                 </div>
               </motion.div>
             )}
