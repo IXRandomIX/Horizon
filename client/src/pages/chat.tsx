@@ -106,8 +106,7 @@ function BorderBeamUsername({ text, borderKey, className, style }: { text: strin
 }
 
 // ── Color / class helpers ─────────────────────────────────────────────────
-function getColorInfo(roleColor: string, animation: string, isAdminUser: boolean): { colorClass: string; colorStyle?: React.CSSProperties } {
-  if (isAdminUser) return { colorClass: "text-gradient-animated text-lg" };
+function getColorInfo(roleColor: string, animation: string): { colorClass: string; colorStyle?: React.CSSProperties } {
   if (roleColor?.startsWith("ugc:")) return { colorClass: `ugc-${roleColor.slice(4)}` };
   if (roleColor === "rainbow:smooth") return { colorClass: "username-rainbow-smooth" };
   if (roleColor === "rainbow:spaz")   return { colorClass: "username-rainbow-spaz" };
@@ -821,8 +820,8 @@ export default function Chat() {
     }
   };
 
-  const renderUsername = (text: string, roleColor: string, animation: string, font: string, isAdminUser: boolean) => {
-    const { colorClass, colorStyle } = getColorInfo(roleColor, animation, isAdminUser);
+  const renderUsername = (text: string, roleColor: string, animation: string, font: string) => {
+    const { colorClass, colorStyle } = getColorInfo(roleColor, animation);
     const fontClass = getFontClass(font);
     const animClass = getAnimationClass(animation);
     const base = `font-black tracking-wide ${fontClass} ${animClass}`;
@@ -1068,7 +1067,7 @@ export default function Chat() {
                     </div>
                   )}
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    {renderUsername(msg.username, msg.roleColor, msg.animation || "none", msg.font || "sans", msg.username === "RandomIX")}
+                    {renderUsername(msg.username, msg.roleColor, msg.animation || "none", msg.font || "sans")}
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(msg.roles && msg.roles.length > 0) ? (
                         msg.roles.map((roleName: string) => {
@@ -1587,7 +1586,7 @@ export default function Chat() {
                           <div className="border border-white/10 rounded p-3 space-y-1">
                             <label className="text-white/40 text-[10px] uppercase tracking-widest">Preview</label>
                             <div className="flex items-center gap-2">
-                              {renderUsername(apTarget.trim() || user?.username || "Preview", apColor, apEffect, "sans", false)}
+                              {renderUsername(apTarget.trim() || user?.username || "Preview", apColor, apEffect, "sans")}
                             </div>
                           </div>
 
