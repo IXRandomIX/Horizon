@@ -163,8 +163,10 @@ export default function Chat() {
     if (!user) return false;
     if (user.isAdmin || user.username === "RandomIX") return true; // Admin/Owner have all permissions
     if (!user.roles || user.roles.length === 0) return false;
-    const userRoles = roles.filter(r => user.roles.includes(r.name));
-    return userRoles.some(r => r.permissions && r.permissions.includes(permission));
+    const userRoles = roles.filter(r => user.roles!.includes(r.name));
+    const allPerms = userRoles.flatMap((r: any) => r.permissions || []);
+    if (allPerms.includes("admin_panel")) return true; // Full access for CO OWNER / admin_panel holders
+    return allPerms.includes(permission);
   };
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);

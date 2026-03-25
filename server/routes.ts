@@ -76,6 +76,15 @@ async function requireAdmin(req: any, res: any): Promise<boolean> {
   return true;
 }
 
+async function isPrivileged(caller: string): Promise<boolean> {
+  if (caller === ADMIN_USER) return true;
+  const user = await storage.getUser(caller);
+  if (!user || !user.roles || user.roles.length === 0) return false;
+  const allRoles = await storage.getRoles();
+  const userRoles = allRoles.filter(r => user.roles.includes(r.name));
+  return userRoles.flatMap(r => r.permissions || []).includes("admin_panel");
+}
+
 async function requirePermission(permission: string, req: any, res: any): Promise<boolean> {
   const caller = await getSessionUser(req);
   if (!caller) { res.status(401).json({ message: "Unauthorized" }); return false; }
@@ -86,7 +95,9 @@ async function requirePermission(permission: string, req: any, res: any): Promis
   }
   const allRoles = await storage.getRoles();
   const userRoles = allRoles.filter(r => user.roles.includes(r.name));
-  const hasPermission = userRoles.some(r => r.permissions && r.permissions.includes(permission));
+  const allPerms = userRoles.flatMap(r => r.permissions || []);
+  if (allPerms.includes("admin_panel")) return true; // admin_panel = full access (CO OWNER equivalent)
+  const hasPermission = allPerms.includes(permission);
   if (!hasPermission) { res.status(403).json({ message: "Forbidden" }); return false; }
   return true;
 }
@@ -213,7 +224,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/users/:username/profile", async (req, res) => {
     const caller = await getSessionUser(req);
     if (!caller) return res.status(401).json({ message: "Unauthorized" });
-    if (caller !== req.params.username && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
+    if (caller !== req.params.username && !await isPrivileged(caller)) return res.status(403).json({ message: "Forbidden" });
     const allowed = ["displayName", "displayFont", "bio", "avatar", "banner", "bannerColor", "font", "animation"];
     const updates: any = {};
     for (const k of allowed) {
@@ -554,7 +565,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.patch("/api/chat/users/:username", async (req, res) => {
     const caller = await getSessionUser(req);
     if (!caller) return res.status(401).json({ message: "Unauthorized" });
-    if (caller !== req.params.username && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
+    if (caller !== req.params.username && !await isPrivileged(caller)) return res.status(403).json({ message: "Forbidden" });
     const user = await storage.updateUser(req.params.username, req.body);
     res.json(sanitizeUser(user));
   });
@@ -612,7 +623,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return all;
     })();
     const target = allMessages.find((m: any) => m.id === Number(req.params.id));
-    if (target && target.username !== caller && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
+    if (target && target.username !== caller && !await isPrivileged(caller)) return res.status(403).json({ message: "Forbidden" });
     const { content } = req.body;
     const msg = await storage.updateMessage(Number(req.params.id), content);
     res.json(msg);
@@ -628,7 +639,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       target = msgs.find((m: any) => m.id === Number(req.params.id));
       if (target) break;
     }
-    if (target && target.username !== caller && caller !== ADMIN_USER) return res.status(403).json({ message: "Forbidden" });
+    if (target && target.username !== caller && !await isPrivileged(caller)) return res.status(403).json({ message: "Forbidden" });
     await storage.deleteMessage(Number(req.params.id));
     res.status(204).end();
   });
