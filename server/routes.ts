@@ -1790,34 +1790,73 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     }
   }
 
+  // Source priority order for automatic fallback (vidsrc2 first — best coverage)
+  const SOURCE_FALLBACK_ORDER = ["vidsrc2", "superembed", "vidsrc", "embedsu"];
+
+  // Detect "unavailable" responses from player sites so we can fallback
+  function looksUnavailable(html: string): boolean {
+    const lc = html.toLowerCase();
+    return lc.includes("unavailable at the moment") ||
+           lc.includes("this media is unavailable") ||
+           lc.includes("not available at this time") ||
+           lc.includes("video is not available") ||
+           lc.includes("content not found") ||
+           // vidsrc.xyz / others return minimal HTML when content is missing
+           (html.length < 800 && !lc.includes("<video") && !lc.includes("player"));
+  }
+
+  const EMBED_FETCH_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Accept-Encoding": "identity",
+    "Referer": "https://www.google.com/",
+  };
+
+  async function fetchEmbedSource(src: string, type: string, id: string, s: string, e: string) {
+    const url = buildSourceUrl(src, type, id, s, e);
+    const response = await fetch(url, { headers: EMBED_FETCH_HEADERS, redirect: "follow" });
+    const html = await response.text();
+    const origin = new URL(response.url).origin;
+    return { html, origin };
+  }
+
   app.get("/api/movies/embed", async (req, res) => {
     const { type, id, s, e, source } = req.query as Record<string, string>;
     if (!id) return res.status(400).send("Missing id");
-    const targetUrl = buildSourceUrl(source || "vidsrc", type || "movie", id, s || "1", e || "1");
-    try {
-      const response = await fetch(targetUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-          "Accept-Language": "en-US,en;q=0.9",
-          "Accept-Encoding": "identity",
-          "Referer": "https://www.google.com/",
-        },
-        redirect: "follow",
-      });
-      const finalUrl = response.url;
-      const pageOrigin = new URL(finalUrl).origin;
-      const html = await response.text();
-      const rewritten = injectPopupBlocker(html, pageOrigin);
-      res.setHeader("Content-Type", "text/html; charset=utf-8");
-      res.setHeader("Access-Control-Allow-Origin", "*");
-      res.setHeader("X-Frame-Options", "ALLOWALL");
-      res.removeHeader("Content-Security-Policy");
-      res.removeHeader("X-Content-Type-Options");
-      res.send(rewritten);
-    } catch (e: any) {
-      res.status(502).send(`<html><body style="background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="color:#a855f7">Unable to load player</h2><p style="color:#888">${e.message}</p></div></body></html>`);
+
+    const t = type || "movie";
+    const season = s || "1";
+    const episode = e || "1";
+    const requestedSource = source || "vidsrc";
+
+    // Build fallback list: requested source first, then the rest in priority order
+    const fallbacks = [requestedSource, ...SOURCE_FALLBACK_ORDER.filter(x => x !== requestedSource)];
+
+    let lastError = "";
+    for (const src of fallbacks) {
+      try {
+        const { html, origin } = await fetchEmbedSource(src, t, id, season, episode);
+        if (looksUnavailable(html)) {
+          console.log(`[embed] ${src} returned unavailable for ${t}/${id}, trying next…`);
+          continue;
+        }
+        const rewritten = injectPopupBlocker(html, origin);
+        res.setHeader("Content-Type", "text/html; charset=utf-8");
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("X-Frame-Options", "ALLOWALL");
+        res.removeHeader("Content-Security-Policy");
+        res.removeHeader("X-Content-Type-Options");
+        res.send(rewritten);
+        return;
+      } catch (err: any) {
+        lastError = err.message;
+        console.log(`[embed] ${src} failed: ${err.message}`);
+      }
     }
+
+    // All sources exhausted
+    res.status(502).send(`<html><body style="background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="color:#a855f7">Media Unavailable</h2><p style="color:#888">All streaming sources are currently unavailable for this title.</p><p style="color:#555;font-size:12px">${lastError}</p></div></body></html>`);
   });
 
   // Silent sink for ad-network XHR requests redirected by the in-page interceptor.

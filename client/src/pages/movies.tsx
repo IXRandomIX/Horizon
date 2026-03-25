@@ -218,7 +218,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
-  const [source, setSource] = useState<SourceId>("vidsrc");
+  const [source, setSource] = useState<SourceId>("vidsrc2");
   const containerRef = useRef<HTMLDivElement>(null);
   const isTV = media.media_type === "tv";
 
