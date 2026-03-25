@@ -253,12 +253,9 @@ function HScrollSection({ title, icon, videos, isLoading, onVideoClick, onChanne
 
 function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => void }) {
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [streamReady, setStreamReady] = useState<"loading" | "ok" | "error">("loading");
-  const [retryCount, setRetryCount] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
   const isShort = video.duration !== null && video.duration <= 180;
-  const streamSrc = `/api/yt-stream/${video.id}`;
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&rel=0`;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -276,19 +273,6 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
     document.addEventListener("fullscreenchange", handler);
     return () => document.removeEventListener("fullscreenchange", handler);
   }, []);
-
-  // Check if stream is accessible before committing; re-runs on retry
-  useEffect(() => {
-    let cancelled = false;
-    setStreamReady("loading");
-    fetch(`/api/yt-video-info/${video.id}`)
-      .then(r => {
-        if (cancelled) return;
-        setStreamReady(r.ok ? "ok" : "error");
-      })
-      .catch(() => { if (!cancelled) setStreamReady("error"); });
-    return () => { cancelled = true; };
-  }, [video.id, retryCount]);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -309,67 +293,14 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-hidden relative" style={isShort ? { aspectRatio: "9/16", maxWidth: "100%", alignSelf: "center" } : {}}>
-          {streamReady === "loading" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-black z-10">
-              <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-              <p className="text-white/40 text-xs">Loading stream...</p>
-            </div>
-          )}
-
-          {streamReady === "ok" && (
-            <video
-              ref={videoRef}
-              src={`${streamSrc}?r=${retryCount}`}
-              autoPlay
-              controls
-              controlsList="nodownload"
-              className="w-full h-full bg-black"
-              data-testid="video-yt-player"
-              onError={(e) => {
-                const vid = e.currentTarget;
-                const code = vid.error?.code;
-                const msg = vid.error?.message;
-                console.error(`[video-error] code=${code} msg="${msg}" retry=${retryCount}`);
-                // Auto-retry up to 2 times (each retry re-probes the server for a fresh route)
-                if (retryCount < 2) {
-                  setRetryCount(c => c + 1);
-                } else {
-                  setStreamReady("error");
-                }
-              }}
-            />
-          )}
-
-          {streamReady === "error" && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-4 bg-black/90 px-6" data-testid="div-stream-error">
-              <div className="w-14 h-14 rounded-full bg-red-500/20 flex items-center justify-center">
-                <X className="w-7 h-7 text-red-400" />
-              </div>
-              <div className="text-center">
-                <p className="text-white font-semibold text-sm mb-1">Stream Unavailable</p>
-                <p className="text-white/40 text-xs max-w-xs">This video couldn't be loaded through the proxy. You can watch it directly on YouTube.</p>
-              </div>
-              <div className="flex items-center gap-3">
-                <button
-                  data-testid="button-retry-stream"
-                  onClick={() => { setRetryCount(0); setStreamReady("loading"); }}
-                  className="flex items-center gap-2 px-4 py-2 bg-white/10 hover:bg-white/20 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Try Again
-                </button>
-                <a
-                  href={`https://www.youtube.com/watch?v=${video.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  data-testid="link-watch-on-youtube"
-                  className="flex items-center gap-2 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
-                >
-                  Watch on YouTube
-                </a>
-              </div>
-            </div>
-          )}
+        <div className="flex-1 min-h-0 relative" style={isShort ? { aspectRatio: "9/16", maxWidth: "100%", alignSelf: "center" } : {}}>
+          <iframe
+            src={embedUrl}
+            className="w-full h-full border-0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowFullScreen
+            data-testid="iframe-yt-player"
+          />
         </div>
       </div>
     </div>
