@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink } from "lucide-react";
+import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink, Ban, Clock, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -106,6 +106,7 @@ export default function Chat() {
   const [newMessage, setNewMessage] = useState("");
   const [cooldown, setCooldown] = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [banStatus, setBanStatus] = useState<{ banned: boolean; ban: { reason: string; bannedBy: string; expiresAt: string | null } | null; timedOut: boolean; timeout: { expiresAt: string } | null } | null>(null);
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -156,6 +157,7 @@ export default function Chat() {
   const canPostInChannel = (channel: any): boolean => {
     if (!channel) return false;
     if (!user) return false;
+    if (channel.isLogs) return false;
     if (user.username === "RandomIX" || user.isAdmin) return true;
     if (userHasPermission("talk_in_private")) return true;
     if (channel.readOnlyPublic) return false;
@@ -254,6 +256,22 @@ export default function Chat() {
     }, 2000); // Poll every 2 seconds
     return () => clearInterval(interval);
   }, [activeChannel]);
+
+  // Ban status check
+  const fetchBanStatus = useCallback(async () => {
+    const token = getSessionToken();
+    if (!token) return;
+    const res = await fetch("/api/chat/ban-status", { headers: { Authorization: `Bearer ${token}` } });
+    if (res.ok) setBanStatus(await res.json());
+  }, []);
+
+  useEffect(() => {
+    if (user) {
+      fetchBanStatus();
+      const interval = setInterval(fetchBanStatus, 15000);
+      return () => clearInterval(interval);
+    }
+  }, [user, fetchBanStatus]);
 
   // Real-time polling for roles
   useEffect(() => {
@@ -469,13 +487,28 @@ export default function Chat() {
       }),
     });
     if (res.ok) {
-      setNewMessage("");
-      setReplyingTo(null);
-      justSentRef.current = true;
-      fetchMessages(activeChannel.id);
+      const data = await res.json().catch(() => ({}));
+      if (data.commandHandled) {
+        setNewMessage("");
+        toast({ title: data.message, className: "bg-green-900/80 border-green-500/30 text-green-200" });
+        fetchBanStatus();
+      } else {
+        setNewMessage("");
+        setReplyingTo(null);
+        justSentRef.current = true;
+        fetchMessages(activeChannel.id);
+      }
     } else if (res.status === 429) {
       const data = await res.json().catch(() => ({ remaining: 5 }));
-      startCooldown(data.remaining ?? 5);
+      if (data.timedOut) {
+        setBanStatus(prev => prev ? { ...prev, timedOut: true, timeout: { expiresAt: data.expiresAt } } : null);
+        await fetchBanStatus();
+      } else {
+        startCooldown(data.remaining ?? 5);
+      }
+    } else if (res.status === 403) {
+      const data = await res.json().catch(() => ({}));
+      if (data.banned) await fetchBanStatus();
     }
   };
 
@@ -702,6 +735,35 @@ export default function Chat() {
           <iframe src={webviewUrl} className="flex-1 w-full border-0" title="Proxy Webview" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals" />
         </div>
       )}
+      {/* Ban Overlay */}
+      {banStatus?.banned && (
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/95 backdrop-blur-sm">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md w-full mx-6 rounded-3xl border border-red-500/20 bg-red-950/20 p-10 text-center space-y-6">
+            <div className="w-20 h-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
+              <Ban className="w-10 h-10 text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-white tracking-widest uppercase mb-1">Banned from Chat</h2>
+              <p className="text-white/40 text-sm">You have been banned from Horizon Chat.</p>
+            </div>
+            <div className="space-y-3 text-left rounded-2xl bg-white/[0.03] border border-white/5 p-4">
+              <div>
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Reason</p>
+                <p className="text-sm text-white/80 mt-0.5">{banStatus.ban?.reason || "No reason provided"}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Banned by</p>
+                <p className="text-sm text-white/80 mt-0.5">{banStatus.ban?.bannedBy}</p>
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Expires</p>
+                <p className="text-sm text-white/80 mt-0.5">{banStatus.ban?.expiresAt ? new Date(banStatus.ban.expiresAt).toLocaleString() : "Never (Permanent)"}</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
       {/* Channels Sidebar */}
       <div className="w-64 border-r border-white/5 bg-black/50 flex flex-col hidden md:flex">
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
@@ -749,8 +811,9 @@ export default function Chat() {
             {channels.map((ch) => (
               <div key={ch.id} className="group flex items-center gap-1">
                 <button onClick={() => setActiveChannel(ch)} className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${activeChannel?.id === ch.id ? 'bg-primary/10 text-primary border border-primary/20' : 'text-muted-foreground hover:bg-white/5 hover:text-white'}`}>
-                  <Hash className="w-4 h-4" />
+                  {(ch as any).isLogs ? <Bot className="w-4 h-4 text-blue-400 flex-shrink-0" /> : <Hash className="w-4 h-4 flex-shrink-0" />}
                   <span className="font-medium">{ch.name}</span>
+                  {(ch as any).isLogs && <span className="ml-auto text-[9px] font-black text-blue-400/70 tracking-widest">BOT</span>}
                 </button>
                 {userHasPermission("manage_channels") && (
                   <DropdownMenu>
@@ -1061,24 +1124,26 @@ export default function Chat() {
 
             <Input 
               placeholder={
-                cooldown > 0
-                  ? `Slow down! Wait ${cooldown}s...`
-                  : activeChannel
-                    ? (!canPostInChannel(activeChannel) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`)
-                    : "Select a channel"
+                banStatus?.timedOut
+                  ? `You are timed out until ${banStatus.timeout ? new Date(banStatus.timeout.expiresAt).toLocaleTimeString() : "..."}`
+                  : cooldown > 0
+                    ? `Slow down! Wait ${cooldown}s...`
+                    : activeChannel
+                      ? (!canPostInChannel(activeChannel) ? `#${activeChannel.name} - ${(activeChannel as any).isLogs ? "Bot only" : "View only"}` : `Message #${activeChannel.name}`)
+                      : "Select a channel"
               }
               value={newMessage} 
               onChange={(e) => setNewMessage(e.target.value)}
-              className={`bg-transparent border-none focus-visible:ring-0 text-lg h-10 ${cooldown > 0 ? "placeholder:text-red-400/70" : ""}`}
-              disabled={!activeChannel || !canPostInChannel(activeChannel) || cooldown > 0}
+              className={`bg-transparent border-none focus-visible:ring-0 text-lg h-10 ${banStatus?.timedOut ? "placeholder:text-orange-400/70" : cooldown > 0 ? "placeholder:text-red-400/70" : ""}`}
+              disabled={!activeChannel || !canPostInChannel(activeChannel) || cooldown > 0 || !!banStatus?.timedOut}
             />
             <Button
               type="submit"
               size="icon"
-              className={`text-white shadow-lg transition-all ${cooldown > 0 ? "bg-red-500/60 hover:bg-red-500/60 shadow-red-500/10 w-10 min-w-[2.5rem]" : "bg-primary hover:bg-primary/90 shadow-primary/20"}`}
-              disabled={!newMessage.trim() || !activeChannel || !canPostInChannel(activeChannel) || cooldown > 0}
+              className={`text-white shadow-lg transition-all ${banStatus?.timedOut ? "bg-orange-500/60 hover:bg-orange-500/60 shadow-orange-500/10 w-10 min-w-[2.5rem]" : cooldown > 0 ? "bg-red-500/60 hover:bg-red-500/60 shadow-red-500/10 w-10 min-w-[2.5rem]" : "bg-primary hover:bg-primary/90 shadow-primary/20"}`}
+              disabled={!newMessage.trim() || !activeChannel || !canPostInChannel(activeChannel) || cooldown > 0 || !!banStatus?.timedOut}
             >
-              {cooldown > 0 ? <span className="text-xs font-black">{cooldown}s</span> : <Send className="w-5 h-5" />}
+              {banStatus?.timedOut ? <Clock className="w-4 h-4" /> : cooldown > 0 ? <span className="text-xs font-black">{cooldown}s</span> : <Send className="w-5 h-5" />}
             </Button>
           </form>
         </div>

@@ -14,7 +14,30 @@ export const channels = pgTable("channels", {
   isPrivate: boolean("is_private").default(false),
   allowedUsers: text("allowed_users").array().default(sql`'{}'::text[]`),
   readOnlyPublic: boolean("read_only_public").default(false),
+  isLogs: boolean("is_logs").default(false),
 });
+
+export const chatBans = pgTable("chat_bans", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull(),
+  reason: text("reason").default(""),
+  bannedBy: text("banned_by").notNull(),
+  bannedAt: timestamp("banned_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at"),
+  active: boolean("active").default(true).notNull(),
+});
+
+export const chatTimeouts = pgTable("chat_timeouts", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull(),
+  timeoutBy: text("timeout_by").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  active: boolean("active").default(true).notNull(),
+});
+
+export type ChatBan = typeof chatBans.$inferSelect;
+export type ChatTimeout = typeof chatTimeouts.$inferSelect;
 
 export const roles = pgTable("roles", {
   id: serial("id").primaryKey(),

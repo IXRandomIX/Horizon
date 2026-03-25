@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, questCycles, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, questCycles, chatBans, chatTimeouts, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack, type ChatBan, type ChatTimeout } from "@shared/schema";
 import { QUESTS } from "@shared/quests";
 import { eq, and, or, sql, ne, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -105,6 +105,16 @@ export interface IStorage {
   createUserTrack(data: { username: string; name: string; filePath: string; fileType: string; isPublic: boolean }): Promise<UserTrack>;
   deleteUserTrack(id: number): Promise<void>;
   getUserTrack(id: number): Promise<UserTrack | undefined>;
+
+  // Chat Moderation
+  banUser(username: string, bannedBy: string, reason: string, expiresAt: Date | null): Promise<void>;
+  unbanUser(username: string): Promise<void>;
+  getActiveBan(username: string): Promise<ChatBan | null>;
+  timeoutUser(username: string, timeoutBy: string, expiresAt: Date): Promise<void>;
+  untimeoutUser(username: string): Promise<void>;
+  getActiveTimeout(username: string): Promise<ChatTimeout | null>;
+  ensureLogsChannel(): Promise<Channel>;
+  postBotMessage(channelId: number, content: string): Promise<Message>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -507,6 +517,64 @@ export class DatabaseStorage implements IStorage {
     await db.update(userQuestProgress)
       .set({ completed: true })
       .where(and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId), eq(userQuestProgress.cycleId, cycleId)));
+  }
+
+  async banUser(username: string, bannedBy: string, reason: string, expiresAt: Date | null): Promise<void> {
+    await db.update(chatBans).set({ active: false }).where(and(eq(chatBans.username, username), eq(chatBans.active, true)));
+    await db.insert(chatBans).values({ username, bannedBy, reason, expiresAt, active: true });
+  }
+
+  async unbanUser(username: string): Promise<void> {
+    await db.update(chatBans).set({ active: false }).where(and(eq(chatBans.username, username), eq(chatBans.active, true)));
+  }
+
+  async getActiveBan(username: string): Promise<ChatBan | null> {
+    const [ban] = await db.select().from(chatBans).where(and(eq(chatBans.username, username), eq(chatBans.active, true)));
+    if (!ban) return null;
+    if (ban.expiresAt && ban.expiresAt < new Date()) {
+      await this.unbanUser(username);
+      return null;
+    }
+    return ban;
+  }
+
+  async timeoutUser(username: string, timeoutBy: string, expiresAt: Date): Promise<void> {
+    await db.update(chatTimeouts).set({ active: false }).where(and(eq(chatTimeouts.username, username), eq(chatTimeouts.active, true)));
+    await db.insert(chatTimeouts).values({ username, timeoutBy, expiresAt, active: true });
+  }
+
+  async untimeoutUser(username: string): Promise<void> {
+    await db.update(chatTimeouts).set({ active: false }).where(and(eq(chatTimeouts.username, username), eq(chatTimeouts.active, true)));
+  }
+
+  async getActiveTimeout(username: string): Promise<ChatTimeout | null> {
+    const [timeout] = await db.select().from(chatTimeouts).where(and(eq(chatTimeouts.username, username), eq(chatTimeouts.active, true)));
+    if (!timeout) return null;
+    if (timeout.expiresAt < new Date()) {
+      await this.untimeoutUser(username);
+      return null;
+    }
+    return timeout;
+  }
+
+  async ensureLogsChannel(): Promise<Channel> {
+    const [existing] = await db.select().from(channels).where(eq(channels.isLogs, true));
+    if (existing) return existing;
+    const [created] = await db.insert(channels).values({ name: "logs", isPrivate: false, readOnlyPublic: true, isLogs: true }).returning();
+    return created;
+  }
+
+  async postBotMessage(channelId: number, content: string): Promise<Message> {
+    const [msg] = await db.insert(messages).values({
+      channelId,
+      username: "HorizonBot",
+      content,
+      role: "BOT",
+      roleColor: "#3b82f6",
+      font: "sans",
+      animation: "none",
+    }).returning();
+    return msg;
   }
 }
 

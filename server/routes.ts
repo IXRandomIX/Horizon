@@ -125,6 +125,46 @@ async function isStaffUser(username: string): Promise<boolean> {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  const CHAT_TIME_MAP: Record<string, number> = {
+    "30 seconds": 30 * 1000,
+    "1 minute": 60 * 1000,
+    "3 minutes": 3 * 60 * 1000,
+    "1 hour": 60 * 60 * 1000,
+    "10 hours": 10 * 60 * 60 * 1000,
+    "1 day": 24 * 60 * 60 * 1000,
+    "2 days": 2 * 24 * 60 * 60 * 1000,
+    "3 days": 3 * 24 * 60 * 60 * 1000,
+    "10 days": 10 * 24 * 60 * 60 * 1000,
+    "1 month": 30 * 24 * 60 * 60 * 1000,
+    "2 months": 60 * 24 * 60 * 60 * 1000,
+    "3 months": 90 * 24 * 60 * 60 * 1000,
+    "1 year": 365 * 24 * 60 * 60 * 1000,
+    "2 years": 730 * 24 * 60 * 60 * 1000,
+    "3 years": 1095 * 24 * 60 * 60 * 1000,
+    "10 years": 3650 * 24 * 60 * 60 * 1000,
+  };
+
+  function parseChatTime(words: string[], offset: number): { ms: number; label: string } | null {
+    const twoWord = `${words[offset] ?? ""} ${words[offset + 1] ?? ""}`.toLowerCase().trim();
+    if (CHAT_TIME_MAP[twoWord] !== undefined) return { ms: CHAT_TIME_MAP[twoWord], label: twoWord };
+    const oneWord = (words[offset] ?? "").toLowerCase().trim();
+    if (CHAT_TIME_MAP[oneWord] !== undefined) return { ms: CHAT_TIME_MAP[oneWord], label: oneWord };
+    return null;
+  }
+
+  function formatExpiry(expiresAt: Date | null): string {
+    if (!expiresAt) return "Permanent";
+    return expiresAt.toUTCString();
+  }
+
+  let logsChannelId: number | null = null;
+  async function getLogsChannelId(): Promise<number | null> {
+    if (logsChannelId) return logsChannelId;
+    const ch = await storage.ensureLogsChannel();
+    logsChannelId = ch.id;
+    return logsChannelId;
+  }
+
   const setupChat = async () => {
     try {
       let channels = await storage.getChannels();
@@ -138,6 +178,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         if (ch.name === "lounge") await storage.deleteChannel(ch.id);
         if (ch.name === "announcements" && !ch.readOnlyPublic) await storage.updateChannel(ch.id, { readOnlyPublic: true });
       }
+      // Ensure logs channel exists
+      const logsCh = await storage.ensureLogsChannel();
+      logsChannelId = logsCh.id;
       const proxies = await storage.getProxies();
       if (proxies.length === 0) {
         await storage.createProxy({ name: "Interstellar", url: "https://ad-free-proxy--securlyeduclass.replit.app/", useWebview: true });
@@ -622,8 +665,79 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const allowed = await requirePermission("talk_in_private", req, res);
       if (!allowed) return;
     }
-    // 5-second spam cooldown (skip for privileged users)
     const isPriv = await isPrivileged(sessionUsername);
+
+    // ── Slash commands (Owner / CO OWNER only) ────────────────────────────
+    const { content, replyToId, replyToUsername, replyToContent } = req.body;
+    if (typeof content === "string" && content.startsWith("/")) {
+      if (!isPriv && sessionUsername !== ADMIN_USER) {
+        return res.status(403).json({ message: "You don't have permission to use commands." });
+      }
+      const words = content.trim().split(/\s+/);
+      const cmd = words[0].toLowerCase();
+      const targetUser = words[1]?.toLowerCase();
+
+      if (cmd === "/ban" && targetUser) {
+        const timeResult = parseChatTime(words, 2);
+        const reason = timeResult
+          ? words.slice(4).join(" ") || "No reason provided"
+          : words.slice(2).join(" ") || "No reason provided";
+        const expiresAt = timeResult ? new Date(Date.now() + timeResult.ms) : null;
+        await storage.banUser(targetUser, sessionUsername, reason, expiresAt);
+        const logsCh = await getLogsChannelId();
+        if (logsCh) {
+          const label = timeResult ? timeResult.label : "permanent";
+          await storage.postBotMessage(logsCh, `🔨 **${targetUser}** was banned by **${sessionUsername}** | Duration: ${label} | Reason: ${reason} | Expires: ${formatExpiry(expiresAt)}`);
+        }
+        return res.status(200).json({ commandHandled: true, message: `${targetUser} has been banned.` });
+      }
+
+      if (cmd === "/timeout" && targetUser) {
+        const timeResult = parseChatTime(words, 2);
+        if (!timeResult) return res.status(400).json({ message: "Invalid time. Usage: /timeout [username] [30 seconds | 1 minute | ...]" });
+        const expiresAt = new Date(Date.now() + timeResult.ms);
+        await storage.timeoutUser(targetUser, sessionUsername, expiresAt);
+        const logsCh = await getLogsChannelId();
+        if (logsCh) {
+          await storage.postBotMessage(logsCh, `🔇 **${targetUser}** was timed out by **${sessionUsername}** | Duration: ${timeResult.label} | Expires: ${formatExpiry(expiresAt)}`);
+        }
+        return res.status(200).json({ commandHandled: true, message: `${targetUser} has been timed out for ${timeResult.label}.` });
+      }
+
+      if (cmd === "/unban" && targetUser) {
+        await storage.unbanUser(targetUser);
+        const logsCh = await getLogsChannelId();
+        if (logsCh) {
+          await storage.postBotMessage(logsCh, `✅ **${targetUser}** was unbanned by **${sessionUsername}**`);
+        }
+        return res.status(200).json({ commandHandled: true, message: `${targetUser} has been unbanned.` });
+      }
+
+      if (cmd === "/untimeout" && targetUser) {
+        await storage.untimeoutUser(targetUser);
+        const logsCh = await getLogsChannelId();
+        if (logsCh) {
+          await storage.postBotMessage(logsCh, `🔊 **${targetUser}**'s timeout was removed by **${sessionUsername}**`);
+        }
+        return res.status(200).json({ commandHandled: true, message: `${targetUser}'s timeout has been removed.` });
+      }
+
+      return res.status(400).json({ message: `Unknown command: ${cmd}. Available: /ban, /timeout, /unban, /untimeout` });
+    }
+
+    // ── Ban check ─────────────────────────────────────────────────────────
+    const activeBan = await storage.getActiveBan(sessionUsername);
+    if (activeBan) {
+      return res.status(403).json({ message: "You are banned from Horizon Chat.", banned: true, reason: activeBan.reason, expiresAt: activeBan.expiresAt });
+    }
+
+    // ── Timeout check ──────────────────────────────────────────────────────
+    const activeTimeout = await storage.getActiveTimeout(sessionUsername);
+    if (activeTimeout) {
+      return res.status(429).json({ message: "You are timed out.", timedOut: true, expiresAt: activeTimeout.expiresAt });
+    }
+
+    // ── 5-second spam cooldown (skip for privileged users) ────────────────
     if (!isPriv) {
       const last = lastMessageAt.get(sessionUsername) ?? 0;
       const elapsed = Date.now() - last;
@@ -633,7 +747,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
     }
     lastMessageAt.set(sessionUsername, Date.now());
-    const { content, replyToId, replyToUsername, replyToContent } = req.body;
+
     const username = sessionUsername;
     const user = await storage.getUser(username);
     const msg = await storage.createMessage({
@@ -697,6 +811,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const { username, emoji } = req.body;
     await storage.removeReaction(Number(req.params.id), username, emoji);
     res.status(204).end();
+  });
+
+  // ─── Chat Ban Status ──────────────────────────────────────────────────────
+  app.get("/api/chat/ban-status", async (req, res) => {
+    const username = await getSessionUser(req);
+    if (!username) return res.status(401).json({ message: "Unauthorized" });
+    const ban = await storage.getActiveBan(username);
+    const timeout = await storage.getActiveTimeout(username);
+    return res.json({
+      banned: !!ban,
+      ban: ban ? { reason: ban.reason, bannedBy: ban.bannedBy, expiresAt: ban.expiresAt } : null,
+      timedOut: !!timeout,
+      timeout: timeout ? { expiresAt: timeout.expiresAt } : null,
+    });
   });
 
   // ─── Proxies ──────────────────────────────────────────────────────────────
