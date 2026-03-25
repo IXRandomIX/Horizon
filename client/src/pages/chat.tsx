@@ -511,8 +511,12 @@ export default function Chat() {
       const data = await res.json().catch(() => ({}));
       if (data.commandHandled) {
         setNewMessage("");
-        toast({ title: data.message, className: "bg-green-900/80 border-green-500/30 text-green-200" });
-        fetchBanStatus();
+        if (data.error) {
+          toast({ title: data.message, className: "bg-red-900/80 border-red-500/30 text-red-200" });
+        } else {
+          toast({ title: data.message, className: "bg-green-900/80 border-green-500/30 text-green-200" });
+          fetchBanStatus();
+        }
       } else {
         setNewMessage("");
         setReplyingTo(null);

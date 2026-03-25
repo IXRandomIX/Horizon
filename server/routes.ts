@@ -678,6 +678,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const targetUser = words[1]?.toLowerCase();
 
       if (cmd === "/ban" && targetUser) {
+        if (targetUser === ADMIN_USER.toLowerCase() || await isPrivileged(targetUser)) {
+          return res.status(200).json({ commandHandled: true, error: true, message: `You cannot ban a staff member.` });
+        }
         const timeResult = parseChatTime(words, 2);
         const reason = timeResult
           ? words.slice(4).join(" ") || "No reason provided"
@@ -693,6 +696,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       }
 
       if (cmd === "/timeout" && targetUser) {
+        if (targetUser === ADMIN_USER.toLowerCase() || await isPrivileged(targetUser)) {
+          return res.status(200).json({ commandHandled: true, error: true, message: `You cannot timeout a staff member.` });
+        }
         const timeResult = parseChatTime(words, 2);
         if (!timeResult) return res.status(400).json({ message: "Invalid time. Usage: /timeout [username] [30 seconds | 1 minute | ...]" });
         const expiresAt = new Date(Date.now() + timeResult.ms);
