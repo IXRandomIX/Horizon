@@ -727,6 +727,41 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     });
   });
 
+  app.get("/api/ranks/leaderboard", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    const allUsers = await storage.getAllUsers();
+    const allRoles = await storage.getRoles();
+    const staffRoleNames = allRoles
+      .filter(r => (r.permissions || []).includes("admin_panel"))
+      .map(r => r.name);
+    const staffList: any[] = [];
+    const byRank: Record<number, any[]> = {};
+    for (const u of allUsers) {
+      const userIsStaff = u.username === ADMIN_USER || (u.roles || []).some((r: string) => staffRoleNames.includes(r));
+      const xp = u.xp ?? 0;
+      const rank = getRankForXP(xp);
+      const entry = {
+        username: u.username,
+        displayName: u.displayName,
+        avatar: u.avatar,
+        xp,
+        rank,
+      };
+      if (userIsStaff) {
+        staffList.push(entry);
+      } else {
+        if (!byRank[rank.rank]) byRank[rank.rank] = [];
+        byRank[rank.rank].push(entry);
+      }
+    }
+    // Sort each rank group by XP descending
+    for (const k of Object.keys(byRank)) {
+      byRank[Number(k)].sort((a: any, b: any) => b.xp - a.xp);
+    }
+    res.json({ staff: staffList, byRank });
+  });
+
   app.post("/api/xp/track", async (req, res) => {
     const caller = await getSessionUser(req);
     if (!caller) return res.status(401).json({ message: "Unauthorized" });
