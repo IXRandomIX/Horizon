@@ -95,7 +95,7 @@ export default function RanksPage() {
     return acc;
   }, {});
 
-  const rankedTiers = [...RANKS].filter(r => r.rank !== 0).sort((a, b) => a.rank - b.rank);
+  const rankedTiers = [...RANKS].sort((a, b) => a.rank - b.rank);
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar bg-black">
@@ -125,7 +125,7 @@ export default function RanksPage() {
             <div>
               <p className="text-white/40 text-xs uppercase tracking-widest font-bold">Your Status</p>
               <p className="text-2xl font-black" style={{ color: currentRank.color }}>
-                {isStaff ? "STAFF" : currentRank.rank === 0 ? "Unranked" : `Rank ${currentRank.rank} · ${currentRank.name}`}
+                {isStaff ? "STAFF" : currentRank.rank === 9 ? "Unranked" : `Rank ${currentRank.rank} · ${currentRank.name}`}
               </p>
             </div>
             <div className="ml-auto text-right">

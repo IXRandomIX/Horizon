@@ -51,7 +51,7 @@ export default function LeaderboardPage() {
     fetchLeaderboard();
   }, [fetchLeaderboard]);
 
-  const rankedTiers = [...RANKS].filter(r => r.rank !== 0).sort((a, b) => a.rank - b.rank);
+  const rankedTiers = [...RANKS].sort((a, b) => a.rank - b.rank);
 
   return (
     <div className="h-full overflow-y-auto custom-scrollbar bg-black">
@@ -151,35 +151,6 @@ export default function LeaderboardPage() {
                 );
               })}
 
-              {/* Unranked */}
-              {leaderboard && (() => {
-                const unranked = leaderboard.byRank[0] ?? [];
-                if (unranked.length === 0) return null;
-                return (
-                  <div className="rounded-2xl border border-white/10 overflow-hidden opacity-60">
-                    <div className="flex items-center gap-3 px-4 py-3 border-b border-white/5 bg-white/[0.02]">
-                      <div className="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black bg-white/10 text-white/30 flex-shrink-0">?</div>
-                      <p className="text-sm font-black text-white/30">Unranked</p>
-                      <span className="ml-auto text-[10px] text-white/20 font-bold">
-                        {unranked.length} {unranked.length === 1 ? "user" : "users"}
-                      </span>
-                    </div>
-                    <div className="divide-y divide-white/[0.04] bg-white/[0.01]">
-                      {unranked.map((u, idx) => (
-                        <div key={u.username} className="flex items-center gap-3 px-4 py-3">
-                          <span className="text-xs font-bold text-white/20 w-6 text-right flex-shrink-0">#{idx + 1}</span>
-                          <Avatar user={u} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-white/50 truncate">{u.displayName || u.username}</p>
-                            <p className="text-xs text-white/20">@{u.username}</p>
-                          </div>
-                          <span className="text-xs font-bold text-white/30 flex-shrink-0">{u.xp.toLocaleString()} XP</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })()}
             </div>
           </>
         )}

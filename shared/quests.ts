@@ -1,5 +1,5 @@
 export const RANKS = [
-  { rank: 0, name: "Unranked", xpNeeded: 0, color: "#6b7280" },
+  { rank: 9, name: "Unranked", xpNeeded: 0, color: "#6b7280" },
   { rank: 8, name: "Rank Climber", xpNeeded: 300, color: "#a3a3a3" },
   { rank: 7, name: "Normal", xpNeeded: 1000, color: "#60a5fa" },
   { rank: 6, name: "Beginner", xpNeeded: 5000, color: "#34d399" },
