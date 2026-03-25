@@ -105,11 +105,16 @@ async function requirePermission(permission: string, req: any, res: any): Promis
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const setupChat = async () => {
     try {
-      const channels = await storage.getChannels();
+      let channels = await storage.getChannels();
       if (channels.length === 0) {
         await storage.createChannel({ name: "general" });
-        await storage.createChannel({ name: "announcements" });
-        await storage.createChannel({ name: "lounge" });
+        await storage.createChannel({ name: "announcements", readOnlyPublic: true });
+      }
+      // Ensure announcements is readOnlyPublic and remove lounge
+      channels = await storage.getChannels();
+      for (const ch of channels) {
+        if (ch.name === "lounge") await storage.deleteChannel(ch.id);
+        if (ch.name === "announcements" && !ch.readOnlyPublic) await storage.updateChannel(ch.id, { readOnlyPublic: true });
       }
       const proxies = await storage.getProxies();
       if (proxies.length === 0) {
