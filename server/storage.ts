@@ -520,16 +520,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async banUser(username: string, bannedBy: string, reason: string, expiresAt: Date | null): Promise<void> {
-    await db.update(chatBans).set({ active: false }).where(and(eq(chatBans.username, username), eq(chatBans.active, true)));
-    await db.insert(chatBans).values({ username, bannedBy, reason, expiresAt, active: true });
+    const lower = username.toLowerCase();
+    await db.update(chatBans).set({ active: false }).where(and(sql`lower(${chatBans.username}) = ${lower}`, eq(chatBans.active, true)));
+    await db.insert(chatBans).values({ username: lower, bannedBy, reason, expiresAt, active: true });
   }
 
   async unbanUser(username: string): Promise<void> {
-    await db.update(chatBans).set({ active: false }).where(and(eq(chatBans.username, username), eq(chatBans.active, true)));
+    const lower = username.toLowerCase();
+    await db.update(chatBans).set({ active: false }).where(and(sql`lower(${chatBans.username}) = ${lower}`, eq(chatBans.active, true)));
   }
 
   async getActiveBan(username: string): Promise<ChatBan | null> {
-    const [ban] = await db.select().from(chatBans).where(and(eq(chatBans.username, username), eq(chatBans.active, true)));
+    const lower = username.toLowerCase();
+    const [ban] = await db.select().from(chatBans).where(and(sql`lower(${chatBans.username}) = ${lower}`, eq(chatBans.active, true)));
     if (!ban) return null;
     if (ban.expiresAt && ban.expiresAt < new Date()) {
       await this.unbanUser(username);
@@ -539,16 +542,19 @@ export class DatabaseStorage implements IStorage {
   }
 
   async timeoutUser(username: string, timeoutBy: string, expiresAt: Date): Promise<void> {
-    await db.update(chatTimeouts).set({ active: false }).where(and(eq(chatTimeouts.username, username), eq(chatTimeouts.active, true)));
-    await db.insert(chatTimeouts).values({ username, timeoutBy, expiresAt, active: true });
+    const lower = username.toLowerCase();
+    await db.update(chatTimeouts).set({ active: false }).where(and(sql`lower(${chatTimeouts.username}) = ${lower}`, eq(chatTimeouts.active, true)));
+    await db.insert(chatTimeouts).values({ username: lower, timeoutBy, expiresAt, active: true });
   }
 
   async untimeoutUser(username: string): Promise<void> {
-    await db.update(chatTimeouts).set({ active: false }).where(and(eq(chatTimeouts.username, username), eq(chatTimeouts.active, true)));
+    const lower = username.toLowerCase();
+    await db.update(chatTimeouts).set({ active: false }).where(and(sql`lower(${chatTimeouts.username}) = ${lower}`, eq(chatTimeouts.active, true)));
   }
 
   async getActiveTimeout(username: string): Promise<ChatTimeout | null> {
-    const [timeout] = await db.select().from(chatTimeouts).where(and(eq(chatTimeouts.username, username), eq(chatTimeouts.active, true)));
+    const lower = username.toLowerCase();
+    const [timeout] = await db.select().from(chatTimeouts).where(and(sql`lower(${chatTimeouts.username}) = ${lower}`, eq(chatTimeouts.active, true)));
     if (!timeout) return null;
     if (timeout.expiresAt < new Date()) {
       await this.untimeoutUser(username);

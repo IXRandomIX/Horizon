@@ -758,27 +758,27 @@ export default function Chat() {
       )}
       {/* Ban Overlay */}
       {banStatus?.banned && (
-        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/95 backdrop-blur-sm">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md w-full mx-6 rounded-3xl border border-red-500/20 bg-red-950/20 p-10 text-center space-y-6">
-            <div className="w-20 h-20 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center mx-auto">
-              <Ban className="w-10 h-10 text-red-400" />
-            </div>
-            <div>
-              <h2 className="text-2xl font-black text-white tracking-widest uppercase mb-1">Banned from Chat</h2>
-              <p className="text-white/40 text-sm">You have been banned from Horizon Chat.</p>
-            </div>
-            <div className="space-y-3 text-left rounded-2xl bg-white/[0.03] border border-white/5 p-4">
-              <div>
-                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Reason</p>
-                <p className="text-sm text-white/80 mt-0.5">{banStatus.ban?.reason || "No reason provided"}</p>
+        <div className="absolute inset-0 z-40 flex items-center justify-center bg-black backdrop-blur-sm">
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-sm w-full mx-6 text-center space-y-8">
+            <div className="space-y-3">
+              <div className="w-20 h-20 rounded-full bg-red-500/10 border-2 border-red-500/30 flex items-center justify-center mx-auto">
+                <Ban className="w-9 h-9 text-red-500" />
               </div>
-              <div>
-                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Banned by</p>
-                <p className="text-sm text-white/80 mt-0.5">{banStatus.ban?.bannedBy}</p>
+              <h1 className="text-3xl font-black text-white tracking-[0.15em] uppercase">YOU HAVE BEEN BANNED</h1>
+              <p className="text-white/30 text-xs tracking-widest uppercase">from Horizon Chat</p>
+            </div>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <p className="text-[10px] font-black tracking-[0.2em] uppercase text-red-500/60">Banned by</p>
+                <p className="text-white font-bold text-lg">{banStatus.ban?.bannedBy}</p>
               </div>
-              <div>
-                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">Expires</p>
-                <p className="text-sm text-white/80 mt-0.5">{banStatus.ban?.expiresAt ? new Date(banStatus.ban.expiresAt).toLocaleString() : "Never (Permanent)"}</p>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black tracking-[0.2em] uppercase text-red-500/60">Ban expires</p>
+                <p className="text-white font-semibold">{banStatus.ban?.expiresAt ? new Date(banStatus.ban.expiresAt).toLocaleString() : "Never — Permanent Ban"}</p>
+              </div>
+              <div className="space-y-1">
+                <p className="text-[10px] font-black tracking-[0.2em] uppercase text-red-500/60">Reason</p>
+                <p className="text-white/70 text-sm leading-relaxed italic">"{banStatus.ban?.reason || "No reason provided"}"</p>
               </div>
             </div>
           </motion.div>
