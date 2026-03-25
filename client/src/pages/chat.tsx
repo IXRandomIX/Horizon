@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon } from "lucide-react";
+import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -118,6 +118,7 @@ export default function Chat() {
   const [readOnlyPublic, setReadOnlyPublic] = useState(false);
   const [proxies, setProxies] = useState<any[]>([]);
   const [editingProxy, setEditingProxy] = useState<{ id: number; name: string; url: string } | null>(null);
+  const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
   const [roles, setRoles] = useState<any[]>([]);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleColor, setNewRoleColor] = useState("#9ca3af");
@@ -664,7 +665,23 @@ export default function Chat() {
   };
 
   return (
-    <div className="flex h-full bg-black text-white overflow-hidden">
+    <div className="flex h-full bg-black text-white overflow-hidden relative">
+      {/* Webview Overlay */}
+      {webviewUrl && (
+        <div className="absolute inset-0 z-50 flex flex-col bg-black">
+          <div className="flex items-center gap-2 px-4 py-2 border-b border-white/10 bg-black/80">
+            <Monitor className="w-4 h-4 text-primary" />
+            <span className="text-white text-sm truncate flex-1">{webviewUrl}</span>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white shrink-0" onClick={() => window.open(webviewUrl, '_blank')}>
+              <ExternalLink className="w-4 h-4" />
+            </Button>
+            <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white shrink-0" onClick={() => setWebviewUrl(null)}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+          <iframe src={webviewUrl} className="flex-1 w-full border-0" title="Proxy Webview" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals" />
+        </div>
+      )}
       {/* Channels Sidebar */}
       <div className="w-64 border-r border-white/5 bg-black/50 flex flex-col hidden md:flex">
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
@@ -1226,21 +1243,31 @@ export default function Chat() {
                                     </div>
                                   </div>
                                 ) : (
-                                  <div className="flex items-center justify-between gap-2">
-                                    <div className="flex-1 min-w-0">
-                                      <p className="text-white text-sm font-medium truncate">{proxy.name}</p>
-                                      <p className="text-white/40 text-xs truncate">{proxy.url}</p>
+                                  <div className="space-y-2">
+                                    <div className="flex items-center justify-between gap-2">
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-white text-sm font-medium truncate">{proxy.name}</p>
+                                        <p className="text-white/40 text-xs truncate">{proxy.url}</p>
+                                      </div>
+                                      <div className="flex gap-1 shrink-0">
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white" onClick={() => setEditingProxy({ id: proxy.id, name: proxy.name, url: proxy.url })}>
+                                          <Edit2 className="w-3 h-3" />
+                                        </Button>
+                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-400" onClick={async () => {
+                                          const res = await authFetch(`/api/proxies/${proxy.id}`, { method: "DELETE" });
+                                          if (res.ok) { toast({ title: "Proxy deleted" }); fetchProxies(); }
+                                          else toast({ title: "Failed to delete", variant: "destructive" });
+                                        }}>
+                                          <Trash2 className="w-3 h-3" />
+                                        </Button>
+                                      </div>
                                     </div>
-                                    <div className="flex gap-1 shrink-0">
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white" onClick={() => setEditingProxy({ id: proxy.id, name: proxy.name, url: proxy.url })}>
-                                        <Edit2 className="w-3 h-3" />
+                                    <div className="flex gap-2">
+                                      <Button size="sm" variant="outline" className="flex-1 h-7 text-xs gap-1 border-white/10 hover:bg-white/5" onClick={() => setWebviewUrl(proxy.url)}>
+                                        <Monitor className="w-3 h-3" /> Webview
                                       </Button>
-                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-400" onClick={async () => {
-                                        const res = await authFetch(`/api/proxies/${proxy.id}`, { method: "DELETE" });
-                                        if (res.ok) { toast({ title: "Proxy deleted" }); fetchProxies(); }
-                                        else toast({ title: "Failed to delete", variant: "destructive" });
-                                      }}>
-                                        <Trash2 className="w-3 h-3" />
+                                      <Button size="sm" variant="outline" className="flex-1 h-7 text-xs gap-1 border-white/10 hover:bg-white/5" onClick={() => window.open(proxy.url, '_blank')}>
+                                        <ExternalLink className="w-3 h-3" /> New Tab
                                       </Button>
                                     </div>
                                   </div>
