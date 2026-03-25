@@ -2369,7 +2369,9 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     return e;
   }
 
-  function rewriteYtUrls(text: string): string {
+  const PROXY_STEM = YT_PROXY_PATH.slice(1); // "api/yt-proxy"
+
+  function rewriteYtUrls(text: string, skipRelative = false): string {
     let out = text;
     for (const [prefix, origin] of Object.entries(YT_ORIGINS)) {
       const host = new URL(origin).host;
@@ -2377,8 +2379,20 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
       out = out.split(`http://${host}`).join(`${YT_PROXY_PATH}/${prefix}`);
       out = out.split(`//${host}`).join(`${YT_PROXY_PATH}/${prefix}`);
     }
-    out = out.replace(/(src|href|action|poster|data-src)="\//g, `$1="${YT_PROXY_PATH}/noco/`);
-    out = out.replace(/(src|href|action|poster|data-src)='\//g, `$1='${YT_PROXY_PATH}/noco/`);
+    if (!skipRelative) {
+      // Rewrite root-relative paths, but skip any that are already proxied paths
+      out = out.replace(/(src|href|action|poster|data-src)="\//g, (match, attr) => {
+        return `${attr}="${YT_PROXY_PATH}/noco/`;
+      });
+      out = out.replace(/(src|href|action|poster|data-src)='\//g, (match, attr) => {
+        return `${attr}='${YT_PROXY_PATH}/noco/`;
+      });
+      // Undo any double-rewrites (already-proxied paths that got prefixed again)
+      const doublePrefix = `${YT_PROXY_PATH}/noco/${PROXY_STEM}`;
+      while (out.includes(doublePrefix)) {
+        out = out.split(doublePrefix).join(`${YT_PROXY_PATH}`);
+      }
+    }
     return out;
   }
 
@@ -2616,7 +2630,7 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
         contentType.includes("css") || contentType.includes("json");
       if (isText) {
         let text = await upstreamRes.text();
-        text = rewriteYtUrls(text);
+        text = rewriteYtUrls(text, true);
         res.setHeader("Content-Type", contentType);
         const buf = Buffer.from(text, "utf8");
         if (isCacheable && upstreamRes.status === 200) ytProxyCache.set(cacheKey, { ct: contentType, buf, ts: Date.now() });
