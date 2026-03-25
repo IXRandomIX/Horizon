@@ -48,7 +48,7 @@ export default function Browser() {
           ref={iframeRef}
           src="/scramjet/"
           className={`w-full h-full border-0 transition-opacity duration-1000 ${isLoading ? 'opacity-0' : 'opacity-100'}`}
-          allow="fullscreen"
+          allow="fullscreen; autoplay; encrypted-media; picture-in-picture; clipboard-read; clipboard-write; geolocation; microphone; camera"
           onLoad={() => setIsLoading(false)}
           title="Scramjet Proxy"
           data-testid="iframe-browser"
