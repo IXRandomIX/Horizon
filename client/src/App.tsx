@@ -14,6 +14,7 @@ import GatekeepOS from "@/pages/gatekeep-os";
 import Announcements from "@/pages/announcements";
 import Chat from "@/pages/chat";
 import Partners from "@/pages/partners";
+import Credits from "@/pages/credits";
 import AIPage from "@/pages/ai";
 import TheWall from "@/pages/the-wall";
 import LoginPage from "@/pages/login";
@@ -48,6 +49,7 @@ function Router() {
       <Route path="/announcements" component={Announcements} />
       <Route path="/chat" component={Chat} />
       <Route path="/partners" component={Partners} />
+      <Route path="/credits" component={Credits} />
       <Route path="/ai" component={AIPage} />
       <Route path="/the-wall" component={TheWall} />
       <Route path="/profile" component={ProfileEditor} />

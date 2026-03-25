@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
   Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
-  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen, Youtube, Trophy, BarChart2
+  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen, Youtube, Trophy, BarChart2, Star
 } from "lucide-react";
 import { getRankForXP } from "@shared/quests";
 import {
@@ -89,6 +89,7 @@ export function AppSidebar() {
     { name: "Horizon AI", path: "/ai", icon: Sparkles, highlight: true },
     { name: "Global Inbox", path: "/global-inbox", icon: MailOpen, badge: globalInboxUnread, onNavigate: markGlobalInboxRead },
     { name: "Partners", path: "/partners", icon: Users },
+    { name: "Credits", path: "/credits", icon: Star },
     { name: "Movies", path: "/movies", icon: Clapperboard },
     { name: "HorizonTube", path: "/horizontube", icon: Youtube },
     { name: "Ranks & Quests", path: "/ranks", icon: Trophy },
