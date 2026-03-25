@@ -915,10 +915,12 @@ export default function Chat() {
                     .sort((a, b) => {
                       const orderMap: { [key: string]: number } = {
                         "Owner": 0,
-                        "Admin": 1,
-                        "Server Settings": 2,
-                        "Manage Channels": 3,
-                        "Manage Roles": 4,
+                        "CO OWNER": 1,
+                        "Admin": 2,
+                        "Mod": 3,
+                        "Server Settings": 4,
+                        "Manage Channels": 5,
+                        "Manage Roles": 6,
                       };
                       return (orderMap[a.name] ?? 99) - (orderMap[b.name] ?? 99);
                     })
