@@ -367,7 +367,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">Source:</span>
+              <span className="text-[10px] text-white/30 flex-shrink-0">Source:</span>
               <div className="flex items-center gap-1 flex-wrap">
                 {SOURCES.map(src => (
                   <button
@@ -384,7 +384,10 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
                   </button>
                 ))}
               </div>
-              <span className="text-[10px] text-white/20 ml-auto flex items-center gap-1">
+              <span className="text-[10px] text-white/20 flex items-center gap-1 flex-shrink-0">
+                · if unavailable, try another source
+              </span>
+              <span className="text-[10px] text-white/20 ml-auto flex items-center gap-1 flex-shrink-0">
                 <RefreshCw className="w-2.5 h-2.5" />
                 Proxied
               </span>

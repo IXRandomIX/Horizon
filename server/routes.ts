@@ -1485,6 +1485,12 @@ try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});
 window.open=function(){return null;};
 window.alert=function(){};
 window.confirm=function(){return false;};
+/* Stub ad library globals so inline ad calls don't throw ReferenceError */
+var _noop=function(){};
+window.aclib={runInPagePush:_noop,runPop:_noop,runBanner:_noop,runNative:_noop,runInterstitial:_noop};
+window._Hasync={push:_noop};
+window.googletag={cmd:[],pubads:function(){return{enableSingleRequest:_noop,setTargeting:_noop,collapseEmptyDivs:_noop,disableInitialLoad:_noop};},enableServices:_noop,display:_noop,destroySlots:_noop,defineSlot:function(){return{addService:function(){return this;}};},defineOutOfPageSlot:function(){return{addService:function(){return this;};};}};
+window.__cmp=_noop;window.__tcfapi=function(a,b,cb){if(typeof cb==='function')cb({},false);};
 /* Block ad domains in XHR/fetch */
 var _adRe=new RegExp('(${AD_HOSTS.map(h=>h.replace(/\./g,"\\\\.")).join("|")})','i');
 function _isAd(u){return typeof u==='string'&&_adRe.test(u);}
@@ -1812,6 +1818,12 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     } catch (e: any) {
       res.status(502).send(`<html><body style="background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="color:#a855f7">Unable to load player</h2><p style="color:#888">${e.message}</p></div></body></html>`);
     }
+  });
+
+  // Silent sink for ad-network XHR requests redirected by the in-page interceptor.
+  app.all("/api/movies/deadend", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.sendStatus(204);
   });
 
   // Proxy API calls from within the embed page back to the streaming origin.
