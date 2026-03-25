@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { usePageXP } from "@/hooks/use-xp-track";
 import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, Loader2, SkipForward, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
@@ -497,6 +498,7 @@ const TAB_CONFIG: { id: TabType; label: string; icon: any; searchType: string }[
 ];
 
 export default function MoviesPage() {
+  usePageXP("movies_visited");
   const [activeTab, setActiveTab] = useState<TabType>("movies");
   const [searchInput, setSearchInput] = useState("");
   const [selected, setSelected] = useState<Media | null>(null);

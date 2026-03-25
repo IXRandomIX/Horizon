@@ -62,6 +62,15 @@ export const users = pgTable("users", {
   avatar: text("avatar").default(""),
   banner: text("banner").default(""),
   bannerColor: text("banner_color").default("#1a1a2e"),
+  xp: integer("xp").default(0),
+});
+
+export const userQuestProgress = pgTable("user_quest_progress", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull(),
+  questId: text("quest_id").notNull(),
+  progress: integer("progress").default(0),
+  completed: boolean("completed").default(false),
 });
 
 export const proxies = pgTable("proxies", {
@@ -165,3 +174,4 @@ export type Reaction = typeof reactions.$inferSelect;
 export type Friendship = typeof friendships.$inferSelect;
 export type BlockedUser = typeof blockedUsers.$inferSelect;
 export type DirectMessage = typeof directMessages.$inferSelect;
+export type UserQuestProgress = typeof userQuestProgress.$inferSelect;

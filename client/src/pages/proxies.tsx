@@ -1,4 +1,5 @@
 import { Globe, Shield, Plus, Trash2, X, Maximize2 } from "lucide-react";
+import { usePageXP } from "@/hooks/use-xp-track";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ type Proxy = {
 };
 
 export default function Proxies() {
+  usePageXP("proxies_visited");
   const [proxies, setProxies] = useState<Proxy[]>([]);
   const [user, setUser] = useState<{ username: string; isAdmin: boolean } | null>(null);
   const [newProxyName, setNewProxyName] = useState("");

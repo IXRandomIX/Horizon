@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
+import { trackXP } from "@/hooks/use-xp-track";
 import { useGames } from "@/hooks/use-games";
 import { GameCard } from "@/components/game-card";
 import { Input } from "@/components/ui/input";
@@ -245,7 +246,7 @@ export default function Games() {
           <>
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 md:gap-8 pb-8">
               {visibleGames.map((game) => (
-                <GameCard key={game.id ?? game.name} game={game} onClick={() => setPlayingGame(game)} />
+                <GameCard key={game.id ?? game.name} game={game} onClick={() => { setPlayingGame(game); trackXP("games_played"); }} />
               ))}
             </div>
             {visibleCount < filteredGames.length && (

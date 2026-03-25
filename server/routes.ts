@@ -2,6 +2,7 @@ import type { Express } from "express";
 import type { Server } from "http";
 import { api } from "@shared/routes";
 import { storage } from "./storage";
+import { QUESTS, getRankForXP } from "@shared/quests";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
@@ -100,6 +101,26 @@ async function requirePermission(permission: string, req: any, res: any): Promis
   const hasPermission = allPerms.includes(permission);
   if (!hasPermission) { res.status(403).json({ message: "Forbidden" }); return false; }
   return true;
+}
+
+async function trackXPAction(username: string, type: string): Promise<void> {
+  const relevantQuests = QUESTS.filter(q => q.type === type);
+  for (const quest of relevantQuests) {
+    const result = await storage.incrementQuestProgress(username, quest.id, 1);
+    if (!result.completed && result.progress >= quest.target) {
+      await storage.markQuestCompleted(username, quest.id);
+      await storage.addUserXP(username, quest.xp);
+    }
+  }
+}
+
+async function isStaffUser(username: string): Promise<boolean> {
+  if (username === ADMIN_USER) return true;
+  const user = await storage.getUser(username);
+  if (!user || !user.roles || user.roles.length === 0) return false;
+  const allRoles = await storage.getRoles();
+  const userRoles = allRoles.filter(r => user.roles.includes(r.name));
+  return userRoles.flatMap(r => r.permissions || []).includes("admin_panel");
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
@@ -612,6 +633,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       replyToUsername,
       replyToContent
     });
+    // Track messages_sent XP quest (fire-and-forget)
+    trackXPAction(username, "messages_sent").catch(() => {});
     res.status(201).json(msg);
   });
 
@@ -683,6 +706,30 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!await requirePermission("manage_proxies", req, res)) return;
     await storage.deleteProxy(Number(req.params.id));
     res.status(204).end();
+  });
+
+  // ─── XP / Ranks / Quests ──────────────────────────────────────────────────
+  app.get("/api/ranks/me", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    const staff = await isStaffUser(caller);
+    const xp = staff ? Infinity : await storage.getUserXP(caller);
+    const rank = staff ? { rank: -1, name: "STAFF", xpNeeded: 0, color: "#FFD700" } : getRankForXP(xp);
+    const questProgress = await storage.getQuestProgress(caller);
+    res.json({ xp: staff ? null : xp, rank, questProgress, isStaff: staff });
+  });
+
+  app.post("/api/xp/track", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    const staff = await isStaffUser(caller);
+    if (staff) return res.json({ ok: true });
+    const { type } = req.body;
+    if (!type) return res.status(400).json({ message: "type required" });
+    await trackXPAction(caller, type);
+    const xp = await storage.getUserXP(caller);
+    const rank = getRankForXP(xp);
+    res.json({ xp, rank });
   });
 
   // ─── Pages ────────────────────────────────────────────────────────────────

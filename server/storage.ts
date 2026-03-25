@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack } from "@shared/schema";
 import { eq, and, or, sql, ne, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -83,6 +83,13 @@ export interface IStorage {
   setGatekeepUnlocked(token: string): Promise<void>;
   incrementGatekeepAttempts(token: string): Promise<number>;
   setGatekeepLockout(token: string, until: Date): Promise<void>;
+
+  // XP & Quests
+  getUserXP(username: string): Promise<number>;
+  addUserXP(username: string, amount: number): Promise<number>;
+  getQuestProgress(username: string): Promise<any[]>;
+  incrementQuestProgress(username: string, questId: string, amount: number): Promise<{ progress: number; completed: boolean }>;
+  markQuestCompleted(username: string, questId: string): Promise<void>;
 
   // Change Log
   getChangeLogEntries(): Promise<ChangeLogEntry[]>;
@@ -427,6 +434,48 @@ export class DatabaseStorage implements IStorage {
   async getUserTrack(id: number): Promise<UserTrack | undefined> {
     const [track] = await db.select().from(userTracks).where(eq(userTracks.id, id));
     return track;
+  }
+
+  async getUserXP(username: string): Promise<number> {
+    const user = await this.getUser(username);
+    return user?.xp ?? 0;
+  }
+
+  async addUserXP(username: string, amount: number): Promise<number> {
+    const current = await this.getUserXP(username);
+    const newXP = current + amount;
+    await db.update(users).set({ xp: newXP }).where(eq(users.username, username));
+    return newXP;
+  }
+
+  async getQuestProgress(username: string): Promise<any[]> {
+    return await db.select().from(userQuestProgress).where(eq(userQuestProgress.username, username));
+  }
+
+  async incrementQuestProgress(username: string, questId: string, amount: number): Promise<{ progress: number; completed: boolean }> {
+    const [existing] = await db.select().from(userQuestProgress).where(
+      and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId))
+    );
+    if (existing) {
+      if (existing.completed) return { progress: existing.progress ?? 0, completed: true };
+      const newProgress = (existing.progress ?? 0) + amount;
+      const [updated] = await db.update(userQuestProgress)
+        .set({ progress: newProgress })
+        .where(and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId)))
+        .returning();
+      return { progress: updated.progress ?? 0, completed: updated.completed ?? false };
+    } else {
+      const [created] = await db.insert(userQuestProgress)
+        .values({ username, questId, progress: amount, completed: false })
+        .returning();
+      return { progress: created.progress ?? 0, completed: created.completed ?? false };
+    }
+  }
+
+  async markQuestCompleted(username: string, questId: string): Promise<void> {
+    await db.update(userQuestProgress)
+      .set({ completed: true })
+      .where(and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId)));
   }
 }
 

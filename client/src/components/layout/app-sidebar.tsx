@@ -1,9 +1,11 @@
 import { useLocation, Link } from "wouter";
+import { useEffect, useState } from "react";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
   Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
-  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen, Youtube
+  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen, Youtube, Trophy
 } from "lucide-react";
+import { getRankForXP } from "@shared/quests";
 import {
   Sidebar,
   SidebarContent,
@@ -45,6 +47,16 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { globalInboxUnread, chatUnread, changeLogsUnread, markGlobalInboxRead, markChatRead, markChangeLogsRead } = useNotifications();
+  const [rankInfo, setRankInfo] = useState<{ xp: number | null; rank: { name: string; color: string }; isStaff: boolean } | null>(null);
+
+  useEffect(() => {
+    const token = localStorage.getItem("horizon_session_token");
+    if (!token) return;
+    fetch("/api/ranks/me", { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (data) setRankInfo(data); })
+      .catch(() => {});
+  }, [user?.username]);
 
   const FONT_CLASSES: Record<string, string> = {
     "Playfair Display": "font-playfair",
@@ -69,6 +81,7 @@ export function AppSidebar() {
     { name: "Partners", path: "/partners", icon: Users },
     { name: "Movies", path: "/movies", icon: Clapperboard },
     { name: "HorizonTube", path: "/horizontube", icon: Youtube },
+    { name: "Ranks & Quests", path: "/ranks", icon: Trophy },
     { name: "Games Portal", path: "/games", icon: Gamepad2 },
     { name: "Dragon X V2", path: "/eaglercraft", icon: Sword },
     { name: "Eaglercraft Launcher", path: "/eaglercraft-launcher", icon: Monitor },
@@ -186,7 +199,13 @@ export function AppSidebar() {
               </div>
               <div className="min-w-0 flex-1 text-left">
                 <p className={`text-sm font-bold text-white truncate ${fontClass}`}>{displayName}</p>
-                <p className="text-xs text-white/30 truncate">@{user?.username}</p>
+                {rankInfo ? (
+                  <p className="text-[10px] font-bold truncate" style={{ color: rankInfo.rank.color }}>
+                    {rankInfo.isStaff ? "STAFF · ∞ XP" : `${rankInfo.rank.name} · ${(rankInfo.xp ?? 0).toLocaleString()} XP`}
+                  </p>
+                ) : (
+                  <p className="text-xs text-white/30 truncate">@{user?.username}</p>
+                )}
               </div>
               {user?.role && user.role !== "User" && (
                 <span className="text-[9px] font-bold text-primary/70 bg-primary/10 border border-primary/20 rounded px-1.5 py-0.5 flex-shrink-0 uppercase tracking-wider">

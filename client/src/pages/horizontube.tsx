@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { usePageXP } from "@/hooks/use-xp-track";
 import { useQuery } from "@tanstack/react-query";
 import {
   Search, X, Play, Youtube, TrendingUp, Clock, Zap, History,
@@ -577,6 +578,7 @@ function InfiniteVideoGrid({ baseUrl, onVideoClick, onChannelClick, emptyText }:
 }
 
 export default function HorizonTubePage() {
+  usePageXP("tube_visited");
   const [searchInput, setSearchInput] = useState("");
   const [showFilters, setShowFilters] = useState(false);
   const [filters, setFilters] = useState<Filters>({ type: "All", duration: "Any", uploadDate: "Anytime", prioritize: "Relevance", features: [] });
