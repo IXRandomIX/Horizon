@@ -56,20 +56,17 @@ function getYear(m: Media) {
 }
 
 const SOURCES = [
-  { id: "vidify",     label: "Vidify"      },
-  { id: "vidsrc2",    label: "VidSrc 2"    },
-  { id: "vidsrcco",   label: "VidSrc.co"   },
-  { id: "autoembed",  label: "AutoEmbed"   },
-  { id: "vidsrcicu",  label: "VidSrc ICU"  },
-  { id: "moviekex",   label: "MovieKex"    },
-  { id: "vidsrccc",   label: "VidSrc CC"   },
-  { id: "moviesapi",  label: "MoviesAPI"   },
-  { id: "vidlink",    label: "VidLink"     },
-  { id: "embedsu",    label: "Embed.su"    },
-  { id: "superembed", label: "SuperEmbed"  },
-  { id: "vidora",     label: "Vidora"      },
-  { id: "smashy",     label: "Smashy"      },
-  { id: "vidsrc",     label: "VidSrc"      },
+  { id: "vidify",   label: "Vidify"     },
+  { id: "vidsrc2",  label: "VidSrc 2"   },
+  { id: "vidsrcco", label: "VidSrc.co"  },
+  { id: "autoembed",label: "AutoEmbed"  },
+  { id: "vidsrcicu",label: "VidSrc ICU" },
+  { id: "moviekex", label: "MovieKex"   },
+  { id: "vidsrccc", label: "VidSrc CC"  },
+  { id: "moviesapi",label: "MoviesAPI"  },
+  { id: "vidlink",  label: "VidLink"    },
+  { id: "embedsu",  label: "Embed.su"   },
+  { id: "vidora",   label: "Vidora"     },
 ] as const;
 type SourceId = typeof SOURCES[number]["id"];
 
@@ -122,18 +119,10 @@ function getEmbedUrl(m: Media, season: number, episode: number, source: SourceId
         ? `https://embed.su/embed/tv/${id}/${s}/${e}`
         : `https://embed.su/embed/movie/${id}`;
     case "vidora":
+    default:
       return isTV
         ? `https://vidora.su/tv/${id}/${s}/${e}?colour=dba4b2&autoplay=true`
         : `https://vidora.su/movie/${id}?colour=dba4b2&autoplay=true`;
-    case "superembed":
-      return isTV
-        ? `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`
-        : `https://multiembed.mov/?video_id=${id}&tmdb=1`;
-    // smashy and vidsrc (vidsrc.to) go through server proxy for cloudnestra/ad bypass
-    default: {
-      const params = new URLSearchParams({ type: m.media_type, id, s, e, source });
-      return `/api/movies/embed?${params}`;
-    }
   }
 }
 
