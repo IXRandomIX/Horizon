@@ -290,7 +290,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 backdrop-blur-sm p-2 sm:p-4">
       <div
         ref={containerRef}
-        className="relative w-full max-w-5xl bg-black rounded-2xl overflow-hidden border border-white/10 shadow-2xl flex flex-col"
+        className="relative w-full max-w-5xl bg-black rounded-2xl border border-white/10 shadow-2xl flex flex-col overflow-y-auto"
         style={{ maxHeight: "95vh" }}
       >
         {/* Header */}
