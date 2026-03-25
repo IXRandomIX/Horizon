@@ -53,7 +53,7 @@ export default function ProfileEditor() {
 
   useEffect(() => {
     if (!user) return;
-    fetch(`/api/users/${user.username}`).then(r => r.json()).then(u => {
+    fetch(`/api/users/${user.username}`, { credentials: "include" }).then(r => r.json()).then(u => {
       setDisplayName(u.displayName || "");
       setDisplayFont(u.displayFont || "sans");
       setBio(u.bio || "");
@@ -67,7 +67,7 @@ export default function ProfileEditor() {
     setUploading(type);
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body: fd });
+    const res = await fetch("/api/upload", { method: "POST", body: fd, credentials: "include" });
     const data = await res.json();
     setUploading(null);
     return data.url as string;
@@ -93,6 +93,7 @@ export default function ProfileEditor() {
     const res = await fetch(`/api/users/${user.username}/profile`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ displayName: displayName || null, displayFont, bio, avatar, banner, bannerColor }),
     });
     if (res.ok) {
