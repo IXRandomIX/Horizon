@@ -2396,24 +2396,9 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     return out;
   }
 
-  // Intercept script injected into YouTube embed to proxy googlevideo.com streams
-  const GV_INTERCEPTOR = `<script>
-(function(){
-  var P='/api/yt-gvideo?u=';
-  var GV=/^https?:\\/\\/[a-z0-9.-]+\\.googlevideo\\.com/;
-  var _f=window.fetch;
-  window.fetch=function(url,opts){
-    if(typeof url==='string'&&GV.test(url))url=P+encodeURIComponent(url);
-    else if(url&&url.url&&GV.test(url.url))url=new Request(P+encodeURIComponent(url.url),url);
-    return _f.call(this,url,opts);
-  };
-  var _o=XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open=function(m,url){
-    if(typeof url==='string'&&GV.test(url))url=P+encodeURIComponent(url);
-    return _o.apply(this,[m,url].concat([].slice.call(arguments,2)));
-  };
-})();
-</script>`;
+  // No video CDN interception — let googlevideo.com serve directly to the browser
+  // for maximum speed. Content blockers don't target CDN domains.
+  const GV_INTERCEPTOR = ``;
 
   // ── yt-dlp video streaming ────────────────────────────────────────────────
   // Architecture: yt-dlp spawned as child process, stdout piped directly to
