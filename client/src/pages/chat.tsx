@@ -50,21 +50,39 @@ const BORDER_BEAM_KEYS: Record<string, string[]> = {
 };
 
 const USERNAME_EFFECTS = [
-  { key: "efx:matrix",      name: "🟩 Matrix",         desc: "Green 1s & 0s rain down behind username" },
-  { key: "efx:glitch-text", name: "👾 Glitch Text",    desc: "Letters randomly flip to crazy symbols" },
-  { key: "efx:galaxy",      name: "🌌 Galaxy",         desc: "Cosmic star-glow pulsing around username" },
-  { key: "efx:blackhole",   name: "🕳️ Black Hole",     desc: "Dark vortex pulls letters together" },
-  { key: "efx:rainbow",     name: "🌈 Rainbow Flow",   desc: "Full rainbow sweeping through text" },
-  { key: "efx:border:white",   name: "□ White Border",    desc: "Glowing white border beam" },
-  { key: "efx:border:gold",    name: "□ Gold Border",     desc: "Golden beam racing the border" },
-  { key: "efx:border:red",     name: "□ Red Border",      desc: "Red beam racing the border" },
-  { key: "efx:border:cyan",    name: "□ Cyan Border",     desc: "Cyan neon border beam" },
-  { key: "efx:border:purple",  name: "□ Purple Border",   desc: "Purple border beam" },
-  { key: "efx:border:green",   name: "□ Green Border",    desc: "Green border beam" },
-  { key: "efx:border:fire",    name: "□ Fire Border",     desc: "Fire gradient border beam" },
-  { key: "efx:border:ocean",   name: "□ Ocean Border",    desc: "Ocean gradient border beam" },
-  { key: "efx:border:rainbow", name: "□ Rainbow Border",  desc: "Rainbow border beam" },
+  { key: "efx:matrix",          name: "🟩 Matrix Green",   desc: "Green 1s & 0s rain down behind username" },
+  { key: "efx:matrix:red",      name: "🔴 Matrix Red",     desc: "Red matrix rain" },
+  { key: "efx:matrix:blue",     name: "🔵 Matrix Blue",    desc: "Blue matrix rain" },
+  { key: "efx:matrix:gold",     name: "✨ Matrix Gold",    desc: "Golden matrix rain" },
+  { key: "efx:matrix:purple",   name: "💜 Matrix Purple",  desc: "Purple matrix rain" },
+  { key: "efx:matrix:cyan",     name: "🩵 Matrix Cyan",    desc: "Cyan matrix rain" },
+  { key: "efx:matrix:white",    name: "⬜ Matrix White",   desc: "White matrix rain" },
+  { key: "efx:matrix:pink",     name: "💗 Matrix Pink",    desc: "Pink matrix rain" },
+  { key: "efx:glitch-text",     name: "👾 Glitch Text",    desc: "Letters randomly flip to crazy symbols" },
+  { key: "efx:galaxy",          name: "🌌 Galaxy",         desc: "Stars and nebula behind the username" },
+  { key: "efx:blackhole",       name: "🕳️ Black Hole",     desc: "Spinning black hole sucking in stars" },
+  { key: "efx:rainbow",         name: "🌈 Rainbow Flow",   desc: "Full rainbow sweeping through text" },
+  { key: "efx:border:white",    name: "□ Border White",    desc: "Glowing white border beam" },
+  { key: "efx:border:gold",     name: "□ Border Gold",     desc: "Golden beam racing the border" },
+  { key: "efx:border:red",      name: "□ Border Red",      desc: "Red beam racing the border" },
+  { key: "efx:border:cyan",     name: "□ Border Cyan",     desc: "Cyan neon border beam" },
+  { key: "efx:border:purple",   name: "□ Border Purple",   desc: "Purple border beam" },
+  { key: "efx:border:green",    name: "□ Border Green",    desc: "Green border beam" },
+  { key: "efx:border:fire",     name: "□ Border Fire",     desc: "Fire gradient border beam" },
+  { key: "efx:border:ocean",    name: "□ Border Ocean",    desc: "Ocean gradient border beam" },
+  { key: "efx:border:rainbow",  name: "□ Border Rainbow",  desc: "Rainbow border beam" },
 ];
+
+const MATRIX_COLORS: Record<string, string> = {
+  "efx:matrix":        "#00ff41",
+  "efx:matrix:red":    "#ff2222",
+  "efx:matrix:blue":   "#0088ff",
+  "efx:matrix:gold":   "#ffd700",
+  "efx:matrix:purple": "#bb00ff",
+  "efx:matrix:cyan":   "#00ffff",
+  "efx:matrix:white":  "#ffffff",
+  "efx:matrix:pink":   "#ff44cc",
+};
 
 // ── Helper components ─────────────────────────────────────────────────────
 function GlitchTextUsername({ text, className, style }: { text: string; className?: string; style?: React.CSSProperties }) {
@@ -103,6 +121,142 @@ function BorderBeamUsername({ text, borderKey, className, style }: { text: strin
       <span className={className} style={{ position: "relative", zIndex: 2, ...style }}>{text}</span>
     </span>
   );
+}
+
+// ── Canvas-based username effect components ────────────────────────────────
+function MatrixCanvas({ color }: { color: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const W = 180, H = 55;
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d'); if (!ctx) return;
+    const sz = 9, cols = Math.floor(W / sz);
+    const drops: number[] = Array.from({ length: cols }, () => -Math.floor(Math.random() * 15));
+    let animId: number, tick = 0;
+    const frame = () => {
+      tick++;
+      if (tick % 3 === 0) {
+        ctx.fillStyle = 'rgba(0,0,0,0.13)';
+        ctx.fillRect(0, 0, W, H);
+        ctx.fillStyle = color;
+        ctx.font = `bold ${sz}px monospace`;
+        for (let i = 0; i < cols; i++) {
+          const char = Math.random() > 0.5 ? '1' : '0';
+          const y = drops[i] * sz;
+          if (y > 0 && y < H + sz) ctx.fillText(char, i * sz + 1, y);
+          drops[i]++;
+          if (drops[i] * sz > H && Math.random() > 0.96) drops[i] = -Math.floor(Math.random() * 12);
+        }
+      }
+      animId = requestAnimationFrame(frame);
+    };
+    animId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(animId);
+  }, [color]);
+  return <canvas ref={canvasRef} width={W} height={H} style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)', pointerEvents:'none', borderRadius:3, zIndex:0 }} />;
+}
+
+function GalaxyCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const W = 180, H = 55;
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d'); if (!ctx) return;
+    type GStar = { x: number; y: number; r: number; phase: number; spd: number; big: boolean };
+    const stars: GStar[] = Array.from({ length: 55 }, () => ({
+      x: Math.random() * W, y: Math.random() * H,
+      r: Math.random() * 1.4 + 0.3,
+      phase: Math.random() * Math.PI * 2,
+      spd: 0.8 + Math.random() * 1.2,
+      big: Math.random() > 0.82,
+    }));
+    let t = 0, animId: number;
+    const frame = () => {
+      t += 0.016;
+      ctx.clearRect(0, 0, W, H);
+      const glow = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W * 0.55);
+      glow.addColorStop(0, 'rgba(90,0,210,0.10)');
+      glow.addColorStop(0.5, 'rgba(0,20,160,0.06)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+      for (const s of stars) {
+        const op = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * s.spd + s.phase));
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${op * 0.95})`;
+        ctx.fill();
+        if (s.big && op > 0.7) {
+          ctx.strokeStyle = `rgba(190,170,255,${op * 0.55})`;
+          ctx.lineWidth = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(s.x - s.r * 3.5, s.y); ctx.lineTo(s.x + s.r * 3.5, s.y);
+          ctx.moveTo(s.x, s.y - s.r * 3.5); ctx.lineTo(s.x, s.y + s.r * 3.5);
+          ctx.stroke();
+        }
+      }
+      animId = requestAnimationFrame(frame);
+    };
+    animId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(animId);
+  }, []);
+  return <canvas ref={canvasRef} width={W} height={H} style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)', pointerEvents:'none', zIndex:0 }} />;
+}
+
+function BlackholeCanvas() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const W = 180, H = 55;
+  const CX = W / 2, CY = H / 2, BH_R = 7;
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d'); if (!ctx) return;
+    type BHStar = { angle: number; dist: number; spd: number; op: number };
+    const stars: BHStar[] = Array.from({ length: 30 }, () => ({
+      angle: Math.random() * Math.PI * 2,
+      dist: 18 + Math.random() * 68,
+      spd: 0.003 + Math.random() * 0.005,
+      op: 0.5 + Math.random() * 0.5,
+    }));
+    let rot = 0, animId: number;
+    const frame = () => {
+      ctx.clearRect(0, 0, W, H);
+      rot += 0.018;
+      // outer glow
+      const glow = ctx.createRadialGradient(CX, CY, BH_R, CX, CY, 32);
+      glow.addColorStop(0, 'rgba(90,0,150,0.45)'); glow.addColorStop(0.5, 'rgba(40,0,80,0.15)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+      // accretion disc rings
+      ctx.save(); ctx.translate(CX, CY); ctx.rotate(rot * 0.4);
+      for (let i = 0; i < 3; i++) {
+        const r = BH_R + 5 + i * 5;
+        const g = ctx.createLinearGradient(-r * 1.8, 0, r * 1.8, 0);
+        g.addColorStop(0, `rgba(255,${120 - i * 25},0,${0.75 - i * 0.17})`);
+        g.addColorStop(0.5, `rgba(180,80,255,${0.5 - i * 0.1})`);
+        g.addColorStop(1, `rgba(255,${120 - i * 25},0,${0.75 - i * 0.17})`);
+        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.8, r * 0.38, 0, 0, Math.PI * 2);
+        ctx.strokeStyle = g; ctx.lineWidth = 2.2 - i * 0.4; ctx.stroke();
+      }
+      ctx.restore();
+      // black hole disc
+      const bhg = ctx.createRadialGradient(CX, CY, 0, CX, CY, BH_R);
+      bhg.addColorStop(0, '#000'); bhg.addColorStop(0.85, '#000'); bhg.addColorStop(1, 'rgba(60,0,90,0.7)');
+      ctx.beginPath(); ctx.arc(CX, CY, BH_R, 0, Math.PI * 2); ctx.fillStyle = bhg; ctx.fill();
+      // infalling stars
+      for (const s of stars) {
+        s.angle += s.spd * (60 / Math.max(s.dist, 5));
+        s.dist -= 0.18;
+        if (s.dist < BH_R) { s.dist = 22 + Math.random() * 60; s.angle = Math.random() * Math.PI * 2; s.op = 0.5 + Math.random() * 0.5; }
+        const sx = CX + Math.cos(s.angle) * s.dist;
+        const sy = CY + Math.sin(s.angle) * s.dist * 0.33;
+        const fade = Math.min(1, (s.dist - BH_R) / 14);
+        ctx.beginPath(); ctx.arc(sx, sy, 0.85, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255,255,255,${fade * s.op})`; ctx.fill();
+      }
+      animId = requestAnimationFrame(frame);
+    };
+    animId = requestAnimationFrame(frame);
+    return () => cancelAnimationFrame(animId);
+  }, []);
+  return <canvas ref={canvasRef} width={W} height={H} style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)', pointerEvents:'none', zIndex:0 }} />;
 }
 
 // ── Color / class helpers ─────────────────────────────────────────────────
@@ -190,7 +344,7 @@ export default function Chat() {
   // Admin appearance panel
   const [apTarget, setApTarget] = useState("");
   const [apColor, setApColor] = useState("#9ca3af");
-  const [apEffect, setApEffect] = useState("none");
+  const [apEffects, setApEffects] = useState<string[]>([]);
   const [apColorTab, setApColorTab] = useState<"solid" | "gradient" | "rainbow">("solid");
   const [apShowEffects, setApShowEffects] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
@@ -413,7 +567,8 @@ export default function Chat() {
   const applyUserAppearance = async () => {
     const target = apTarget.trim() || user?.username;
     if (!target) return;
-    const updates: any = { roleColor: apColor, animation: apEffect === "none" ? "none" : apEffect };
+    const animStr = apEffects.length > 0 ? apEffects.join("|") : "none";
+    const updates: any = { roleColor: apColor, animation: animStr };
     const res = await authFetch(`/api/chat/users/${target}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -823,20 +978,57 @@ export default function Chat() {
   const renderUsername = (text: string, roleColor: string, animation: string, font: string) => {
     const { colorClass, colorStyle } = getColorInfo(roleColor, animation);
     const fontClass = getFontClass(font);
-    const animClass = getAnimationClass(animation);
-    const base = `font-black tracking-wide ${fontClass} ${animClass}`;
+    const base = `font-black tracking-wide ${fontClass}`;
 
-    if (animation?.startsWith("efx:border:")) {
-      const bk = animation.slice("efx:border:".length);
-      return <BorderBeamUsername text={text} borderKey={bk} className={`${base} ${colorClass}`} style={colorStyle} />;
+    // Parse pipe-separated effects (e.g. "efx:matrix|efx:galaxy|efx:border:gold")
+    const effects = (!animation || animation === "none") ? [] : animation.split("|").filter(e => e && e !== "none");
+
+    const borderEffect = effects.find(e => e.startsWith("efx:border:"));
+    const hasGlitch   = effects.includes("efx:glitch-text");
+    const matrixEffect = effects.find(e => e.startsWith("efx:matrix"));
+    const hasGalaxy   = effects.includes("efx:galaxy");
+    const hasBlackhole = effects.includes("efx:blackhole");
+    const hasRainbow  = effects.includes("efx:rainbow");
+
+    // rainbow flow class (text gradient)
+    const rainbowCls = hasRainbow ? "efx-rainbow" : "";
+    // galaxy glow class (text-shadow)
+    const galaxyCls  = hasGalaxy  ? "efx-galaxy"  : "";
+    const textClass = `${base} ${colorClass} ${rainbowCls} ${galaxyCls}`.trim();
+
+    // Build base text node (glitch vs plain)
+    const textNode = hasGlitch
+      ? <GlitchTextUsername text={text} className={textClass} style={colorStyle} />
+      : <span className={textClass} style={colorStyle} data-text={text}>{text}</span>;
+
+    // If any background canvas effect is needed, wrap in a relative container
+    const needsCanvasWrap = matrixEffect || hasGalaxy || hasBlackhole;
+    const matrixColor = matrixEffect ? (MATRIX_COLORS[matrixEffect] ?? "#00ff41") : "#00ff41";
+
+    let inner: React.ReactNode = needsCanvasWrap ? (
+      <span style={{ position:'relative', display:'inline-flex', alignItems:'center', verticalAlign:'middle' }}>
+        {hasBlackhole  && <BlackholeCanvas />}
+        {hasGalaxy     && <GalaxyCanvas />}
+        {matrixEffect  && <MatrixCanvas color={matrixColor} />}
+        <span style={{ position:'relative', zIndex:2 }}>{textNode}</span>
+      </span>
+    ) : textNode;
+
+    // Wrap with border beam if present (outermost layer)
+    if (borderEffect) {
+      const bk = borderEffect.slice("efx:border:".length);
+      const cols = BORDER_BEAM_KEYS[bk] ?? BORDER_BEAM_KEYS.white;
+      const conicGrad = `conic-gradient(from 0deg, ${cols.join(", ")}, ${cols[0]})`;
+      return (
+        <span style={{ position:'relative', display:'inline-flex', alignItems:'center', padding:'1px 5px', borderRadius:'4px', overflow:'hidden' }}>
+          <span aria-hidden style={{ position:'absolute', inset:'-40px', background:conicGrad, animation:'borderBeamSpin 2s linear infinite', borderRadius:'4px' }} />
+          <span aria-hidden style={{ position:'absolute', inset:'1.5px', background:'#000', borderRadius:'3px', zIndex:1 }} />
+          <span style={{ position:'relative', zIndex:2 }}>{inner}</span>
+        </span>
+      );
     }
-    if (animation === "efx:glitch-text") {
-      return <GlitchTextUsername text={text} className={`${base} ${colorClass}`} style={colorStyle} />;
-    }
-    const efxClass = animation?.startsWith("efx:") ? `efx-${animation.slice(4)}` : "";
-    return (
-      <span className={`${base} ${colorClass} ${efxClass}`} style={colorStyle} data-text={text}>{text}</span>
-    );
+
+    return inner;
   };
 
   return (
@@ -1572,30 +1764,42 @@ export default function Chat() {
                             )}
                           </div>
 
-                          {/* Effect picker */}
+                          {/* Effect picker - multi-select */}
                           <div className="space-y-2">
-                            <button onClick={() => setApShowEffects(v => !v)} className="text-white/50 text-xs flex items-center gap-1 hover:text-white transition-colors">
-                              <Sparkles className="w-3 h-3" /> Visual Effects {apShowEffects ? "▲" : "▼"}
-                            </button>
+                            <div className="flex items-center justify-between">
+                              <button onClick={() => setApShowEffects(v => !v)} className="text-white/50 text-xs flex items-center gap-1 hover:text-white transition-colors">
+                                <Sparkles className="w-3 h-3" /> Visual Effects {apShowEffects ? "▲" : "▼"}
+                              </button>
+                              {apEffects.length > 0 && (
+                                <button onClick={() => setApEffects([])} className="text-[10px] text-red-400 hover:text-red-300 transition-colors">Clear all</button>
+                              )}
+                            </div>
                             {apShowEffects && (
-                              <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto pr-1">
-                                {USERNAME_EFFECTS.map(e => (
-                                  <button key={e.key} onClick={() => setApEffect(e.key)} className={`text-[10px] px-2 py-1.5 rounded border text-left transition-all ${apEffect === e.key ? "border-primary bg-primary/20 text-primary" : "border-white/10 text-white/50 hover:border-white/30 hover:text-white/80"}`}>
-                                    {e.name}
-                                  </button>
-                                ))}
+                              <div className="grid grid-cols-2 gap-1 max-h-52 overflow-y-auto pr-1">
+                                {USERNAME_EFFECTS.map(e => {
+                                  const active = apEffects.includes(e.key);
+                                  return (
+                                    <button
+                                      key={e.key}
+                                      onClick={() => setApEffects(prev => active ? prev.filter(x => x !== e.key) : [...prev, e.key])}
+                                      className={`text-[10px] px-2 py-1.5 rounded border text-left transition-all ${active ? "border-primary bg-primary/20 text-primary" : "border-white/10 text-white/50 hover:border-white/30 hover:text-white/80"}`}
+                                    >
+                                      {active ? "✓ " : ""}{e.name}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             )}
-                            {!apShowEffects && apEffect !== "none" && (
-                              <p className="text-primary text-[10px]">Effect: {USERNAME_EFFECTS.find(e => e.key === apEffect)?.name ?? apEffect}</p>
+                            {apEffects.length > 0 && (
+                              <p className="text-primary text-[10px]">Active: {apEffects.map(k => USERNAME_EFFECTS.find(e => e.key === k)?.name ?? k).join(" + ")}</p>
                             )}
                           </div>
 
                           {/* Live Preview */}
                           <div className="border border-white/10 rounded p-3 space-y-1">
                             <label className="text-white/40 text-[10px] uppercase tracking-widest">Preview</label>
-                            <div className="flex items-center gap-2">
-                              {renderUsername(apTarget.trim() || user?.username || "Preview", apColor, apEffect, "sans")}
+                            <div className="flex items-center gap-2 min-h-[32px]">
+                              {renderUsername(apTarget.trim() || user?.username || "Preview", apColor, apEffects.length > 0 ? apEffects.join("|") : "none", "sans")}
                             </div>
                           </div>
 
