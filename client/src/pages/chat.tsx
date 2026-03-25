@@ -131,6 +131,29 @@ const AVAILABLE_FONTS: { key: string; name: string; family: string; category: st
   { key: "Lobster",           name: "Lobster",           family: "'Lobster', cursive",                  category: "Hand" },
   { key: "Satisfy",           name: "Satisfy",           family: "'Satisfy', cursive",                  category: "Hand" },
   { key: "Great Vibes",       name: "Great Vibes",       family: "'Great Vibes', cursive",              category: "Hand" },
+  // Sans — already in HTML, now wired up
+  { key: "Inter",             name: "Inter",             family: "'Inter', sans-serif",                 category: "Sans" },
+  { key: "Plus Jakarta Sans", name: "Plus Jakarta",      family: "'Plus Jakarta Sans', sans-serif",     category: "Sans" },
+  { key: "IBM Plex Sans",     name: "IBM Plex Sans",     family: "'IBM Plex Sans', sans-serif",         category: "Sans" },
+  { key: "Geist",             name: "Geist",             family: "'Geist', sans-serif",                 category: "Sans" },
+  { key: "Work Sans",         name: "Work Sans",         family: "'Work Sans', sans-serif",             category: "Sans" },
+  { key: "Barlow",            name: "Barlow",            family: "'Barlow', sans-serif",                category: "Sans" },
+  { key: "Manrope",           name: "Manrope",           family: "'Manrope', sans-serif",               category: "Sans" },
+  { key: "Figtree",           name: "Figtree",           family: "'Figtree', sans-serif",               category: "Sans" },
+  { key: "Prompt",            name: "Prompt",            family: "'Prompt', sans-serif",                category: "Sans" },
+  // Serif — already in HTML, now wired up
+  { key: "Source Serif 4",    name: "Source Serif 4",    family: "'Source Serif 4', serif",             category: "Serif" },
+  // Display
+  { key: "Anton",             name: "Anton",             family: "'Anton', sans-serif",                 category: "Display" },
+  { key: "Barlow Condensed",  name: "Barlow Condensed",  family: "'Barlow Condensed', sans-serif",      category: "Display" },
+  { key: "Teko",              name: "Teko",              family: "'Teko', sans-serif",                  category: "Display" },
+  { key: "Saira Condensed",   name: "Saira Condensed",   family: "'Saira Condensed', sans-serif",       category: "Display" },
+  { key: "Secular One",       name: "Secular One",       family: "'Secular One', sans-serif",           category: "Display" },
+  { key: "Yeseva One",        name: "Yeseva One",        family: "'Yeseva One', serif",                 category: "Display" },
+  // Handwriting — extra
+  { key: "Boogaloo",          name: "Boogaloo",          family: "'Boogaloo', cursive",                 category: "Hand" },
+  { key: "Lilita One",        name: "Lilita One",        family: "'Lilita One', cursive",               category: "Hand" },
+  { key: "Passion One",       name: "Passion One",       family: "'Passion One', cursive",              category: "Hand" },
   // Monospace / Code
   { key: "JetBrains Mono",    name: "JetBrains Mono",    family: "'JetBrains Mono', monospace",         category: "Code" },
   { key: "Fira Code",         name: "Fira Code",         family: "'Fira Code', monospace",              category: "Code" },
@@ -143,6 +166,22 @@ const AVAILABLE_FONTS: { key: string; name: string; family: string; category: st
   // Gaming / Pixel
   { key: "Press Start 2P",    name: "Press Start 2P",    family: "'Press Start 2P', monospace",         category: "Gaming" },
   { key: "VT323",             name: "VT323",             family: "'VT323', monospace",                  category: "Gaming" },
+  { key: "Chakra Petch",      name: "Chakra Petch",      family: "'Chakra Petch', sans-serif",          category: "Gaming" },
+  { key: "Bungee",            name: "Bungee",            family: "'Bungee', sans-serif",                category: "Gaming" },
+  { key: "Bungee Shade",      name: "Bungee Shade",      family: "'Bungee Shade', sans-serif",          category: "Gaming" },
+  { key: "Black Han Sans",    name: "Black Han Sans",    family: "'Black Han Sans', sans-serif",        category: "Gaming" },
+  { key: "Creepster",         name: "Creepster",         family: "'Creepster', cursive",                category: "Gaming" },
+  { key: "Special Elite",     name: "Special Elite",     family: "'Special Elite', cursive",            category: "Gaming" },
+  { key: "Rye",               name: "Rye",               family: "'Rye', serif",                        category: "Gaming" },
+  { key: "League Gothic",     name: "League Gothic",     family: "'League Gothic', sans-serif",         category: "Display" },
+  // FontLibrary.org — open-source originals
+  { key: "GlacialIndifferenceRegular", name: "Glacial Indiff.",      family: "'GlacialIndifferenceRegular', sans-serif", category: "FLB" },
+  { key: "OstrichSansRegular",         name: "Ostrich Sans",         family: "'OstrichSansRegular', sans-serif",         category: "FLB" },
+  { key: "ChunkFiveExRegular",         name: "Chunk Five",           family: "'ChunkFiveExRegular', serif",              category: "FLB" },
+  { key: "LeagueGothicRegular",        name: "League Gothic",        family: "'LeagueGothicRegular', sans-serif",        category: "FLB" },
+  { key: "AllerRegular",               name: "Aller",                family: "'AllerRegular', sans-serif",               category: "FLB" },
+  { key: "ProcionoRegular",            name: "Prociono",             family: "'ProcionoRegular', serif",                 category: "FLB" },
+  { key: "BergamoStdRegular",          name: "Bergamo",              family: "'BergamoStdRegular', serif",               category: "FLB" },
 ];
 
 // ── Helper components ─────────────────────────────────────────────────────
@@ -1884,7 +1923,7 @@ export default function Chat() {
                               <div className="space-y-2">
                                 {/* Category filter */}
                                 <div className="flex flex-wrap gap-1">
-                                  {["All", "Sans", "Serif", "Display", "Hand", "Code", "Gaming"].map(cat => (
+                                  {["All", "Sans", "Serif", "Display", "Hand", "Code", "Gaming", "FLB"].map(cat => (
                                     <button key={cat} onClick={() => setApFontCategory(cat)} className={`text-[10px] px-2 py-0.5 rounded border transition-all ${apFontCategory === cat ? "border-primary bg-primary/20 text-primary" : "border-white/10 text-white/40 hover:text-white/70"}`}>{cat}</button>
                                   ))}
                                 </div>
