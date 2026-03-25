@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, ChevronRight, Loader2, RefreshCw } from "lucide-react";
+import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, Loader2, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p/w342";
@@ -31,13 +31,10 @@ interface ContinueItem {
   updatedAt: number;
 }
 
-interface CategoryData {
-  trending: Media[];
-  popular: Media[];
-  topRated: Media[];
-  nowPlaying?: Media[];
-  onAir?: Media[];
-  movies?: Media[];
+interface PageData {
+  results: Media[];
+  total_pages: number;
+  page: number;
 }
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -154,22 +151,6 @@ function MediaCard({ m, onClick }: { m: Media; onClick: () => void }) {
   );
 }
 
-function MediaRow({ title, items, onSelect }: { title: string; items: Media[]; onSelect: (m: Media) => void }) {
-  if (!items || items.length === 0) return null;
-  return (
-    <section>
-      <div className="flex items-center gap-2 mb-3">
-        <h2 className="text-base font-bold text-white tracking-wide">{title}</h2>
-        <span className="text-xs text-white/30">{items.length} titles</span>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-        {items.map(m => (
-          <MediaCard key={`${m.id}-${m.media_type}`} m={m} onClick={() => onSelect(m)} />
-        ))}
-      </div>
-    </section>
-  );
-}
 
 function SkeletonGrid() {
   return (
@@ -409,53 +390,84 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   );
 }
 
-function MoviesTab({ active, onSelect }: { active: boolean; onSelect: (m: Media) => void }) {
-  const { data, isLoading } = useQuery<CategoryData>({
-    queryKey: ["/api/movies/category/movies"],
-    enabled: active,
-    staleTime: 5 * 60 * 1000,
-  });
-  if (!active) return null;
-  if (isLoading) return <SkeletonGrid />;
-  if (!data) return null;
-  return (
-    <div className="space-y-10">
-      <MediaRow title="🔥 Trending This Week" items={data.trending || []} onSelect={onSelect} />
-      <MediaRow title="🏆 Top Rated" items={data.topRated || []} onSelect={onSelect} />
-    </div>
-  );
-}
+function InfiniteTab({ active, category, onSelect }: { active: boolean; category: string; onSelect: (m: Media) => void }) {
+  const [pages, setPages] = useState<Media[]>([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
-function ShowsTab({ active, onSelect }: { active: boolean; onSelect: (m: Media) => void }) {
-  const { data, isLoading } = useQuery<CategoryData>({
-    queryKey: ["/api/movies/category/shows"],
+  const { data: firstPage, isLoading } = useQuery<PageData>({
+    queryKey: ["/api/movies/category", category, 1],
+    queryFn: async () => {
+      const res = await fetch(`/api/movies/category/${category}?page=1`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed");
+      return res.json();
+    },
     enabled: active,
     staleTime: 5 * 60 * 1000,
   });
-  if (!active) return null;
-  if (isLoading) return <SkeletonGrid />;
-  if (!data) return null;
-  return (
-    <div className="space-y-10">
-      <MediaRow title="🔥 Trending This Week" items={data.trending || []} onSelect={onSelect} />
-      <MediaRow title="🏆 Top Rated" items={data.topRated || []} onSelect={onSelect} />
-    </div>
-  );
-}
 
-function AnimeTab({ active, onSelect }: { active: boolean; onSelect: (m: Media) => void }) {
-  const { data, isLoading } = useQuery<CategoryData>({
-    queryKey: ["/api/movies/category/anime"],
-    enabled: active,
-    staleTime: 5 * 60 * 1000,
-  });
+  useEffect(() => {
+    if (firstPage) {
+      setPages(firstPage.results || []);
+      setTotalPages(firstPage.total_pages || 1);
+      setCurrentPage(1);
+    }
+  }, [firstPage]);
+
+  const loadMore = useCallback(async () => {
+    if (loadingMore || currentPage >= totalPages) return;
+    setLoadingMore(true);
+    try {
+      const next = currentPage + 1;
+      const res = await fetch(`/api/movies/category/${category}?page=${next}`, { credentials: "include" });
+      if (!res.ok) return;
+      const data: PageData = await res.json();
+      setPages(prev => [...prev, ...(data.results || [])]);
+      setCurrentPage(next);
+    } catch {}
+    finally { setLoadingMore(false); }
+  }, [loadingMore, currentPage, totalPages, category]);
+
+  useEffect(() => {
+    if (!active) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) loadMore();
+    }, { rootMargin: "300px" });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [active, loadMore]);
+
   if (!active) return null;
   if (isLoading) return <SkeletonGrid />;
-  if (!data) return null;
+  if (!pages.length) return null;
+
   return (
-    <div className="space-y-10">
-      <MediaRow title="⭐ Most Popular" items={data.popular || []} onSelect={onSelect} />
-      <MediaRow title="🏆 Top Rated" items={data.topRated || []} onSelect={onSelect} />
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        {pages.map(m => (
+          <MediaCard key={`${m.id}-${m.media_type}`} m={m} onClick={() => onSelect(m)} />
+        ))}
+      </div>
+      <div ref={sentinelRef} className="flex justify-center py-6">
+        {loadingMore && (
+          <div className="flex items-center gap-2 text-white/40 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Loading more…
+          </div>
+        )}
+        {!loadingMore && currentPage < totalPages && (
+          <button
+            onClick={loadMore}
+            className="px-6 py-2 rounded-xl bg-white/5 border border-white/10 text-white/50 hover:text-white hover:bg-white/10 transition-all text-sm font-medium"
+          >
+            Load More
+          </button>
+        )}
+      </div>
     </div>
   );
 }
@@ -631,9 +643,9 @@ export default function MoviesPage() {
           </section>
         ) : (
           <>
-            <MoviesTab active={activeTab === "movies"} onSelect={setSelected} />
-            <ShowsTab active={activeTab === "shows"} onSelect={setSelected} />
-            <AnimeTab active={activeTab === "anime"} onSelect={setSelected} />
+            <InfiniteTab active={activeTab === "movies"} category="movies" onSelect={setSelected} />
+            <InfiniteTab active={activeTab === "shows"} category="shows" onSelect={setSelected} />
+            <InfiniteTab active={activeTab === "anime"} category="anime" onSelect={setSelected} />
           </>
         )}
       </div>

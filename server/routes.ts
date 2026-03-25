@@ -1342,45 +1342,45 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   const SECTION_LIMIT = 12;
 
-  app.get("/api/movies/category/movies", async (_req, res) => {
+  // Popular movies — paginated (matches DocumenTV's /movie/popular approach)
+  app.get("/api/movies/category/movies", async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
     try {
-      const [trending, topRated] = await Promise.all([
-        tmdbFetch(`/trending/movie/week?api_key=${TMDB_KEY}&page=1`),
-        tmdbFetch(`/movie/top_rated?api_key=${TMDB_KEY}&page=1`),
-      ]);
+      const data = await tmdbFetch(`/movie/popular?api_key=${TMDB_KEY}&language=en-US&page=${page}`);
       res.json({
-        trending: trending.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "movie" })),
-        topRated: topRated.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "movie" })),
+        results: (data.results || []).map((m: any) => ({ ...m, media_type: "movie" })),
+        total_pages: data.total_pages || 1,
+        page: data.page || page,
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
 
-  app.get("/api/movies/category/shows", async (_req, res) => {
+  // Popular TV shows — paginated (matches DocumenTV's /tv/popular approach)
+  app.get("/api/movies/category/shows", async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
     try {
-      const [trending, topRated] = await Promise.all([
-        tmdbFetch(`/trending/tv/week?api_key=${TMDB_KEY}&page=1`),
-        tmdbFetch(`/tv/top_rated?api_key=${TMDB_KEY}&page=1`),
-      ]);
+      const data = await tmdbFetch(`/tv/popular?api_key=${TMDB_KEY}&language=en-US&page=${page}`);
       res.json({
-        trending: trending.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
-        topRated: topRated.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
+        results: (data.results || []).map((m: any) => ({ ...m, media_type: "tv" })),
+        total_pages: data.total_pages || 1,
+        page: data.page || page,
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
   });
 
-  app.get("/api/movies/category/anime", async (_req, res) => {
+  // Popular anime — paginated (JP animation via discover)
+  app.get("/api/movies/category/anime", async (req, res) => {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
     try {
-      const [popular, topRated] = await Promise.all([
-        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=1`),
-        tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=vote_average.desc&vote_count.gte=200&page=1`),
-      ]);
+      const data = await tmdbFetch(`/discover/tv?api_key=${TMDB_KEY}&with_genres=16&with_origin_country=JP&sort_by=popularity.desc&page=${page}`);
       res.json({
-        popular: popular.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
-        topRated: topRated.results.slice(0, SECTION_LIMIT).map((m: any) => ({ ...m, media_type: "tv" })),
+        results: (data.results || []).map((m: any) => ({ ...m, media_type: "tv" })),
+        total_pages: data.total_pages || 1,
+        page: data.page || page,
       });
     } catch (e: any) {
       res.status(500).json({ message: e.message });
