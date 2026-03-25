@@ -1441,27 +1441,92 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       });
   }
 
+  // Known ad/popup network hostnames to block outright
+  const AD_HOSTS = [
+    "acscdn.com","aclib.net","actrafficquality.com",
+    "profitablecpmratenetwork.com","effectivegatecpm.com",
+    "adsterra.com","popads.net","popcash.net","hilltopads.net",
+    "exoclick.com","trafficjunky.net","plugrush.com",
+    "adcash.com","valueimpression.com","richpush.co",
+    "mgid.com","revcontent.com","outbrain.com",
+    "ero-advertising.com","adxpansion.com","juicyadvertising.com",
+    "trafficstars.com","etarget.eu","adskeeper.com","run.ad.gt",
+    "tsyndicate.com","histats.com","counter.yadro.ru",
+    "mc.yandex.ru","statcounter.com","clickadu.com",
+  ];
+  const AD_HOST_RE = new RegExp(
+    AD_HOSTS.map(h => h.replace(/\./g, "\\.")).join("|"),
+    "i"
+  );
+
+  function stripAdScripts(html: string): string {
+    // Remove <script> tags whose src points to known ad networks
+    return html.replace(/<script[^>]+src=["']?(\/\/|https?:\/\/)[^"'\s>]*["']?[^>]*>[\s\S]*?<\/script>/gi, (m) => {
+      if (AD_HOST_RE.test(m)) return "";
+      return m;
+    }).replace(/<script[^>]+src=["']?(\/\/|https?:\/\/)[^"'\s>]*["']?[^>]*\/>/gi, (m) => {
+      if (AD_HOST_RE.test(m)) return "";
+      return m;
+    // Also strip noscript tracking pixels
+    }).replace(/<noscript>[\s\S]*?histats[\s\S]*?<\/noscript>/gi, "")
+      .replace(/<noscript>[\s\S]*?statcounter[\s\S]*?<\/noscript>/gi, "");
+  }
+
   function injectSafeProxy(html: string, pageOrigin: string): string {
-    // Spoof window.top/parent/frameElement so JS anti-iframe checks pass.
-    // Intercept XHR + fetch so relative-path API calls (like /response.php) are
-    // routed through our snproxy instead of hitting our server directly.
-    // Static extensions — never intercept these; let <base> handle them for HTML,
-    // or let them resolve naturally via the document origin.
+    // Strip ad/popup scripts from the HTML before it reaches the browser
+    const cleaned = stripAdScripts(html);
+
+    // Spoof window.top/parent/frameElement, block popups, hide overlay ads,
+    // and intercept XHR + fetch so relative-path API calls go through snproxy.
     const script = `<script>(function(){
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});}catch(e){}
 window.open=function(){return null;};
+window.alert=function(){};
+window.confirm=function(){return false;};
+/* Block ad domains in XHR/fetch */
+var _adRe=new RegExp('(${AD_HOSTS.map(h=>h.replace(/\./g,"\\\\.")).join("|")})','i');
+function _isAd(u){return typeof u==='string'&&_adRe.test(u);}
+/* Popup/overlay remover — runs on DOM mutations */
+function _killAds(){
+  var els=document.querySelectorAll('[style*="position:fixed"],[style*="position: fixed"]');
+  for(var i=0;i<els.length;i++){
+    var z=parseInt(window.getComputedStyle(els[i]).zIndex)||0;
+    var tag=els[i].tagName.toLowerCase();
+    if(z>999&&tag!=='video'&&tag!=='iframe')els[i].remove();
+  }
+  /* Hide overlay iframes from ad networks */
+  var ifs=document.querySelectorAll('iframe');
+  for(var j=0;j<ifs.length;j++){
+    var s=ifs[j].src||ifs[j].getAttribute('data-src')||'';
+    if(_adRe.test(s)){var p=ifs[j].parentNode;if(p)p.removeChild(ifs[j]);}
+  }
+}
+if(window.MutationObserver){
+  new MutationObserver(_killAds).observe(document.documentElement||document.body||document,{childList:true,subtree:true});
+}
+/* XHR interceptor — proxy relative API calls, block ad domains */
 var _po=encodeURIComponent('${pageOrigin}');
 var _snp='/api/movies/snproxy?origin='+_po+'&path=';
 var _staticExt=/\\.(js|css|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|ico|webp|mp4|webm|ogg|mp3|m3u8|ts)([?#]|$)/i;
 function _shouldProxy(u){return typeof u==='string'&&u.charAt(0)==='/'&&u.charAt(1)!=='/'&&!_staticExt.test(u)&&u.indexOf('/api/movies/snproxy')<0;}
 var _xo=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(){var a=Array.prototype.slice.call(arguments);if(_shouldProxy(a[1]))a[1]=_snp+encodeURIComponent(a[1]);return _xo.apply(this,a);};
-var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){var a=Array.prototype.slice.call(arguments);if(_shouldProxy(a[0]))a[0]=_snp+encodeURIComponent(a[0]);return _fo.apply(this,a);};}
+XMLHttpRequest.prototype.open=function(){
+  var a=Array.prototype.slice.call(arguments);
+  if(_isAd(a[1])){a[1]='/api/movies/deadend';return _xo.apply(this,a);}
+  if(_shouldProxy(a[1]))a[1]=_snp+encodeURIComponent(a[1]);
+  return _xo.apply(this,a);
+};
+var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
+  var a=Array.prototype.slice.call(arguments);
+  if(_isAd(a[0]))return Promise.resolve(new Response('',{status:204}));
+  if(_shouldProxy(a[0]))a[0]=_snp+encodeURIComponent(a[0]);
+  return _fo.apply(this,a);
+};}
 }());</script><base href="${pageOrigin}/">`;
-    if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);
-    return script + html;
+    if (/<head[^>]*>/i.test(cleaned)) return cleaned.replace(/(<head[^>]*>)/i, `$1${script}`);
+    return script + cleaned;
   }
 
   function injectPopupBlocker(html: string, pageOrigin: string): string {
