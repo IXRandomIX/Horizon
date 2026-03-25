@@ -84,6 +84,67 @@ const MATRIX_COLORS: Record<string, string> = {
   "efx:matrix:pink":   "#ff44cc",
 };
 
+const AVAILABLE_FONTS: { key: string; name: string; family: string; category: string }[] = [
+  // Default
+  { key: "sans",              name: "Default",           family: "inherit",                             category: "Default" },
+  // Sans-serif
+  { key: "Roboto",            name: "Roboto",            family: "'Roboto', sans-serif",                category: "Sans" },
+  { key: "Open Sans",         name: "Open Sans",         family: "'Open Sans', sans-serif",             category: "Sans" },
+  { key: "Poppins",           name: "Poppins",           family: "'Poppins', sans-serif",               category: "Sans" },
+  { key: "Montserrat",        name: "Montserrat",        family: "'Montserrat', sans-serif",            category: "Sans" },
+  { key: "Raleway",           name: "Raleway",           family: "'Raleway', sans-serif",               category: "Sans" },
+  { key: "Nunito",            name: "Nunito",            family: "'Nunito', sans-serif",                category: "Sans" },
+  { key: "Comfortaa",         name: "Comfortaa",         family: "'Comfortaa', cursive",                category: "Sans" },
+  { key: "Fredoka",           name: "Fredoka",           family: "'Fredoka', sans-serif",               category: "Sans" },
+  { key: "Outfit",            name: "Outfit",            family: "'Outfit', sans-serif",                category: "Sans" },
+  { key: "DM Sans",           name: "DM Sans",           family: "'DM Sans', sans-serif",               category: "Sans" },
+  { key: "Space Grotesk",     name: "Space Grotesk",     family: "'Space Grotesk', sans-serif",         category: "Sans" },
+  { key: "Josefin Sans",      name: "Josefin Sans",      family: "'Josefin Sans', sans-serif",          category: "Sans" },
+  { key: "Oswald",            name: "Oswald",            family: "'Oswald', sans-serif",                category: "Sans" },
+  { key: "Exo 2",             name: "Exo 2",             family: "'Exo 2', sans-serif",                 category: "Sans" },
+  { key: "Kanit",             name: "Kanit",             family: "'Kanit', sans-serif",                 category: "Sans" },
+  { key: "Ubuntu",            name: "Ubuntu",            family: "'Ubuntu', sans-serif",                category: "Sans" },
+  { key: "Rajdhani",          name: "Rajdhani",          family: "'Rajdhani', sans-serif",              category: "Sans" },
+  { key: "Titillium Web",     name: "Titillium Web",     family: "'Titillium Web', sans-serif",         category: "Sans" },
+  // Serif
+  { key: "Playfair Display",  name: "Playfair Display",  family: "'Playfair Display', serif",           category: "Serif" },
+  { key: "Merriweather",      name: "Merriweather",      family: "'Merriweather', serif",               category: "Serif" },
+  { key: "Libre Baskerville", name: "Libre Baskerville", family: "'Libre Baskerville', serif",          category: "Serif" },
+  { key: "Lora",              name: "Lora",              family: "'Lora', serif",                       category: "Serif" },
+  { key: "Cinzel",            name: "Cinzel",            family: "'Cinzel', serif",                     category: "Serif" },
+  // Display
+  { key: "Bebas Neue",        name: "Bebas Neue",        family: "'Bebas Neue', sans-serif",            category: "Display" },
+  { key: "Orbitron",          name: "Orbitron",          family: "'Orbitron', sans-serif",              category: "Display" },
+  { key: "Righteous",         name: "Righteous",         family: "'Righteous', sans-serif",             category: "Display" },
+  { key: "Russo One",         name: "Russo One",         family: "'Russo One', sans-serif",             category: "Display" },
+  { key: "Audiowide",         name: "Audiowide",         family: "'Audiowide', sans-serif",             category: "Display" },
+  { key: "Oxanium",           name: "Oxanium",           family: "'Oxanium', sans-serif",               category: "Display" },
+  { key: "Syne",              name: "Syne",              family: "'Syne', sans-serif",                  category: "Display" },
+  { key: "Abril Fatface",     name: "Abril Fatface",     family: "'Abril Fatface', cursive",            category: "Display" },
+  { key: "Bangers",           name: "Bangers",           family: "'Bangers', cursive",                  category: "Display" },
+  // Handwriting
+  { key: "Dancing Script",    name: "Dancing Script",    family: "'Dancing Script', cursive",           category: "Hand" },
+  { key: "Pacifico",          name: "Pacifico",          family: "'Pacifico', cursive",                 category: "Hand" },
+  { key: "Caveat",            name: "Caveat",            family: "'Caveat', cursive",                   category: "Hand" },
+  { key: "Permanent Marker",  name: "Permanent Marker",  family: "'Permanent Marker', cursive",         category: "Hand" },
+  { key: "Architects Daughter", name: "Architects Daughter", family: "'Architects Daughter', cursive", category: "Hand" },
+  { key: "Lobster",           name: "Lobster",           family: "'Lobster', cursive",                  category: "Hand" },
+  { key: "Satisfy",           name: "Satisfy",           family: "'Satisfy', cursive",                  category: "Hand" },
+  { key: "Great Vibes",       name: "Great Vibes",       family: "'Great Vibes', cursive",              category: "Hand" },
+  // Monospace / Code
+  { key: "JetBrains Mono",    name: "JetBrains Mono",    family: "'JetBrains Mono', monospace",         category: "Code" },
+  { key: "Fira Code",         name: "Fira Code",         family: "'Fira Code', monospace",              category: "Code" },
+  { key: "Source Code Pro",   name: "Source Code Pro",   family: "'Source Code Pro', monospace",        category: "Code" },
+  { key: "Space Mono",        name: "Space Mono",        family: "'Space Mono', monospace",             category: "Code" },
+  { key: "IBM Plex Mono",     name: "IBM Plex Mono",     family: "'IBM Plex Mono', monospace",          category: "Code" },
+  { key: "Roboto Mono",       name: "Roboto Mono",       family: "'Roboto Mono', monospace",            category: "Code" },
+  { key: "Geist Mono",        name: "Geist Mono",        family: "'Geist Mono', monospace",             category: "Code" },
+  { key: "Share Tech Mono",   name: "Share Tech Mono",   family: "'Share Tech Mono', monospace",        category: "Code" },
+  // Gaming / Pixel
+  { key: "Press Start 2P",    name: "Press Start 2P",    family: "'Press Start 2P', monospace",         category: "Gaming" },
+  { key: "VT323",             name: "VT323",             family: "'VT323', monospace",                  category: "Gaming" },
+];
+
 // ── Helper components ─────────────────────────────────────────────────────
 function GlitchTextUsername({ text, className, style }: { text: string; className?: string; style?: React.CSSProperties }) {
   const [display, setDisplay] = useState(text);
@@ -365,8 +426,11 @@ export default function Chat() {
   const [apTarget, setApTarget] = useState("");
   const [apColor, setApColor] = useState("#9ca3af");
   const [apEffects, setApEffects] = useState<string[]>([]);
+  const [apFont, setApFont] = useState("sans");
   const [apColorTab, setApColorTab] = useState<"solid" | "gradient" | "rainbow">("solid");
   const [apShowEffects, setApShowEffects] = useState(false);
+  const [apShowFonts, setApShowFonts] = useState(false);
+  const [apFontCategory, setApFontCategory] = useState("All");
   const [roles, setRoles] = useState<any[]>([]);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleColor, setNewRoleColor] = useState("#9ca3af");
@@ -597,6 +661,7 @@ export default function Chat() {
       toast({ title: `Reset ${target} to defaults` });
       setApColor("#9ca3af");
       setApEffects([]);
+      setApFont("sans");
       setApColorTab("solid");
       if (target === user?.username) {
         const updated = await res.json();
@@ -614,7 +679,7 @@ export default function Chat() {
     const target = apTarget.trim() || user?.username;
     if (!target) return;
     const animStr = apEffects.length > 0 ? apEffects.join("|") : "none";
-    const updates: any = { roleColor: apColor, animation: animStr };
+    const updates: any = { roleColor: apColor, animation: animStr, font: apFont };
     const res = await authFetch(`/api/chat/users/${target}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
@@ -992,18 +1057,10 @@ export default function Chat() {
     );
   }
 
-  const getFontClass = (fontName: string) => {
-    switch (fontName) {
-      case "Adios Script Pro": case "Affair": case "Aphrodite Pro": case "Parisienne": return "font-adios";
-      case "Architects Daughter": case "Samantha Brandon Handwritten Font": return "font-architects";
-      case "Playfair Display": return "font-playfair";
-      case "EB Garamond": return "font-garamond";
-      case "Libre Baskerville": return "font-baskerville";
-      case "Bodoni Moda": case "Didot": return "font-bodoni";
-      case "Cormorant": return "font-cormorant";
-      case "Instrument Serif": return "font-instrument";
-      default: return "font-sans";
-    }
+  const getFontStyle = (fontKey: string): React.CSSProperties => {
+    const found = AVAILABLE_FONTS.find(f => f.key === fontKey);
+    if (!found || found.family === "inherit") return {};
+    return { fontFamily: found.family };
   };
 
   const getAnimationClass = (animName: string) => {
@@ -1023,8 +1080,8 @@ export default function Chat() {
 
   const renderUsername = (text: string, roleColor: string, animation: string, font: string) => {
     const { colorClass, colorStyle } = getColorInfo(roleColor, animation);
-    const fontClass = getFontClass(font);
-    const base = `font-black tracking-wide ${fontClass}`;
+    const fontStyle = getFontStyle(font);
+    const base = `font-black tracking-wide`;
 
     // Parse pipe-separated effects (e.g. "efx:matrix|efx:galaxy|efx:border:gold")
     const effects = (!animation || animation === "none") ? [] : animation.split("|").filter(e => e && e !== "none");
@@ -1041,11 +1098,14 @@ export default function Chat() {
     // galaxy glow class (text-shadow)
     const galaxyCls  = hasGalaxy  ? "efx-galaxy"  : "";
     const textClass = `${base} ${colorClass} ${rainbowCls} ${galaxyCls}`.trim();
+    // merge font + color styles (font first so color can override)
+    const mergedStyle: React.CSSProperties = { ...fontStyle, ...colorStyle };
+    const finalStyle = Object.keys(mergedStyle).length > 0 ? mergedStyle : undefined;
 
     // Build base text node (glitch vs plain)
     const textNode = hasGlitch
-      ? <GlitchTextUsername text={text} className={textClass} style={colorStyle} />
-      : <span className={textClass} style={colorStyle} data-text={text}>{text}</span>;
+      ? <GlitchTextUsername text={text} className={textClass} style={finalStyle} />
+      : <span className={textClass} style={finalStyle} data-text={text}>{text}</span>;
 
     // If any background canvas effect is needed, wrap in a relative container
     const needsCanvasWrap = matrixEffect || hasGalaxy || hasBlackhole;
@@ -1810,6 +1870,48 @@ export default function Chat() {
                             )}
                           </div>
 
+                          {/* Font picker */}
+                          <div className="space-y-2">
+                            <div className="flex items-center justify-between">
+                              <button onClick={() => setApShowFonts(v => !v)} className="text-white/50 text-xs flex items-center gap-1 hover:text-white transition-colors">
+                                <span className="text-sm leading-none">Aa</span> Fonts {apShowFonts ? "▲" : "▼"}
+                              </button>
+                              {apFont !== "sans" && (
+                                <button onClick={() => setApFont("sans")} className="text-[10px] text-red-400 hover:text-red-300 transition-colors">Reset font</button>
+                              )}
+                            </div>
+                            {apShowFonts && (
+                              <div className="space-y-2">
+                                {/* Category filter */}
+                                <div className="flex flex-wrap gap-1">
+                                  {["All", "Sans", "Serif", "Display", "Hand", "Code", "Gaming"].map(cat => (
+                                    <button key={cat} onClick={() => setApFontCategory(cat)} className={`text-[10px] px-2 py-0.5 rounded border transition-all ${apFontCategory === cat ? "border-primary bg-primary/20 text-primary" : "border-white/10 text-white/40 hover:text-white/70"}`}>{cat}</button>
+                                  ))}
+                                </div>
+                                {/* Font grid — each button renders in its own typeface */}
+                                <div className="grid grid-cols-2 gap-1 max-h-56 overflow-y-auto pr-1">
+                                  {AVAILABLE_FONTS.filter(f => apFontCategory === "All" || f.category === apFontCategory).map(f => {
+                                    const active = apFont === f.key;
+                                    return (
+                                      <button
+                                        key={f.key}
+                                        onClick={() => setApFont(f.key)}
+                                        title={f.name}
+                                        style={{ fontFamily: f.family }}
+                                        className={`text-sm px-2 py-1.5 rounded border text-left truncate transition-all ${active ? "border-primary bg-primary/20 text-white" : "border-white/10 text-white/60 hover:border-white/30 hover:text-white"}`}
+                                      >
+                                        {f.name}
+                                      </button>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+                            {!apShowFonts && apFont !== "sans" && (
+                              <p className="text-primary text-[10px]">Font: <span style={{ fontFamily: AVAILABLE_FONTS.find(f => f.key === apFont)?.family }}>{AVAILABLE_FONTS.find(f => f.key === apFont)?.name}</span></p>
+                            )}
+                          </div>
+
                           {/* Effect picker - multi-select */}
                           <div className="space-y-2">
                             <div className="flex items-center justify-between">
@@ -1845,7 +1947,7 @@ export default function Chat() {
                           <div className="border border-white/10 rounded p-3 space-y-1">
                             <label className="text-white/40 text-[10px] uppercase tracking-widest">Preview</label>
                             <div className="flex items-center gap-2 min-h-[32px]">
-                              {renderUsername(apTarget.trim() || user?.username || "Preview", apColor, apEffects.length > 0 ? apEffects.join("|") : "none", "sans")}
+                              {renderUsername(apTarget.trim() || user?.username || "Preview", apColor, apEffects.length > 0 ? apEffects.join("|") : "none", apFont)}
                             </div>
                           </div>
 
