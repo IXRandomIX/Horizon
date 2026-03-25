@@ -49,13 +49,23 @@ export function AppSidebar() {
   const { globalInboxUnread, chatUnread, changeLogsUnread, markGlobalInboxRead, markChatRead, markChangeLogsRead } = useNotifications();
   const [rankInfo, setRankInfo] = useState<{ xp: number | null; rank: { name: string; color: string }; isStaff: boolean } | null>(null);
 
-  useEffect(() => {
+  const fetchRankInfo = () => {
     const token = localStorage.getItem("horizon_session_token");
     if (!token) return;
     fetch("/api/ranks/me", { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.ok ? r.json() : null)
       .then(data => { if (data) setRankInfo(data); })
       .catch(() => {});
+  };
+
+  useEffect(() => {
+    fetchRankInfo();
+    window.addEventListener("xp-updated", fetchRankInfo);
+    const poll = setInterval(fetchRankInfo, 60000);
+    return () => {
+      window.removeEventListener("xp-updated", fetchRankInfo);
+      clearInterval(poll);
+    };
   }, [user?.username]);
 
   const FONT_CLASSES: Record<string, string> = {

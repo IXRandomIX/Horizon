@@ -19,8 +19,8 @@ export function getRankForXP(xp: number) {
 }
 
 export function getNextRank(xp: number) {
-  for (let i = RANKS.length - 1; i >= 0; i--) {
-    if (RANKS[i].xpNeeded > xp) return RANKS[i];
+  for (const r of RANKS) {
+    if (r.xpNeeded > xp) return r;
   }
   return null;
 }

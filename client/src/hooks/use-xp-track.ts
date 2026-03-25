@@ -4,7 +4,7 @@ export async function trackXP(type: string): Promise<void> {
   const token = localStorage.getItem("horizon_session_token");
   if (!token) return;
   try {
-    await fetch("/api/xp/track", {
+    const res = await fetch("/api/xp/track", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -12,6 +12,9 @@ export async function trackXP(type: string): Promise<void> {
       },
       body: JSON.stringify({ type }),
     });
+    if (res.ok) {
+      window.dispatchEvent(new CustomEvent("xp-updated"));
+    }
   } catch {
     // fire-and-forget, ignore errors
   }
