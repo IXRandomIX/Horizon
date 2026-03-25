@@ -470,7 +470,7 @@ export class DatabaseStorage implements IStorage {
     const selected: string[] = [];
     for (const ids of Object.values(byType)) {
       const shuffled = [...ids].sort(() => Math.random() - 0.5);
-      selected.push(...shuffled.slice(0, 2));
+      selected.push(...shuffled.slice(0, 10));
     }
     const [cycle] = await db.insert(questCycles).values({ questIds: selected, startedAt: new Date() }).returning();
     const nextResetAt = new Date(cycle.startedAt.getTime() + CYCLE_MS);
