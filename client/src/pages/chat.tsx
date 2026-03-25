@@ -107,6 +107,28 @@ export default function Chat() {
   const [cooldown, setCooldown] = useState(0);
   const cooldownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [banStatus, setBanStatus] = useState<{ banned: boolean; ban: { reason: string; bannedBy: string; expiresAt: string | null } | null; timedOut: boolean; timeout: { expiresAt: string } | null } | null>(null);
+  const [cmdPickerIndex, setCmdPickerIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const MOD_TIMES_BAN = ["1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
+  const MOD_TIMES_TIMEOUT = ["30 seconds","1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
+
+  const MOD_COMMANDS = [
+    { cmd: "/ban",      syntax: "/ban <username> <time> [reason]",     icon: "🔨", desc: "Temporarily or permanently ban a user from chat.", needsTime: "ban"     as const, needsReason: true  },
+    { cmd: "/timeout",  syntax: "/timeout <username> <time>",          icon: "⏱️", desc: "Silence a user for a set period — they can still read chat.",  needsTime: "timeout" as const, needsReason: false },
+    { cmd: "/unban",    syntax: "/unban <username>",                   icon: "✅", desc: "Lift an active ban and let the user chat again.",              needsTime: null,      needsReason: false },
+    { cmd: "/untimeout",syntax: "/untimeout <username>",               icon: "🔊", desc: "Remove an active timeout and restore posting privileges.",     needsTime: null,      needsReason: false },
+  ];
+
+  const showCmdPicker = userHasPermission("admin_panel") && newMessage.startsWith("/") && !newMessage.includes("\n");
+  const cmdQuery = showCmdPicker ? newMessage.split(" ")[0].toLowerCase() : "";
+  const filteredCmds = showCmdPicker ? MOD_COMMANDS.filter(c => c.cmd.startsWith(cmdQuery)) : [];
+  const activeCmd = showCmdPicker && filteredCmds.length === 0 && newMessage.includes(" ")
+    ? MOD_COMMANDS.find(c => c.cmd === newMessage.split(" ")[0].toLowerCase()) ?? null
+    : null;
+  const cmdParts = newMessage.trim().split(/\s+/);
+  const showTimeHints = showCmdPicker && (activeCmd || (filteredCmds.length === 1 && cmdParts.length >= 3 && newMessage.endsWith(" ")));
+  const hintCmd = activeCmd || filteredCmds[0] || null;
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -1077,6 +1099,104 @@ export default function Chat() {
               <Button variant="ghost" size="icon" className="h-4 w-4" onClick={() => setReplyingTo(null)}><X className="w-3 h-3" /></Button>
             </div>
           )}
+          {/* Command Picker */}
+          <AnimatePresence>
+            {showCmdPicker && (filteredCmds.length > 0 || activeCmd) && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                transition={{ duration: 0.15 }}
+                className="mb-2 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/60"
+              >
+                {/* Header */}
+                <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2">
+                  <Shield className="w-3 h-3 text-primary/60" />
+                  <span className="text-[10px] font-black tracking-widest text-primary/60 uppercase">Owner & CO OWNER Commands</span>
+                </div>
+
+                {/* Command list */}
+                {filteredCmds.length > 0 && (
+                  <div className="divide-y divide-white/[0.04]">
+                    {filteredCmds.map((c, i) => (
+                      <button
+                        key={c.cmd}
+                        type="button"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          setNewMessage(c.cmd + " ");
+                          setCmdPickerIndex(i);
+                          inputRef.current?.focus();
+                        }}
+                        className={`w-full text-left px-4 py-3 transition-all flex items-start gap-3 group ${i === cmdPickerIndex ? "bg-primary/10" : "hover:bg-white/[0.04]"}`}
+                      >
+                        <span className="text-xl leading-none mt-0.5">{c.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-baseline gap-2 flex-wrap">
+                            <span className={`font-black text-sm ${i === cmdPickerIndex ? "text-primary" : "text-white"}`}>{c.cmd}</span>
+                            <span className="text-xs font-mono text-white/30">{c.syntax.slice(c.cmd.length)}</span>
+                          </div>
+                          <p className="text-xs text-white/40 mt-0.5 leading-snug">{c.desc}</p>
+                          {c.needsTime && (
+                            <div className="mt-1.5 flex flex-wrap gap-1">
+                              {(c.needsTime === "timeout" ? MOD_TIMES_TIMEOUT : MOD_TIMES_BAN).map(t => (
+                                <span key={t} className="text-[9px] font-bold tracking-wide px-1.5 py-0.5 rounded-full bg-white/5 text-white/30 border border-white/5">{t}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        {i === cmdPickerIndex && <span className="text-[9px] font-black text-primary/40 uppercase tracking-widest self-center ml-2 shrink-0">TAB</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Active command full hint */}
+                {activeCmd && (
+                  <div className="px-4 py-3 flex items-start gap-3">
+                    <span className="text-xl leading-none mt-0.5">{activeCmd.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-baseline gap-2">
+                        <span className="font-black text-sm text-primary">{activeCmd.cmd}</span>
+                        <span className="text-xs font-mono text-white/30">{activeCmd.syntax.slice(activeCmd.cmd.length)}</span>
+                      </div>
+                      <p className="text-xs text-white/40 mt-0.5">{activeCmd.desc}</p>
+                      {activeCmd.needsTime && cmdParts.length >= 2 && (
+                        <div className="mt-2">
+                          <p className="text-[10px] font-black tracking-widest text-white/20 uppercase mb-1.5">Time Options</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {(activeCmd.needsTime === "timeout" ? MOD_TIMES_TIMEOUT : MOD_TIMES_BAN).map(t => {
+                              const isSelected = cmdParts[2] === t || (cmdParts.slice(2).join(" ") === t);
+                              return (
+                                <button
+                                  key={t}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault();
+                                    const base = cmdParts.slice(0, 2).join(" ");
+                                    const afterTime = activeCmd.needsReason ? " " : "";
+                                    setNewMessage(base + " " + t + afterTime);
+                                    inputRef.current?.focus();
+                                  }}
+                                  className={`text-[10px] font-bold tracking-wide px-2 py-1 rounded-full border transition-all ${isSelected ? "bg-primary/20 text-primary border-primary/30" : "bg-white/5 text-white/50 border-white/10 hover:bg-white/10 hover:text-white"}`}
+                                >
+                                  {t}
+                                </button>
+                              );
+                            })}
+                          </div>
+                          {activeCmd.needsReason && cmdParts.length >= 4 && (
+                            <p className="text-[10px] text-white/30 mt-2">Now type your reason after the time (optional)</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
           <form onSubmit={handleSendMessage} className={`flex gap-3 ${replyingTo ? 'rounded-b-xl' : 'rounded-xl'} bg-white/[0.02] border border-white/10 p-2 focus-within:border-primary/50 transition-all`}>
             <Popover>
               <PopoverTrigger asChild>
@@ -1123,6 +1243,7 @@ export default function Chat() {
             </Dialog>
 
             <Input 
+              ref={inputRef}
               placeholder={
                 banStatus?.timedOut
                   ? `You are timed out until ${banStatus.timeout ? new Date(banStatus.timeout.expiresAt).toLocaleTimeString() : "..."}`
@@ -1133,7 +1254,17 @@ export default function Chat() {
                       : "Select a channel"
               }
               value={newMessage} 
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => { setNewMessage(e.target.value); setCmdPickerIndex(0); }}
+              onKeyDown={(e) => {
+                if (!showCmdPicker || filteredCmds.length === 0) return;
+                if (e.key === "ArrowUp") { e.preventDefault(); setCmdPickerIndex(i => (i - 1 + filteredCmds.length) % filteredCmds.length); }
+                if (e.key === "ArrowDown") { e.preventDefault(); setCmdPickerIndex(i => (i + 1) % filteredCmds.length); }
+                if (e.key === "Tab" || (e.key === "Enter" && filteredCmds.length > 1)) {
+                  e.preventDefault();
+                  setNewMessage(filteredCmds[cmdPickerIndex].cmd + " ");
+                }
+                if (e.key === "Escape") { e.preventDefault(); setNewMessage(""); }
+              }}
               className={`bg-transparent border-none focus-visible:ring-0 text-lg h-10 ${banStatus?.timedOut ? "placeholder:text-orange-400/70" : cooldown > 0 ? "placeholder:text-red-400/70" : ""}`}
               disabled={!activeChannel || !canPostInChannel(activeChannel) || cooldown > 0 || !!banStatus?.timedOut}
             />
