@@ -110,25 +110,6 @@ export default function Chat() {
   const [cmdPickerIndex, setCmdPickerIndex] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const MOD_TIMES_BAN = ["1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
-  const MOD_TIMES_TIMEOUT = ["30 seconds","1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
-
-  const MOD_COMMANDS = [
-    { cmd: "/ban",      syntax: "/ban <username> <time> [reason]",     icon: "🔨", desc: "Temporarily or permanently ban a user from chat.", needsTime: "ban"     as const, needsReason: true  },
-    { cmd: "/timeout",  syntax: "/timeout <username> <time>",          icon: "⏱️", desc: "Silence a user for a set period — they can still read chat.",  needsTime: "timeout" as const, needsReason: false },
-    { cmd: "/unban",    syntax: "/unban <username>",                   icon: "✅", desc: "Lift an active ban and let the user chat again.",              needsTime: null,      needsReason: false },
-    { cmd: "/untimeout",syntax: "/untimeout <username>",               icon: "🔊", desc: "Remove an active timeout and restore posting privileges.",     needsTime: null,      needsReason: false },
-  ];
-
-  const showCmdPicker = userHasPermission("admin_panel") && newMessage.startsWith("/") && !newMessage.includes("\n");
-  const cmdQuery = showCmdPicker ? newMessage.split(" ")[0].toLowerCase() : "";
-  const filteredCmds = showCmdPicker ? MOD_COMMANDS.filter(c => c.cmd.startsWith(cmdQuery)) : [];
-  const activeCmd = showCmdPicker && filteredCmds.length === 0 && newMessage.includes(" ")
-    ? MOD_COMMANDS.find(c => c.cmd === newMessage.split(" ")[0].toLowerCase()) ?? null
-    : null;
-  const cmdParts = newMessage.trim().split(/\s+/);
-  const showTimeHints = showCmdPicker && (activeCmd || (filteredCmds.length === 1 && cmdParts.length >= 3 && newMessage.endsWith(" ")));
-  const hintCmd = activeCmd || filteredCmds[0] || null;
   const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -195,6 +176,24 @@ export default function Chat() {
     if (allPerms.includes("admin_panel")) return true; // Full access for CO OWNER / admin_panel holders
     return allPerms.includes(permission);
   };
+
+  const MOD_TIMES_BAN = ["1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
+  const MOD_TIMES_TIMEOUT = ["30 seconds","1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
+  const MOD_COMMANDS = [
+    { cmd: "/ban",      syntax: "/ban <username> <time> [reason]",     icon: "🔨", desc: "Temporarily or permanently ban a user from chat.", needsTime: "ban"     as const, needsReason: true  },
+    { cmd: "/timeout",  syntax: "/timeout <username> <time>",          icon: "⏱️", desc: "Silence a user for a set period — they can still read chat.",  needsTime: "timeout" as const, needsReason: false },
+    { cmd: "/unban",    syntax: "/unban <username>",                   icon: "✅", desc: "Lift an active ban and let the user chat again.",              needsTime: null,      needsReason: false },
+    { cmd: "/untimeout",syntax: "/untimeout <username>",               icon: "🔊", desc: "Remove an active timeout and restore posting privileges.",     needsTime: null,      needsReason: false },
+  ];
+  const showCmdPicker = userHasPermission("admin_panel") && newMessage.startsWith("/") && !newMessage.includes("\n");
+  const cmdQuery = showCmdPicker ? newMessage.split(" ")[0].toLowerCase() : "";
+  const filteredCmds = showCmdPicker ? MOD_COMMANDS.filter(c => c.cmd.startsWith(cmdQuery)) : [];
+  const activeCmd = showCmdPicker && filteredCmds.length === 0 && newMessage.includes(" ")
+    ? MOD_COMMANDS.find(c => c.cmd === newMessage.split(" ")[0].toLowerCase()) ?? null
+    : null;
+  const cmdParts = newMessage.trim().split(/\s+/);
+  const hintCmd = activeCmd || filteredCmds[0] || null;
+
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isUserScrolling, setIsUserScrolling] = useState(false);
