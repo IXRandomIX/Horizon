@@ -1472,13 +1472,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       .replace(/<noscript>[\s\S]*?statcounter[\s\S]*?<\/noscript>/gi, "");
   }
 
-  function injectSafeProxy(html: string, pageOrigin: string): string {
+  // Rewrite cloudnestra.com/rcp/ iframes statically in HTML (before browser renders them)
+  function rewriteCloudnestraIframes(html: string): string {
+    // Match both //cloudnestra.com/rcp/... and https://cloudnestra.com/rcp/...
+    return html.replace(
+      /(<iframe[^>]+src=)(["'])(?:https?:)?\/\/cloudnestra\.com\/rcp\/([^"'\s]+)\2/gi,
+      (_, pre, q, hash) => `${pre}${q}/api/movies/cnproxy?h=${encodeURIComponent(hash)}${q}`
+    );
+  }
+
+  function injectSafeProxy(html: string, pageOrigin: string, locationPath?: string): string {
     // Strip ad/popup scripts from the HTML before it reaches the browser
     const cleaned = stripAdScripts(html);
 
+    // Rewrite any static cloudnestra.com/rcp/ iframes so they load through our cnproxy
+    const withCnProxy = rewriteCloudnestraIframes(cleaned);
+
+    // If the player is an SPA (e.g. smashy.stream) that reads window.location to know
+    // what content to display, we need to fix the URL before the SPA initialises.
+    const locationFix = locationPath
+      ? `try{window.history.replaceState({},'','${locationPath.replace(/\\/g,"\\\\").replace(/'/g,"\\'")}');}catch(e){}`
+      : "";
+
     // Spoof window.top/parent/frameElement, block popups, hide overlay ads,
     // and intercept XHR + fetch so relative-path API calls go through snproxy.
-    const script = `<script>(function(){
+    const script = `<script>(function(){${locationFix}
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});}catch(e){}
@@ -1509,39 +1527,80 @@ function _killAds(){
     if(_adRe.test(s)){var p=ifs[j].parentNode;if(p)p.removeChild(ifs[j]);}
   }
 }
-if(window.MutationObserver){
-  new MutationObserver(_killAds).observe(document.documentElement||document.body||document,{childList:true,subtree:true});
+/* Dynamically intercept cloudnestra.com/rcp/ iframes (created by JS) and /prorcp/ iframes */
+var _cnRe=/^(?:https?:)?\\/\\/cloudnestra\\.com\\/rcp\\/(.+)/i;
+var _prRe=/^\\/prorcp\\//;
+function _rewrapCN(iframe){
+  var src=iframe.getAttribute('src')||'';
+  var m=src.match(_cnRe);
+  if(m){iframe.setAttribute('src','/api/movies/cnproxy?h='+encodeURIComponent(m[1]));return;}
+  if(_prRe.test(src)&&src.indexOf('/api/movies/cnproxy')<0){
+    iframe.setAttribute('src','/api/movies/cnproxy?path='+encodeURIComponent(src));
+  }
 }
-/* XHR interceptor — proxy relative API calls, block ad domains */
+function _scanIframes(root){
+  var ifs=(root&&root.querySelectorAll?root:document).querySelectorAll('iframe');
+  for(var k=0;k<ifs.length;k++)_rewrapCN(ifs[k]);
+}
+if(window.MutationObserver){
+  new MutationObserver(function(muts){
+    _killAds();
+    for(var i=0;i<muts.length;i++){
+      if(muts[i].type==='childList'){
+        var ns=muts[i].addedNodes;
+        for(var j=0;j<ns.length;j++){
+          var n=ns[j];
+          if(n.tagName==='IFRAME')_rewrapCN(n);
+          else if(n.querySelectorAll)_scanIframes(n);
+        }
+      } else if(muts[i].type==='attributes'&&muts[i].target&&muts[i].target.tagName==='IFRAME'){
+        _rewrapCN(muts[i].target);
+      }
+    }
+  }).observe(document.documentElement||document.body||document,{childList:true,subtree:true,attributes:true,attributeFilter:['src']});
+}
+/* XHR interceptor — proxy relative API calls, block ad domains, intercept known external APIs */
 var _po=encodeURIComponent('${pageOrigin}');
+var _ref=encodeURIComponent('${pageOrigin}/');
 var _snp='/api/movies/snproxy?origin='+_po+'&path=';
 var _staticExt=/\\.(js|css|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|ico|webp|mp4|webm|ogg|mp3|m3u8|ts)([?#]|$)/i;
+/* Absolute-URL APIs that must be proxied with the page origin as spoofed Referer */
+var _absApiRe=/^https?:\\/\\/(api\\.smashystream\\.top)\\//i;
 function _shouldProxy(u){return typeof u==='string'&&u.charAt(0)==='/'&&u.charAt(1)!=='/'&&!_staticExt.test(u)&&u.indexOf('/api/movies/snproxy')<0;}
+function _absProxy(u){
+  try{var p=new URL(u);return '/api/movies/snproxy?origin='+encodeURIComponent(p.origin)+'&path='+encodeURIComponent(p.pathname+p.search+p.hash)+'&ref='+_ref;}
+  catch(e){return u;}
+}
 var _xo=XMLHttpRequest.prototype.open;
 XMLHttpRequest.prototype.open=function(){
   var a=Array.prototype.slice.call(arguments);
   if(_isAd(a[1])){a[1]='/api/movies/deadend';return _xo.apply(this,a);}
   if(_shouldProxy(a[1]))a[1]=_snp+encodeURIComponent(a[1]);
+  else if(typeof a[1]==='string'&&_absApiRe.test(a[1]))a[1]=_absProxy(a[1]);
   return _xo.apply(this,a);
 };
 var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   var a=Array.prototype.slice.call(arguments);
-  if(_isAd(a[0]))return Promise.resolve(new Response('',{status:204}));
-  if(_shouldProxy(a[0]))a[0]=_snp+encodeURIComponent(a[0]);
+  if(typeof a[0]==='string'){
+    var u=a[0];
+    if(_isAd(u))return Promise.resolve(new Response('',{status:204}));
+    if(_shouldProxy(u))a[0]=_snp+encodeURIComponent(u);
+    else if(_absApiRe.test(u))a[0]=_absProxy(u);
+  }
   return _fo.apply(this,a);
 };}
 }());</script><base href="${pageOrigin}/">`;
-    if (/<head[^>]*>/i.test(cleaned)) return cleaned.replace(/(<head[^>]*>)/i, `$1${script}`);
-    return script + cleaned;
+    if (/<head[^>]*>/i.test(withCnProxy)) return withCnProxy.replace(/(<head[^>]*>)/i, `$1${script}`);
+    return script + withCnProxy;
   }
 
-  function injectPopupBlocker(html: string, pageOrigin: string): string {
+  function injectPopupBlocker(html: string, pageOrigin: string, locationPath?: string): string {
     // Do NOT call rewriteUrls here — routing every static resource (JS/CSS/fonts/images)
     // through the relay floods the server and causes crashes. The <base> tag injected by
     // injectSafeProxy handles relative-URL resources by pointing them directly to the
     // source CDN, which is fast and avoids relay overhead.
     // Content-blocker immunity is preserved because the iframe src is always our domain.
-    return injectSafeProxy(html, pageOrigin);
+    return injectSafeProxy(html, pageOrigin, locationPath);
   }
 
   app.get("/api/movies/relay", async (req, res) => {
@@ -1783,6 +1842,10 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
         return isTV
           ? `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${season}&e=${episode}`
           : `https://multiembed.mov/?video_id=${id}&tmdb=1`;
+      case "smashy":
+        return isTV
+          ? `https://player.smashy.stream/tv?tmdb=${id}&s=${season}&e=${episode}`
+          : `https://player.smashy.stream/movie?tmdb=${id}`;
       default:
         return isTV
           ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`
@@ -1790,8 +1853,8 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     }
   }
 
-  // Source priority order for automatic fallback (vidsrc2 first — best coverage)
-  const SOURCE_FALLBACK_ORDER = ["vidsrc2", "superembed", "vidsrc", "embedsu"];
+  // Source priority order for automatic fallback (smashy first — broad anime coverage, self-contained SPA)
+  const SOURCE_FALLBACK_ORDER = ["smashy", "vidsrc2", "superembed", "vidsrc", "embedsu"];
 
   // Detect "unavailable" responses from player sites so we can fallback
   function looksUnavailable(html: string): boolean {
@@ -1813,12 +1876,46 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     "Referer": "https://www.google.com/",
   };
 
+  // Domains that are known intermediate proxy/relay layers which themselves embed another player.
+  // When vidsrc.xyz returns an iframe pointing to one of these, we skip vidsrc.xyz and directly
+  // proxy the inner layer, so our injectSafeProxy (incl. cnproxy rewriting) runs on the real player.
+  const INNER_EMBED_DOMAINS = [
+    "vsembed.ru", "vsembed.me", "vsembed.com",
+    "4sec.ru", "4sec.me",
+    "embed.autoembed.cc",
+  ];
+
   async function fetchEmbedSource(src: string, type: string, id: string, s: string, e: string) {
     const url = buildSourceUrl(src, type, id, s, e);
     const response = await fetch(url, { headers: EMBED_FETCH_HEADERS, redirect: "follow" });
     const html = await response.text();
-    const origin = new URL(response.url).origin;
-    return { html, origin };
+    const finalUrl = new URL(response.url);
+    let origin = finalUrl.origin;
+    let locationPath = finalUrl.pathname + finalUrl.search + finalUrl.hash;
+
+    // Check if the page is just a wrapper that embeds another player via absolute iframe.
+    // If so, fetch that inner player directly so our proxy injection applies to the real player.
+    const innerIframeMatch = html.match(/<iframe[^>]+src="(https?:\/\/([^/"]+)[^"]*)"[^>]*allowfullscreen/i);
+    if (innerIframeMatch) {
+      const innerUrl = innerIframeMatch[1];
+      const innerHost = innerIframeMatch[2];
+      if (INNER_EMBED_DOMAINS.some(d => innerHost === d || innerHost.endsWith("." + d))) {
+        console.log(`[embed] ${src}: detected inner embed layer at ${innerHost}, proxying directly`);
+        try {
+          const innerResponse = await fetch(innerUrl, {
+            headers: { ...EMBED_FETCH_HEADERS, "Referer": origin + "/" },
+            redirect: "follow",
+          });
+          const innerHtml = await innerResponse.text();
+          const innerFinalUrl = new URL(innerResponse.url);
+          return { html: innerHtml, origin: innerFinalUrl.origin, locationPath: innerFinalUrl.pathname + innerFinalUrl.search };
+        } catch (err: any) {
+          console.log(`[embed] ${src}: failed to fetch inner embed (${innerUrl}): ${err.message}, using outer page`);
+        }
+      }
+    }
+
+    return { html, origin, locationPath };
   }
 
   app.get("/api/movies/embed", async (req, res) => {
@@ -1828,7 +1925,7 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     const t = type || "movie";
     const season = s || "1";
     const episode = e || "1";
-    const requestedSource = source || "vidsrc";
+    const requestedSource = source || "smashy";
 
     // Build fallback list: requested source first, then the rest in priority order
     const fallbacks = [requestedSource, ...SOURCE_FALLBACK_ORDER.filter(x => x !== requestedSource)];
@@ -1836,12 +1933,12 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     let lastError = "";
     for (const src of fallbacks) {
       try {
-        const { html, origin } = await fetchEmbedSource(src, t, id, season, episode);
+        const { html, origin, locationPath } = await fetchEmbedSource(src, t, id, season, episode);
         if (looksUnavailable(html)) {
           console.log(`[embed] ${src} returned unavailable for ${t}/${id}, trying next…`);
           continue;
         }
-        const rewritten = injectPopupBlocker(html, origin);
+        const rewritten = injectPopupBlocker(html, origin, locationPath);
         res.setHeader("Content-Type", "text/html; charset=utf-8");
         res.setHeader("Access-Control-Allow-Origin", "*");
         res.setHeader("X-Frame-Options", "ALLOWALL");
@@ -1865,6 +1962,70 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     res.sendStatus(204);
   });
 
+  // Proxy cloudnestra.com/rcp/ and /prorcp/ pages through our server so the browser
+  // doesn't connect directly to cloudnestra.com (which hits Cloudflare bot detection
+  // when loaded from our proxy domain as the parent frame).
+  const CN_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  app.options("/api/movies/cnproxy", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "*");
+    res.sendStatus(204);
+  });
+
+  app.all("/api/movies/cnproxy", async (req, res) => {
+    const h = req.query.h as string | undefined;
+    const path = req.query.path as string | undefined;
+    if (!h && !path) return res.status(400).send("Missing hash or path");
+
+    let cloudnestraPath: string;
+    try {
+      cloudnestraPath = path ? decodeURIComponent(path) : `/rcp/${h}`;
+    } catch { return res.status(400).send("Invalid path"); }
+
+    const url = `https://cloudnestra.com${cloudnestraPath}`;
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": CN_UA,
+          "Referer": "https://vidsrc.xyz/",
+          "Origin": "https://vidsrc.xyz",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+          "Accept-Encoding": "identity",
+        },
+        redirect: "follow",
+      });
+
+      const ct = response.headers.get("content-type") || "text/html";
+      // For non-HTML responses (JS, JSON, etc) just pass through
+      if (!ct.includes("text/html")) {
+        const data = await response.arrayBuffer();
+        res.status(response.status)
+          .setHeader("Content-Type", ct)
+          .setHeader("Access-Control-Allow-Origin", "*")
+          .send(Buffer.from(data));
+        return;
+      }
+
+      let html = await response.text();
+
+      // Apply safe proxy injection with cloudnestra.com as the origin so that
+      // relative-path API calls within cloudnestra go through our snproxy
+      const rewritten = injectSafeProxy(html, "https://cloudnestra.com");
+
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("X-Frame-Options", "ALLOWALL");
+      res.removeHeader("Content-Security-Policy");
+      res.removeHeader("X-Content-Type-Options");
+      res.send(rewritten);
+    } catch (err: any) {
+      console.log(`[cnproxy] Error fetching ${url}: ${err.message}`);
+      res.status(502).send(`cnproxy error: ${err.message}`);
+    }
+  });
+
   // Proxy API calls from within the embed page back to the streaming origin.
   // The injected XHR/fetch interceptor routes relative-path calls here.
   const SNPROXY_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
@@ -1877,21 +2038,33 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   app.all("/api/movies/snproxy", async (req, res) => {
     const origin = req.query.origin as string;
     const path = req.query.path as string;
+    const refParam = req.query.ref as string | undefined;
     if (!origin || !path) return res.status(400).json({ error: "Missing origin or path" });
     let targetUrl: string;
     let decodedOrigin: string;
     let decodedPath: string;
+    let refererUrl: string;
+    let originHeader: string;
     try {
       decodedOrigin = decodeURIComponent(origin);
       decodedPath = decodeURIComponent(path);
       targetUrl = decodedOrigin + decodedPath;
+      if (refParam) {
+        const decodedRef = decodeURIComponent(refParam);
+        // ref may be "https://example.com" or "https://example.com/" — normalise
+        refererUrl = decodedRef.endsWith("/") ? decodedRef : decodedRef + "/";
+        originHeader = new URL(refererUrl).origin;
+      } else {
+        refererUrl = decodedOrigin + "/";
+        originHeader = decodedOrigin;
+      }
     } catch { return res.status(400).json({ error: "Invalid params" }); }
     try {
       const method = req.method === "OPTIONS" ? "GET" : req.method;
       const headers: Record<string, string> = {
         "User-Agent": SNPROXY_UA,
-        "Referer": decodedOrigin + "/",
-        "Origin": decodedOrigin,
+        "Referer": refererUrl,
+        "Origin": originHeader,
         "Accept": (req.headers.accept as string) || "application/json, text/javascript, */*; q=0.01",
         "Accept-Language": "en-US,en;q=0.9",
         "Accept-Encoding": "identity",

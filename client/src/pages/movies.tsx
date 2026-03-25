@@ -59,6 +59,7 @@ function getYear(m: Media) {
 }
 
 const SOURCES = [
+  { id: "smashy",     label: "Smashy"      },
   { id: "vidsrc",     label: "VidSrc"      },
   { id: "vidsrc2",    label: "VidSrc 2"    },
   { id: "embedsu",    label: "Embed.su"    },
@@ -218,7 +219,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
-  const [source, setSource] = useState<SourceId>("vidsrc2");
+  const [source, setSource] = useState<SourceId>("smashy");
   const containerRef = useRef<HTMLDivElement>(null);
   const isTV = media.media_type === "tv";
 
