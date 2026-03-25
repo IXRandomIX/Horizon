@@ -23,7 +23,11 @@ const scramjet = new ScramjetController({
         },
 });
 
-scramjet.init();
+// IMPORTANT: init() is async — store the promise so we can await it before
+// the first navigation. Without this, the IndexedDB config write races with
+// the service worker's loadConfig() read, causing route() to return false on
+// the very first proxy request (consistently broken on fresh production visits).
+const scramjetInitPromise = scramjet.init();
 
 const connection = new BareMux.BareMuxConnection("/baremux/worker.js");
 
@@ -70,6 +74,24 @@ form.addEventListener("submit", async (event) => {
                 error.textContent = "Failed to register service worker.";
                 errorCode.textContent = err.toString();
                 throw err;
+        }
+
+        // Ensure scramjet.init() has fully completed (IDB config written + config
+        // message sent to SW) before we navigate. This is the production fix:
+        // without this await the SW's loadConfig() reads an empty IDB on first visit.
+        try {
+                await scramjetInitPromise;
+        } catch (err) {
+                console.warn("scramjet.init() failed, proceeding anyway:", err);
+        }
+
+        // Re-send the config to the SW controller directly, in case it started
+        // before init() completed and therefore missed the postMessage.
+        if (navigator.serviceWorker.controller) {
+                navigator.serviceWorker.controller.postMessage({
+                        scramjet$type: "loadConfig",
+                        config: scramjet.config,
+                });
         }
 
         const url = search(address.value, searchEngine.value);

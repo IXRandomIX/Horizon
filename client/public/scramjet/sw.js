@@ -3,6 +3,17 @@ importScripts("/scram/scramjet.all.js");
 const { ScramjetServiceWorker } = $scramjetLoadWorker();
 const scramjet = new ScramjetServiceWorker();
 
+// Listen for config messages from the controller page.
+// scramjet.init() sends {scramjet$type:"loadConfig", config:{...}} to the SW.
+// The library's built-in message handler sets scramjet.config, but only if the
+// SW was already listening. This explicit handler ensures we never miss it.
+self.addEventListener("message", (event) => {
+        if (event.data && event.data.scramjet$type === "loadConfig" && event.data.config) {
+                // Set the config directly — same property the library's route() reads.
+                scramjet.config = event.data.config;
+        }
+});
+
 // Force-activate immediately so this SW replaces any stale version
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
@@ -38,6 +49,14 @@ async function handleRequest(event) {
         if (PASS_THROUGH_PREFIXES.some((p) => path.startsWith(p))) return fetch(event.request);
 
         await scramjet.loadConfig();
+
+        // Guard: if config is still null (e.g. fresh install before init() wrote to IDB),
+        // skip routing to avoid a TypeError in route(). The config message handler above
+        // and the await in the submit handler prevent this in normal use.
+        if (!scramjet.config) {
+                return fetch(event.request);
+        }
+
         if (scramjet.route(event)) {
                 return scramjet.fetch(event);
         }
