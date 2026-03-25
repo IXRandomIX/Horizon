@@ -1018,10 +1018,12 @@ export default function Chat() {
                       };
                       return (orderMap[a.name] ?? 99) - (orderMap[b.name] ?? 99);
                     })
-                    .map(role => (
+                    .map(role => {
+                      const { cls: roleCls, style: roleStyle } = getRoleColorInfo(role.color);
+                      return (
                       <div key={role.id} className="space-y-2">
                         <div className="flex items-center justify-between">
-                          <h3 className="font-bold text-sm uppercase tracking-widest" style={{ color: role.color }}>
+                          <h3 className={`font-bold text-sm uppercase tracking-widest ${roleCls}`} style={!roleCls ? roleStyle : undefined}>
                             {role.name}
                           </h3>
                           <span className="text-xs text-muted-foreground bg-white/5 px-2 py-1 rounded">
@@ -1030,7 +1032,7 @@ export default function Chat() {
                         </div>
                         <div className="space-y-1 bg-white/[0.02] rounded p-2">
                           {(rolesByName[role.name] || []).map(u => (
-                            <div key={u.username} className="text-xs hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/5" style={{ color: role.color }}>
+                            <div key={u.username} className={`text-xs hover:text-white transition-colors px-2 py-1 rounded hover:bg-white/5 ${roleCls}`} style={!roleCls ? roleStyle : undefined}>
                               {u.username}
                             </div>
                           ))}
@@ -1039,7 +1041,8 @@ export default function Chat() {
                           )}
                         </div>
                       </div>
-                    ))}
+                    );
+                    })}
                 </div>
               </ScrollArea>
             </div>
@@ -1072,15 +1075,21 @@ export default function Chat() {
                       {(msg.roles && msg.roles.length > 0) ? (
                         msg.roles.map((roleName: string) => {
                           const roleData = roles.find(r => r.name === roleName);
-                          const { cls: rCls, style: rStyle } = getRoleColorInfo(roleData?.color || "#9ca3af");
-                          const borderC = rStyle?.color ? (rStyle.color as string) + "40" : (roleData?.color || "#9ca3af") + "40";
+                          const rc = roleData?.color || "#9ca3af";
+                          const { cls: rCls, style: rStyle } = getRoleColorInfo(rc);
+                          // Pick a border colour: use first hex from ugc preview, else plain + alpha
+                          const ugcEntry = UGC_COLORS.find(c => c.key === rc);
+                          const borderC = ugcEntry
+                            ? (ugcEntry.preview.match(/#[0-9a-fA-F]{6}/)?.[0] ?? "#ffffff") + "80"
+                            : rc.startsWith("rainbow:") ? "#ff880080"
+                            : rc + "60";
                           return (
                             <span 
                               key={roleName}
-                              className={`text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/5 uppercase tracking-widest whitespace-nowrap ${rCls}`}
-                              style={{ borderColor: borderC, ...(!rCls ? rStyle : {}) }}
+                              className="text-[10px] px-2 py-0.5 rounded bg-white/5 border uppercase tracking-widest whitespace-nowrap"
+                              style={{ borderColor: borderC }}
                             >
-                              {roleName}
+                              <span className={rCls} style={!rCls ? rStyle : undefined}>{roleName}</span>
                             </span>
                           );
                         })
