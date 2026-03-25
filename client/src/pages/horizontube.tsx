@@ -255,7 +255,7 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isShort = video.duration !== null && video.duration <= 180;
-  const embedUrl = `https://www.youtube-nocookie.com/embed/${video.id}?autoplay=1&rel=0`;
+  const embedUrl = `/api/yt-embed/${video.id}`;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
