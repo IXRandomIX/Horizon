@@ -9,7 +9,29 @@
                 <title>Horizon Browser</title>
 
                 <link rel="shortcut icon" content="favicon.webp" />
-        
+
+                <!-- Run SW cleanup immediately before anything else loads -->
+                <script>
+                (async () => {
+                        if (!navigator.serviceWorker) return;
+                        // Unregister every old SW on every page load so stale ones never linger
+                        const regs = await navigator.serviceWorker.getRegistrations();
+                        for (const r of regs) await r.unregister();
+                        // Register fresh SW right now so it's active before form submit
+                        const reg = await navigator.serviceWorker.register("./sw.js");
+                        await new Promise((resolve) => {
+                                const sw = reg.installing || reg.waiting || reg.active;
+                                if (!sw || sw.state === "activated") { resolve(); return; }
+                                sw.addEventListener("statechange", function fn() {
+                                        if (sw.state === "activated") { sw.removeEventListener("statechange", fn); resolve(); }
+                                });
+                        });
+                        if (!navigator.serviceWorker.controller) {
+                                await new Promise((r) => navigator.serviceWorker.addEventListener("controllerchange", r, { once: true }));
+                        }
+                })();
+                </script>
+
                 <script src="/scram/scramjet.all.js"></script>
                 <script src="/baremux/index.js"></script>
                 
