@@ -1445,6 +1445,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     // Spoof window.top/parent/frameElement so JS anti-iframe checks pass.
     // Intercept XHR + fetch so relative-path API calls (like /response.php) are
     // routed through our snproxy instead of hitting our server directly.
+    // Static extensions — never intercept these; let <base> handle them for HTML,
+    // or let them resolve naturally via the document origin.
     const script = `<script>(function(){
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
@@ -1452,16 +1454,23 @@ try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});
 window.open=function(){return null;};
 var _po=encodeURIComponent('${pageOrigin}');
 var _snp='/api/movies/snproxy?origin='+_po+'&path=';
+var _staticExt=/\\.(js|css|png|jpg|jpeg|gif|svg|woff2?|ttf|eot|ico|webp|mp4|webm|ogg|mp3|m3u8|ts)([?#]|$)/i;
+function _shouldProxy(u){return typeof u==='string'&&u.charAt(0)==='/'&&u.charAt(1)!=='/'&&!_staticExt.test(u)&&u.indexOf('/api/movies/snproxy')<0;}
 var _xo=XMLHttpRequest.prototype.open;
-XMLHttpRequest.prototype.open=function(){var args=Array.prototype.slice.call(arguments);if(typeof args[1]==='string'&&/^\\/[^/]/.test(args[1]))args[1]=_snp+encodeURIComponent(args[1]);return _xo.apply(this,args);};
-var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){var args=Array.prototype.slice.call(arguments);if(typeof args[0]==='string'&&/^\\/[^/]/.test(args[0]))args[0]=_snp+encodeURIComponent(args[0]);return _fo.apply(this,args);};}
+XMLHttpRequest.prototype.open=function(){var a=Array.prototype.slice.call(arguments);if(_shouldProxy(a[1]))a[1]=_snp+encodeURIComponent(a[1]);return _xo.apply(this,a);};
+var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){var a=Array.prototype.slice.call(arguments);if(_shouldProxy(a[0]))a[0]=_snp+encodeURIComponent(a[0]);return _fo.apply(this,a);};}
 }());</script><base href="${pageOrigin}/">`;
     if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);
     return script + html;
   }
 
   function injectPopupBlocker(html: string, pageOrigin: string): string {
-    return injectSafeProxy(rewriteUrls(html, pageOrigin), pageOrigin);
+    // Do NOT call rewriteUrls here — routing every static resource (JS/CSS/fonts/images)
+    // through the relay floods the server and causes crashes. The <base> tag injected by
+    // injectSafeProxy handles relative-URL resources by pointing them directly to the
+    // source CDN, which is fast and avoids relay overhead.
+    // Content-blocker immunity is preserved because the iframe src is always our domain.
+    return injectSafeProxy(html, pageOrigin);
   }
 
   app.get("/api/movies/relay", async (req, res) => {
@@ -1731,25 +1740,42 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){var arg
     const path = req.query.path as string;
     if (!origin || !path) return res.status(400).json({ error: "Missing origin or path" });
     let targetUrl: string;
-    try { targetUrl = decodeURIComponent(origin) + decodeURIComponent(path); } catch { return res.status(400).json({ error: "Invalid params" }); }
+    let decodedOrigin: string;
+    let decodedPath: string;
     try {
-      const opts: RequestInit = {
-        method: req.method === "OPTIONS" ? "GET" : req.method,
-        headers: {
-          "User-Agent": SNPROXY_UA,
-          "Referer": decodeURIComponent(origin) + "/",
-          "Origin": decodeURIComponent(origin),
-          "Accept": (req.headers.accept as string) || "*/*",
-          "Accept-Language": "en-US,en;q=0.9",
-        },
+      decodedOrigin = decodeURIComponent(origin);
+      decodedPath = decodeURIComponent(path);
+      targetUrl = decodedOrigin + decodedPath;
+    } catch { return res.status(400).json({ error: "Invalid params" }); }
+    try {
+      const method = req.method === "OPTIONS" ? "GET" : req.method;
+      const headers: Record<string, string> = {
+        "User-Agent": SNPROXY_UA,
+        "Referer": decodedOrigin + "/",
+        "Origin": decodedOrigin,
+        "Accept": (req.headers.accept as string) || "application/json, text/javascript, */*; q=0.01",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Accept-Encoding": "identity",
+        "X-Requested-With": "XMLHttpRequest",
+        "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+        "Sec-Ch-Ua-Mobile": "?0",
+        "Sec-Ch-Ua-Platform": '"Windows"',
+        "Sec-Fetch-Dest": "empty",
+        "Sec-Fetch-Mode": "cors",
+        "Sec-Fetch-Site": "same-origin",
+        "Cache-Control": "no-cache",
+        "Pragma": "no-cache",
       };
-      if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
-        const ct = (req.headers["content-type"] as string) || "application/x-www-form-urlencoded";
-        (opts.headers as Record<string, string>)["Content-Type"] = ct;
+      const opts: RequestInit = { method, headers };
+      if (method !== "GET" && method !== "HEAD") {
+        const ct = (req.headers["content-type"] as string) || "application/x-www-form-urlencoded; charset=UTF-8";
+        headers["Content-Type"] = ct;
         if (ct.includes("application/json")) {
           opts.body = JSON.stringify(req.body);
-        } else {
+        } else if (typeof req.body === "object" && req.body !== null) {
           opts.body = new URLSearchParams(req.body as Record<string, string>).toString();
+        } else if (typeof req.body === "string") {
+          opts.body = req.body;
         }
       }
       const response = await fetch(targetUrl, opts);
