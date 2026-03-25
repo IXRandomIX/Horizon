@@ -116,6 +116,8 @@ export default function Chat() {
   const [isPrivate, setIsPrivate] = useState(false);
   const [allowedUsers, setAllowedUsers] = useState("");
   const [readOnlyPublic, setReadOnlyPublic] = useState(false);
+  const [proxies, setProxies] = useState<any[]>([]);
+  const [editingProxy, setEditingProxy] = useState<{ id: number; name: string; url: string } | null>(null);
   const [roles, setRoles] = useState<any[]>([]);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleColor, setNewRoleColor] = useState("#9ca3af");
@@ -286,6 +288,11 @@ export default function Chat() {
     const res = await fetch("/api/chat/roles");
     const data = await res.json();
     setRoles(data);
+  };
+
+  const fetchProxies = async () => {
+    const res = await fetch("/api/proxies");
+    if (res.ok) setProxies(await res.json());
   };
 
   const handleUpdateUser = async (updates: any) => {
@@ -1149,14 +1156,16 @@ export default function Chat() {
                   {userHasPermission("manage_proxies") && (
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Proxies</label>
-                    <Dialog>
+                    <Dialog onOpenChange={(open) => { if (open) fetchProxies(); if (!open) setEditingProxy(null); }}>
                       <DialogTrigger asChild>
                         <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Settings className="w-4 h-4" /> Manage Proxies</Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-black border-white/10">
+                      <DialogContent className="bg-black border-white/10 max-h-[90vh] overflow-y-auto">
                         <DialogHeader><DialogTitle className="text-white">Manage Proxies</DialogTitle></DialogHeader>
                         <div className="space-y-4 py-4">
+                          {/* Add Proxy */}
                           <div className="space-y-2">
+                            <h4 className="text-white text-sm font-bold">Add New Proxy</h4>
                             <Input placeholder="Proxy Name" id="proxyName" className="bg-white/5 border-white/10" />
                             <Input placeholder="Proxy URL" id="proxyUrl" className="bg-white/5 border-white/10" />
                             <Button onClick={async () => {
@@ -1166,15 +1175,76 @@ export default function Chat() {
                                 toast({ title: "Please fill in all fields", variant: "destructive" });
                                 return;
                               }
-                              await authFetch("/api/proxies", {
+                              const res = await authFetch("/api/proxies", {
                                 method: "POST",
                                 headers: { "Content-Type": "application/json" },
                                 body: JSON.stringify({ name, url, useWebview: true }),
                               });
-                              toast({ title: "Proxy added" });
-                              (document.getElementById("proxyName") as HTMLInputElement).value = "";
-                              (document.getElementById("proxyUrl") as HTMLInputElement).value = "";
+                              if (res.ok) {
+                                toast({ title: "Proxy added" });
+                                (document.getElementById("proxyName") as HTMLInputElement).value = "";
+                                (document.getElementById("proxyUrl") as HTMLInputElement).value = "";
+                                fetchProxies();
+                              } else {
+                                toast({ title: "Failed to add proxy", variant: "destructive" });
+                              }
                             }} className="w-full">Add Proxy</Button>
+                          </div>
+                          {/* Existing Proxies List */}
+                          <div className="border-t border-white/10 pt-4 space-y-2">
+                            <h4 className="text-white text-sm font-bold">Existing Proxies</h4>
+                            {proxies.length === 0 && <p className="text-white/40 text-xs">No proxies yet.</p>}
+                            {proxies.map((proxy: any) => (
+                              <div key={proxy.id} className="rounded bg-white/5 p-2 space-y-2">
+                                {editingProxy?.id === proxy.id ? (
+                                  <div className="space-y-2">
+                                    <Input
+                                      value={editingProxy.name}
+                                      onChange={(e) => setEditingProxy({ ...editingProxy, name: e.target.value })}
+                                      className="bg-white/5 border-white/10 text-sm"
+                                      placeholder="Proxy Name"
+                                    />
+                                    <Input
+                                      value={editingProxy.url}
+                                      onChange={(e) => setEditingProxy({ ...editingProxy, url: e.target.value })}
+                                      className="bg-white/5 border-white/10 text-sm"
+                                      placeholder="Proxy URL"
+                                    />
+                                    <div className="flex gap-2">
+                                      <Button size="sm" onClick={async () => {
+                                        const res = await authFetch(`/api/proxies/${proxy.id}`, {
+                                          method: "PATCH",
+                                          headers: { "Content-Type": "application/json" },
+                                          body: JSON.stringify({ name: editingProxy.name, url: editingProxy.url }),
+                                        });
+                                        if (res.ok) { toast({ title: "Proxy updated" }); setEditingProxy(null); fetchProxies(); }
+                                        else toast({ title: "Failed to update", variant: "destructive" });
+                                      }} className="flex-1">Save</Button>
+                                      <Button size="sm" variant="ghost" onClick={() => setEditingProxy(null)} className="text-white/50">Cancel</Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-white text-sm font-medium truncate">{proxy.name}</p>
+                                      <p className="text-white/40 text-xs truncate">{proxy.url}</p>
+                                    </div>
+                                    <div className="flex gap-1 shrink-0">
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-white/50 hover:text-white" onClick={() => setEditingProxy({ id: proxy.id, name: proxy.name, url: proxy.url })}>
+                                        <Edit2 className="w-3 h-3" />
+                                      </Button>
+                                      <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-400" onClick={async () => {
+                                        const res = await authFetch(`/api/proxies/${proxy.id}`, { method: "DELETE" });
+                                        if (res.ok) { toast({ title: "Proxy deleted" }); fetchProxies(); }
+                                        else toast({ title: "Failed to delete", variant: "destructive" });
+                                      }}>
+                                        <Trash2 className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            ))}
                           </div>
                         </div>
                       </DialogContent>
