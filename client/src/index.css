@@ -104,6 +104,30 @@
   .grad-cyan-purple { background: linear-gradient(to right, #00FFFF, #800080); -webkit-background-clip: text; color: transparent; background-size: 200% auto; animation: textGradient 3s linear infinite; }
   .grad-wasabi-charcoal { background: linear-gradient(to right, #E9F056, #333333); -webkit-background-clip: text; color: transparent; background-size: 200% auto; animation: textGradient 3s linear infinite; }
 
+  /* ── Username Gradient Colors (ugc-*) ── */
+  .ugc-fire       { background: linear-gradient(to right,#ff2200,#ff6600,#ffcc00,#ff6600,#ff2200); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 2s linear infinite; }
+  .ugc-ocean      { background: linear-gradient(to right,#0033ff,#00aaff,#00ffee,#00aaff,#0033ff); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 3s linear infinite; }
+  .ugc-royal      { background: linear-gradient(to right,#7b2ff7,#aa55ff,#f5a623,#aa55ff,#7b2ff7); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 3s linear infinite; }
+  .ugc-toxic      { background: linear-gradient(to right,#00ff41,#004400,#00ff41); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 2.5s linear infinite; }
+  .ugc-midnight   { background: linear-gradient(to right,#101585,#4040ff,#101585); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 3s linear infinite; }
+  .ugc-rose       { background: linear-gradient(to right,#ff4488,#ff0066,#cc0044,#ff0066,#ff4488); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 2.5s linear infinite; }
+  .ugc-ice        { background: linear-gradient(to right,#e0f7fa,#80deea,#b2ebf2,#80deea,#e0f7fa); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 3s linear infinite; }
+  .ugc-gold-black { background: linear-gradient(to right,#ffd700,#1a1000,#ffd700); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 2s linear infinite; }
+  .ugc-red-black  { background: linear-gradient(to right,#cc0000,#000000,#cc0000); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 2s linear infinite; }
+  .ugc-neon       { background: linear-gradient(to right,#ff00ff,#00ffff,#ff00ff); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 2s linear infinite; }
+  .ugc-sunset     { background: linear-gradient(to right,#ff6b35,#f7c59f,#ee4266,#f7c59f,#ff6b35); -webkit-background-clip:text; background-clip:text; color:transparent; background-size:200% auto; animation:textGradient 3s linear infinite; }
+
+  /* ── Rainbow Username Colors ── */
+  .username-rainbow-smooth { background:linear-gradient(to right,#ff0000,#ff8800,#ffff00,#00ff00,#0000ff,#8800ff,#ff0000); background-size:300% auto; -webkit-background-clip:text; background-clip:text; color:transparent; animation:rainbowShift 4s linear infinite; }
+  .username-rainbow-spaz   { background:linear-gradient(to right,#ff0000,#ff8800,#ffff00,#00ff00,#0000ff,#8800ff,#ff0000); background-size:300% auto; -webkit-background-clip:text; background-clip:text; color:transparent; animation:rainbowShift 0.3s linear infinite; }
+
+  /* ── Username Effects ── */
+  .efx-matrix { position:relative; }
+  .efx-matrix::before { content:'1 0 1 1 0 0 1 0 1 1 0 1 0 1 0 0 1 0 1 1'; position:absolute; top:-85%; left:50%; transform:translateX(-50%); font-size:6px; font-family:monospace; color:#00ff41; letter-spacing:1px; opacity:0; animation:matrixRain 2s linear infinite; pointer-events:none; white-space:nowrap; z-index:-1; }
+  .efx-galaxy { text-shadow:0 0 10px #fff, 0 0 20px #aa00ff, 0 0 40px #0044ff; animation:galaxyPulse 3s ease-in-out infinite alternate; }
+  .efx-blackhole { animation:blackholePull 3s ease-in-out infinite; filter:drop-shadow(0 0 4px #000) drop-shadow(0 0 8px rgba(100,0,200,0.5)); }
+  .efx-rainbow { background:linear-gradient(to right,#f00,#f80,#ff0,#0f0,#00f,#80f,#f0f,#f00); background-size:400% auto; -webkit-background-clip:text; background-clip:text; color:transparent; animation:rainbowFlow 1.2s linear infinite; }
+
   .text-gradient-animated {
     background: linear-gradient(to right, #3b82f6, #a855f7, #ec4899, #3b82f6);
     background-size: 300% auto;
@@ -141,4 +165,34 @@
 @keyframes wavy {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-5px); }
+}
+
+@keyframes rainbowShift {
+  0%   { background-position: 0% center; }
+  100% { background-position: 300% center; }
+}
+
+@keyframes matrixRain {
+  0%   { top: -80%; opacity: 0.9; }
+  80%  { opacity: 0.7; }
+  100% { top: 150%; opacity: 0; }
+}
+
+@keyframes galaxyPulse {
+  from { text-shadow: 0 0 5px #fff, 0 0 15px #aa00ff, 0 0 25px #aa00ff; }
+  to   { text-shadow: 0 0 10px #fff, 0 0 25px #0044ff, 0 0 50px #0088ff, 0 0 80px #0000ff; }
+}
+
+@keyframes blackholePull {
+  0%, 100% { letter-spacing: normal; filter: drop-shadow(0 0 4px #000) drop-shadow(0 0 8px rgba(100,0,200,0.4)); }
+  50%       { letter-spacing: -1.5px; filter: drop-shadow(0 0 12px #000) drop-shadow(0 0 20px rgba(80,0,180,0.9)); }
+}
+
+@keyframes rainbowFlow {
+  to { background-position: -400% center; }
+}
+
+@keyframes borderBeamSpin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }

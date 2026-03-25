@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import type React from "react";
 import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Palette, Type, Sparkles, Paintbrush, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink, Ban, Clock, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -75,6 +76,128 @@ const GRADIENTS = [
   "Magenta to Hot Pink", "White to Light Gray (with neon glow)"
 ];
 
+// ── Username Gradient Colors ──────────────────────────────────────────────
+const UGC_COLORS = [
+  { key: "ugc:fire",       name: "🔥 Fire",        preview: "linear-gradient(to right,#ff2200,#ff6600,#ffcc00)" },
+  { key: "ugc:ocean",      name: "🌊 Ocean",        preview: "linear-gradient(to right,#0033ff,#00aaff,#00ffee)" },
+  { key: "ugc:royal",      name: "👑 Royal",        preview: "linear-gradient(to right,#7b2ff7,#aa55ff,#f5a623)" },
+  { key: "ugc:toxic",      name: "☣️ Toxic",        preview: "linear-gradient(to right,#00ff41,#004400,#00ff41)" },
+  { key: "ugc:midnight",   name: "🌙 Midnight",     preview: "linear-gradient(to right,#101585,#4040ff,#101585)" },
+  { key: "ugc:rose",       name: "🌹 Rose",         preview: "linear-gradient(to right,#ff4488,#ff0066,#cc0044)" },
+  { key: "ugc:ice",        name: "🧊 Ice",          preview: "linear-gradient(to right,#e0f7fa,#80deea,#b2ebf2)" },
+  { key: "ugc:gold-black", name: "✨ Gold & Black", preview: "linear-gradient(to right,#ffd700,#1a1000,#ffd700)" },
+  { key: "ugc:red-black",  name: "🔴 Red & Black",  preview: "linear-gradient(to right,#cc0000,#000000,#cc0000)" },
+  { key: "ugc:neon",       name: "⚡ Neon",         preview: "linear-gradient(to right,#ff00ff,#00ffff,#ff00ff)" },
+  { key: "ugc:sunset",     name: "🌅 Sunset",       preview: "linear-gradient(to right,#ff6b35,#f7c59f,#ee4266)" },
+];
+
+const RAINBOW_COLORS = [
+  { key: "rainbow:smooth", name: "🌈 Rainbow Smooth", desc: "Slow flowing rainbow" },
+  { key: "rainbow:spaz",   name: "⚡ Rainbow Spaz",   desc: "Lightning-fast rainbow cycle" },
+];
+
+// ── Username Effects ──────────────────────────────────────────────────────
+const BORDER_BEAM_KEYS: Record<string, string[]> = {
+  white:   ["#ffffff","#cccccc","#ffffff"],
+  gold:    ["#ffd700","#ff8c00","#ffd700"],
+  red:     ["#ff0000","#cc0000","#ff0000"],
+  cyan:    ["#00ffff","#0080ff","#00ffff"],
+  purple:  ["#aa00ff","#5500aa","#aa00ff"],
+  green:   ["#00ff00","#008800","#00ff00"],
+  fire:    ["#ff2200","#ff6600","#ffcc00","#ff6600","#ff2200"],
+  ocean:   ["#0033ff","#00aaff","#00ffee","#00aaff","#0033ff"],
+  rainbow: ["#ff0000","#ff8800","#ffff00","#00ff00","#0000ff","#8800ff","#ff0000"],
+};
+
+const USERNAME_EFFECTS = [
+  { key: "efx:matrix",      name: "🟩 Matrix",         desc: "Green 1s & 0s rain down behind username" },
+  { key: "efx:glitch-text", name: "👾 Glitch Text",    desc: "Letters randomly flip to crazy symbols" },
+  { key: "efx:galaxy",      name: "🌌 Galaxy",         desc: "Cosmic star-glow pulsing around username" },
+  { key: "efx:blackhole",   name: "🕳️ Black Hole",     desc: "Dark vortex pulls letters together" },
+  { key: "efx:rainbow",     name: "🌈 Rainbow Flow",   desc: "Full rainbow sweeping through text" },
+  { key: "efx:border:white",   name: "□ White Border",    desc: "Glowing white border beam" },
+  { key: "efx:border:gold",    name: "□ Gold Border",     desc: "Golden beam racing the border" },
+  { key: "efx:border:red",     name: "□ Red Border",      desc: "Red beam racing the border" },
+  { key: "efx:border:cyan",    name: "□ Cyan Border",     desc: "Cyan neon border beam" },
+  { key: "efx:border:purple",  name: "□ Purple Border",   desc: "Purple border beam" },
+  { key: "efx:border:green",   name: "□ Green Border",    desc: "Green border beam" },
+  { key: "efx:border:fire",    name: "□ Fire Border",     desc: "Fire gradient border beam" },
+  { key: "efx:border:ocean",   name: "□ Ocean Border",    desc: "Ocean gradient border beam" },
+  { key: "efx:border:rainbow", name: "□ Rainbow Border",  desc: "Rainbow border beam" },
+];
+
+// ── Helper components ─────────────────────────────────────────────────────
+function GlitchTextUsername({ text, className, style }: { text: string; className?: string; style?: React.CSSProperties }) {
+  const [display, setDisplay] = useState(text);
+  const SYMS = '!@#$%^&*{}[]<>?/\\|~`░▒▓█▄▀■□▪▫Δ∑Ω≈∞';
+  useEffect(() => {
+    let tid: ReturnType<typeof setTimeout>;
+    const glitch = () => {
+      let count = 0;
+      const frame = () => {
+        const chars = text.split('');
+        const n = Math.floor(Math.random() * (chars.length)) + 1;
+        for (let i = 0; i < n; i++) {
+          chars[Math.floor(Math.random() * chars.length)] = SYMS[Math.floor(Math.random() * SYMS.length)];
+        }
+        setDisplay(chars.join(''));
+        count++;
+        if (count < 8) tid = setTimeout(frame, 60);
+        else { setDisplay(text); tid = setTimeout(glitch, 1500 + Math.random() * 2000); }
+      };
+      frame();
+    };
+    const init = setTimeout(glitch, 500 + Math.random() * 1500);
+    return () => { clearTimeout(init); clearTimeout(tid); };
+  }, [text]);
+  return <span className={className} style={style} data-text={text}>{display}</span>;
+}
+
+function BorderBeamUsername({ text, borderKey, className, style }: { text: string; borderKey: string; className?: string; style?: React.CSSProperties }) {
+  const cols = BORDER_BEAM_KEYS[borderKey] ?? BORDER_BEAM_KEYS.white;
+  const conicGrad = `conic-gradient(from 0deg, ${cols.join(", ")}, ${cols[0]})`;
+  return (
+    <span style={{ position: "relative", display: "inline-block", padding: "1px 5px", borderRadius: "4px", overflow: "hidden" }}>
+      <span aria-hidden style={{ position: "absolute", inset: "-40px", background: conicGrad, animation: "borderBeamSpin 2s linear infinite", borderRadius: "4px" }} />
+      <span aria-hidden style={{ position: "absolute", inset: "1.5px", background: "#000", borderRadius: "3px", zIndex: 1 }} />
+      <span className={className} style={{ position: "relative", zIndex: 2, ...style }}>{text}</span>
+    </span>
+  );
+}
+
+// ── Color / class helpers ─────────────────────────────────────────────────
+function getColorInfo(roleColor: string, animation: string, isAdminUser: boolean): { colorClass: string; colorStyle?: React.CSSProperties } {
+  if (isAdminUser) return { colorClass: "text-gradient-animated text-lg" };
+  if (roleColor?.startsWith("ugc:")) return { colorClass: `ugc-${roleColor.slice(4)}` };
+  if (roleColor === "rainbow:smooth") return { colorClass: "username-rainbow-smooth" };
+  if (roleColor === "rainbow:spaz")   return { colorClass: "username-rainbow-spaz" };
+  if (roleColor === "gradient") {
+    if (animation.startsWith("efx:")) return { colorClass: "", colorStyle: { color: "#ffffff" } };
+    const gradients = ["grad-magenta-blue","grad-red-orange","grad-cyan-purple","grad-wasabi-charcoal"];
+    const idx = parseInt(animation.split("-")[1] ?? "0");
+    return { colorClass: gradients[idx % gradients.length] ?? "" };
+  }
+  return { colorClass: "", colorStyle: roleColor ? { color: roleColor } : undefined };
+}
+
+// returns preview swatch style for a ugc: or rainbow: color key
+function getUgcSwatchStyle(key: string): React.CSSProperties {
+  const found = UGC_COLORS.find(c => c.key === key);
+  if (found) return { background: found.preview };
+  if (key === "rainbow:smooth" || key === "rainbow:spaz")
+    return { background: "linear-gradient(to right,#f00,#f80,#ff0,#0f0,#00f,#80f)" };
+  return { background: "#9ca3af" };
+}
+
+// role color: return className + optional inline style for rendering role badge/text
+function getRoleColorInfo(color: string): { cls: string; style?: React.CSSProperties } {
+  if (!color) return { cls: "", style: { color: "#9ca3af" } };
+  if (color.startsWith("ugc:"))       return { cls: `ugc-${color.slice(4)}` };
+  if (color === "rainbow:smooth")     return { cls: "username-rainbow-smooth" };
+  if (color === "rainbow:spaz")       return { cls: "username-rainbow-spaz" };
+  return { cls: "", style: { color } };
+}
+
 type Message = {
   id: number;
   channelId: number;
@@ -125,6 +248,12 @@ export default function Chat() {
   const [proxies, setProxies] = useState<any[]>([]);
   const [editingProxy, setEditingProxy] = useState<{ id: number; name: string; url: string } | null>(null);
   const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
+  // Admin appearance panel
+  const [apTarget, setApTarget] = useState("");
+  const [apColor, setApColor] = useState("#9ca3af");
+  const [apEffect, setApEffect] = useState("none");
+  const [apColorTab, setApColorTab] = useState<"solid" | "gradient" | "rainbow">("solid");
+  const [apShowEffects, setApShowEffects] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleColor, setNewRoleColor] = useState("#9ca3af");
@@ -356,6 +485,29 @@ export default function Chat() {
       updateAuthUser(updatedUser);
       localStorage.setItem("horizon_chat_user", JSON.stringify(merged));
       toast({ title: "Customization updated" });
+    }
+  };
+
+  const applyUserAppearance = async () => {
+    const target = apTarget.trim() || user?.username;
+    if (!target) return;
+    const updates: any = { roleColor: apColor, animation: apEffect === "none" ? "none" : apEffect };
+    const res = await authFetch(`/api/chat/users/${target}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      toast({ title: `Appearance updated for ${target}` });
+      if (target === user?.username) {
+        const updated = await res.json();
+        const merged = { ...user, ...updated };
+        setUser(merged);
+        updateAuthUser(updated);
+        localStorage.setItem("horizon_chat_user", JSON.stringify(merged));
+      }
+    } else {
+      toast({ title: "Failed to update", variant: "destructive" });
     }
   };
 
@@ -732,6 +884,7 @@ export default function Chat() {
   };
 
   const getAnimationClass = (animName: string) => {
+    if (!animName || animName.startsWith("efx:")) return ""; // efx: handled by renderUsername
     if (animName.startsWith("gradient-")) {
       const idx = parseInt(animName.split("-")[1]);
       const gradients = ["grad-magenta-blue", "grad-red-orange", "grad-cyan-purple", "grad-wasabi-charcoal"];
@@ -743,6 +896,25 @@ export default function Chat() {
       case "Wave/Wavy Movement": return "anim-wavy";
       default: return "";
     }
+  };
+
+  const renderUsername = (text: string, roleColor: string, animation: string, font: string, isAdminUser: boolean) => {
+    const { colorClass, colorStyle } = getColorInfo(roleColor, animation, isAdminUser);
+    const fontClass = getFontClass(font);
+    const animClass = getAnimationClass(animation);
+    const base = `font-black tracking-wide ${fontClass} ${animClass}`;
+
+    if (animation?.startsWith("efx:border:")) {
+      const bk = animation.slice("efx:border:".length);
+      return <BorderBeamUsername text={text} borderKey={bk} className={`${base} ${colorClass}`} style={colorStyle} />;
+    }
+    if (animation === "efx:glitch-text") {
+      return <GlitchTextUsername text={text} className={`${base} ${colorClass}`} style={colorStyle} />;
+    }
+    const efxClass = animation?.startsWith("efx:") ? `efx-${animation.slice(4)}` : "";
+    return (
+      <span className={`${base} ${colorClass} ${efxClass}`} style={colorStyle} data-text={text}>{text}</span>
+    );
   };
 
   return (
@@ -973,22 +1145,18 @@ export default function Chat() {
                     </div>
                   )}
                   <div className="flex items-baseline gap-3 flex-wrap">
-                    <span 
-                      className={`font-black tracking-wide ${msg.username === "RandomIX" ? 'text-gradient-animated text-lg' : ''} ${getFontClass(msg.font || "")} ${getAnimationClass(msg.animation || "")}`} 
-                      style={{ color: msg.roleColor !== "gradient" ? msg.roleColor : undefined }}
-                      data-text={msg.username}
-                    >
-                      {msg.username}
-                    </span>
+                    {renderUsername(msg.username, msg.roleColor, msg.animation || "none", msg.font || "sans", msg.username === "RandomIX")}
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(msg.roles && msg.roles.length > 0) ? (
                         msg.roles.map((roleName: string) => {
                           const roleData = roles.find(r => r.name === roleName);
+                          const { cls: rCls, style: rStyle } = getRoleColorInfo(roleData?.color || "#9ca3af");
+                          const borderC = rStyle?.color ? (rStyle.color as string) + "40" : (roleData?.color || "#9ca3af") + "40";
                           return (
                             <span 
                               key={roleName}
-                              className="text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/5 uppercase tracking-widest whitespace-nowrap"
-                              style={{ borderColor: roleData?.color + '40', color: roleData?.color || '#9ca3af' }}
+                              className={`text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/5 uppercase tracking-widest whitespace-nowrap ${rCls}`}
+                              style={{ borderColor: borderC, ...(!rCls ? rStyle : {}) }}
                             >
                               {roleName}
                             </span>
@@ -1316,7 +1484,22 @@ export default function Chat() {
                           <div className="space-y-2">
                             <h4 className="text-white text-sm font-bold">Create New Role</h4>
                             <Input placeholder="Role Name" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} className="bg-white/5 border-white/10" />
-                            <Input type="color" value={newRoleColor} onChange={(e) => setNewRoleColor(e.target.value)} className="h-10 w-full bg-transparent p-0 border-none" />
+                            <div className="space-y-1">
+                              <label className="text-white/50 text-xs">Role Color</label>
+                              <Input type="color" value={newRoleColor.startsWith("ugc:") || newRoleColor.startsWith("rainbow:") ? "#9ca3af" : newRoleColor} onChange={(e) => setNewRoleColor(e.target.value)} className="h-10 w-full bg-transparent p-0 border-none" />
+                              <p className="text-white/40 text-[10px]">Or pick a gradient / rainbow below:</p>
+                              <div className="grid grid-cols-6 gap-1">
+                                {UGC_COLORS.map(c => (
+                                  <button key={c.key} title={c.name} onClick={() => setNewRoleColor(c.key)} className={`h-6 w-full rounded border ${newRoleColor === c.key ? "border-white" : "border-transparent"}`} style={{ background: c.preview }} />
+                                ))}
+                                {RAINBOW_COLORS.map(c => (
+                                  <button key={c.key} title={c.name} onClick={() => setNewRoleColor(c.key)} className={`h-6 w-full rounded border text-[8px] font-bold ${newRoleColor === c.key ? "border-white" : "border-transparent"}`} style={{ background: "linear-gradient(to right,#f00,#f80,#ff0,#0f0,#00f,#80f)" }} />
+                                ))}
+                              </div>
+                              {(newRoleColor.startsWith("ugc:") || newRoleColor.startsWith("rainbow:")) && (
+                                <p className="text-primary text-[10px]">Selected: {UGC_COLORS.find(c=>c.key===newRoleColor)?.name ?? newRoleColor}</p>
+                              )}
+                            </div>
                             <div className="grid grid-cols-1 gap-2 text-white text-xs">
                               {AVAILABLE_PERMISSIONS.map(perm => (
                                 <div key={perm} className="flex items-center gap-2">
@@ -1407,6 +1590,91 @@ export default function Chat() {
                     </Dialog>
                     )}
                   </div>
+
+                  {/* User Appearance Section */}
+                  {userHasPermission("admin_panel") && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">User Appearance</label>
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5"><Sparkles className="w-4 h-4" /> Username Customizer</Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-black border-white/10 max-h-[90vh] overflow-y-auto w-[420px]">
+                        <DialogHeader><DialogTitle className="text-white">Username Appearance</DialogTitle></DialogHeader>
+                        <div className="space-y-4 py-4">
+                          <div className="space-y-1">
+                            <label className="text-white/50 text-xs">Target Username (leave blank for yourself)</label>
+                            <Input placeholder={user?.username || "username"} value={apTarget} onChange={e => setApTarget(e.target.value)} className="bg-white/5 border-white/10 text-white" />
+                          </div>
+
+                          {/* Color Tabs */}
+                          <div className="space-y-2">
+                            <label className="text-white/50 text-xs">Color</label>
+                            <div className="flex gap-1 p-1 bg-white/5 rounded">
+                              {(["solid","gradient","rainbow"] as const).map(t => (
+                                <button key={t} onClick={() => setApColorTab(t)} className={`flex-1 text-xs py-1 rounded capitalize transition-colors ${apColorTab === t ? "bg-primary text-white" : "text-white/40 hover:text-white/70"}`}>{t}</button>
+                              ))}
+                            </div>
+                            {apColorTab === "solid" && (
+                              <div className="space-y-1">
+                                <Input type="color" value={apColor.startsWith("ugc:") || apColor.startsWith("rainbow:") ? "#9ca3af" : apColor} onChange={e => setApColor(e.target.value)} className="h-10 w-full bg-transparent p-0 border-none" />
+                                <p className="text-white/40 text-[10px]">Hex color for the username</p>
+                              </div>
+                            )}
+                            {apColorTab === "gradient" && (
+                              <div className="grid grid-cols-4 gap-2">
+                                {UGC_COLORS.map(c => (
+                                  <button key={c.key} title={c.name} onClick={() => setApColor(c.key)} className={`h-8 rounded border-2 flex items-end justify-center pb-0.5 transition-all ${apColor === c.key ? "border-white scale-105" : "border-transparent"}`} style={{ background: c.preview }}>
+                                    <span className="text-[8px] font-bold text-white drop-shadow">{c.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {apColorTab === "rainbow" && (
+                              <div className="grid grid-cols-2 gap-2">
+                                {RAINBOW_COLORS.map(c => (
+                                  <button key={c.key} title={c.name} onClick={() => setApColor(c.key)} className={`h-8 rounded border-2 flex items-center justify-center transition-all ${apColor === c.key ? "border-white scale-105" : "border-transparent"}`} style={{ background: "linear-gradient(to right,#f00,#f80,#ff0,#0f0,#00f,#80f)" }}>
+                                    <span className="text-[9px] font-bold text-white drop-shadow">{c.name}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Effect picker */}
+                          <div className="space-y-2">
+                            <button onClick={() => setApShowEffects(v => !v)} className="text-white/50 text-xs flex items-center gap-1 hover:text-white transition-colors">
+                              <Sparkles className="w-3 h-3" /> Visual Effects {apShowEffects ? "▲" : "▼"}
+                            </button>
+                            {apShowEffects && (
+                              <div className="grid grid-cols-2 gap-1 max-h-48 overflow-y-auto pr-1">
+                                {USERNAME_EFFECTS.map(e => (
+                                  <button key={e.key} onClick={() => setApEffect(e.key)} className={`text-[10px] px-2 py-1.5 rounded border text-left transition-all ${apEffect === e.key ? "border-primary bg-primary/20 text-primary" : "border-white/10 text-white/50 hover:border-white/30 hover:text-white/80"}`}>
+                                    {e.name}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                            {!apShowEffects && apEffect !== "none" && (
+                              <p className="text-primary text-[10px]">Effect: {USERNAME_EFFECTS.find(e => e.key === apEffect)?.name ?? apEffect}</p>
+                            )}
+                          </div>
+
+                          {/* Live Preview */}
+                          <div className="border border-white/10 rounded p-3 space-y-1">
+                            <label className="text-white/40 text-[10px] uppercase tracking-widest">Preview</label>
+                            <div className="flex items-center gap-2">
+                              {renderUsername(apTarget.trim() || user?.username || "Preview", apColor, apEffect, "sans", false)}
+                            </div>
+                          </div>
+
+                          <Button onClick={applyUserAppearance} className="w-full bg-primary hover:bg-primary/90">Apply Appearance</Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  )}
+
                   {userHasPermission("manage_proxies") && (
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Proxies</label>
