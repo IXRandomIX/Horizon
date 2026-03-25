@@ -584,6 +584,32 @@ export default function Chat() {
     if (res.ok) setProxies(await res.json());
   };
 
+  const resetUserAppearance = async () => {
+    const target = apTarget.trim() || user?.username;
+    if (!target) return;
+    const updates = { roleColor: "#9ca3af", animation: "none", font: "sans" };
+    const res = await authFetch(`/api/chat/users/${target}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(updates),
+    });
+    if (res.ok) {
+      toast({ title: `Reset ${target} to defaults` });
+      setApColor("#9ca3af");
+      setApEffects([]);
+      setApColorTab("solid");
+      if (target === user?.username) {
+        const updated = await res.json();
+        const merged = { ...user, ...updated };
+        setUser(merged);
+        updateAuthUser(updated);
+        localStorage.setItem("horizon_chat_user", JSON.stringify(merged));
+      }
+    } else {
+      toast({ title: "Failed to reset", variant: "destructive" });
+    }
+  };
+
   const applyUserAppearance = async () => {
     const target = apTarget.trim() || user?.username;
     if (!target) return;
@@ -1823,7 +1849,10 @@ export default function Chat() {
                             </div>
                           </div>
 
-                          <Button onClick={applyUserAppearance} className="w-full bg-primary hover:bg-primary/90">Apply Appearance</Button>
+                          <div className="flex gap-2">
+                            <Button onClick={applyUserAppearance} className="flex-1 bg-primary hover:bg-primary/90">Apply Appearance</Button>
+                            <Button onClick={resetUserAppearance} variant="outline" className="border-red-500/40 text-red-400 hover:bg-red-500/10 hover:text-red-300 hover:border-red-400 px-3" title="Reset color, effects and font to defaults">Reset</Button>
+                          </div>
                         </div>
                       </DialogContent>
                     </Dialog>
