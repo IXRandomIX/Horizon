@@ -70,7 +70,9 @@ function ImageURLCreator() {
   const handleDragLeave = () => setDragging(false);
 
   const copyUrl = (id: string, url: string) => {
-    navigator.clipboard.writeText(url);
+    // Make absolute for sharing — relative paths aren't usable outside this tab
+    const absolute = url.startsWith("http") ? url : `${window.location.origin}${url}`;
+    navigator.clipboard.writeText(absolute);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
     toast({ title: "URL copied to clipboard!" });

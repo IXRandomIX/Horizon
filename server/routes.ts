@@ -11,6 +11,16 @@ import { GoogleGenerativeAI } from "@google/generative-ai";
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
+// Normalize any stored absolute /uploads/ URL to a relative path so it
+// survives hostname/session changes (e.g. Replit dev URL rotation).
+function normalizeUploadUrl(url: string | null | undefined): string {
+  if (!url) return url as string;
+  // e.g. "https://xxx.replit.dev/uploads/123.png" → "/uploads/123.png"
+  const m = url.match(/\/uploads\/.+/);
+  if (m) return m[0];
+  return url;
+}
+
 const audioUpload = multer({
   storage: multer.diskStorage({
     destination: (_req, _file, cb) => cb(null, uploadsDir),
@@ -59,6 +69,9 @@ const WALL_LOCKOUT_MS = 20 * 24 * 60 * 60 * 1000;
 
 function sanitizeUser(user: any) {
   const { password, ...rest } = user;
+  // Normalize any old absolute /uploads/ URLs that were stored before the relative-URL fix
+  if (rest.avatar) rest.avatar = normalizeUploadUrl(rest.avatar);
+  if (rest.banner) rest.banner = normalizeUploadUrl(rest.banner);
   return rest;
 }
 
@@ -239,9 +252,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       isAdmin: user.username === ADMIN_USER,
       displayName: user.displayName,
       displayFont: user.displayFont,
-      avatar: user.avatar,
+      avatar: normalizeUploadUrl(user.avatar),
       bio: user.bio,
-      banner: user.banner,
+      banner: normalizeUploadUrl(user.banner),
       bannerColor: user.bannerColor,
       roles: user.roles,
       roleColor: user.roleColor,
@@ -260,7 +273,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (existing) return res.status(409).json({ message: "Username already taken. Try a different one." });
     const user = await storage.createUser({ username, password, role: "User", roleColor: "#9ca3af" });
     const sessionToken = await storage.createSession(user.username);
-    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor, sessionToken });
+    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: normalizeUploadUrl(user.avatar), bio: user.bio, banner: normalizeUploadUrl(user.banner), bannerColor: user.bannerColor, sessionToken });
   });
 
   app.post("/api/auth/login", async (req, res) => {
@@ -274,7 +287,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         user = await storage.createUser({ username: ADMIN_USER, password: ADMIN_PASS, role: "Owner", roleColor: "#a855f7", animation: "glitch", font: "fancy" });
       }
       const sessionToken = await storage.createSession(ADMIN_USER);
-      return res.json({ username: user.username, role: "Owner", isAdmin: true, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor, sessionToken });
+      return res.json({ username: user.username, role: "Owner", isAdmin: true, displayName: user.displayName, displayFont: user.displayFont, avatar: normalizeUploadUrl(user.avatar), bio: user.bio, banner: normalizeUploadUrl(user.banner), bannerColor: user.bannerColor, sessionToken });
     }
 
     const user = await storage.getUser(username);
@@ -285,7 +298,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     }
 
     const sessionToken = await storage.createSession(user.username);
-    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: user.avatar, bio: user.bio, banner: user.banner, bannerColor: user.bannerColor, sessionToken });
+    return res.json({ username: user.username, role: user.role, isAdmin: false, displayName: user.displayName, displayFont: user.displayFont, avatar: normalizeUploadUrl(user.avatar), bio: user.bio, banner: normalizeUploadUrl(user.banner), bannerColor: user.bannerColor, sessionToken });
   });
 
   // ─── Users Directory ──────────────────────────────────────────────────────
@@ -904,7 +917,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const entry = {
         username: u.username,
         displayName: u.displayName,
-        avatar: u.avatar,
+        avatar: normalizeUploadUrl(u.avatar),
         xp,
         rank,
       };
@@ -958,9 +971,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   // ─── Upload ───────────────────────────────────────────────────────────────
   app.post("/api/upload", upload.single("file"), (req, res) => {
     if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-    const host = req.headers.host || "localhost:5000";
-    const protocol = req.headers["x-forwarded-proto"] || "http";
-    const url = `${protocol}://${host}/uploads/${req.file.filename}`;
+    // Use a relative path so the URL works regardless of hostname/session changes
+    const url = `/uploads/${req.file.filename}`;
     res.json({ url, filename: req.file.filename, originalName: req.file.originalname });
   });
 
