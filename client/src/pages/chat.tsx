@@ -174,6 +174,10 @@ const AVAILABLE_FONTS: { key: string; name: string; family: string; category: st
   { key: "Special Elite",     name: "Special Elite",     family: "'Special Elite', cursive",            category: "Gaming" },
   { key: "Rye",               name: "Rye",               family: "'Rye', serif",                        category: "Gaming" },
   { key: "League Gothic",     name: "League Gothic",     family: "'League Gothic', sans-serif",         category: "Display" },
+  // Zalgo / cursed text (Unicode combining marks — not a real font)
+  { key: "zalgo:low",  name: "Z̧̮a̺l̡g̯o̕ (Low)",   family: "inherit", category: "Special" },
+  { key: "zalgo:mid",  name: "Z̴̛͔a̵͚̕l͖̕g̡͔o̡̗ (Mid)",   family: "inherit", category: "Special" },
+  { key: "zalgo:high", name: "Z̷̢̨̛͍͓͓͕̝͔̠̮͕̝̰̅̿̒̿̃͌̅̉̌̀̐a̵̧͍͎̝̘͔̤̫̝̣͍̅͂̾̑̃̾l̷̢̡̨̧͚̯͎̫̬̝͕̦̤̙͚̩͓̅̐̐̿͂̐̾̊̑̀̃g̵̡̡̛̛͓̬̣̮͎̱̮͖͚̱̭͈̫̪̲̞̱͈̟̭̖̀̂͋͂̈́̑͑̑̊̂̽͌̂̆̀̇̉̃̈́́̓̊͂̓̚͝o̷̢̤̠̟̙̬̝͓̦͍̦̬͔͓͖̍̽̑̈́͒̑̒̿̋̑͛̎̀̽͋ (High)", family: "inherit", category: "Special" },
   // FontLibrary.org — open-source originals
   { key: "GlacialIndifferenceRegular", name: "Glacial Indiff.",      family: "'GlacialIndifferenceRegular', sans-serif", category: "FLB" },
   { key: "OstrichSansRegular",         name: "Ostrich Sans",         family: "'OstrichSansRegular', sans-serif",         category: "FLB" },
@@ -183,6 +187,27 @@ const AVAILABLE_FONTS: { key: string; name: string; family: string; category: st
   { key: "ProcionoRegular",            name: "Prociono",             family: "'ProcionoRegular', serif",                 category: "FLB" },
   { key: "BergamoStdRegular",          name: "Bergamo",              family: "'BergamoStdRegular', serif",               category: "FLB" },
 ];
+
+// ── Zalgo text transform ───────────────────────────────────────────────────
+const ZALGO_UP = ['\u0300','\u0301','\u0302','\u0303','\u0304','\u0305','\u0306','\u0307','\u0308','\u0309','\u030a','\u030b','\u030c','\u030d','\u030e','\u030f','\u0310','\u0311','\u0312','\u0313','\u0314','\u0315','\u031a','\u031b','\u033d','\u033e','\u033f','\u0340','\u0341','\u0346','\u034a','\u034b','\u034c','\u0350','\u0351','\u0352','\u0357','\u035b','\u0363','\u0364','\u0365','\u0366','\u0367','\u0368','\u0369','\u036a','\u036b','\u036c','\u036d','\u036e','\u036f'];
+const ZALGO_MID = ['\u0315','\u031b','\u0300','\u0301','\u0302','\u0303','\u0304','\u0305','\u0306','\u0307','\u0308','\u0309','\u030a','\u030b','\u030c','\u030d','\u030e','\u031a','\u0338','\u0322','\u0323','\u0324','\u0325','\u0326','\u0327','\u0328','\u0329','\u032a','\u032b','\u032c','\u032d','\u032e','\u032f','\u0330','\u0331','\u0332','\u0333','\u0339','\u033a','\u033b','\u033c','\u0345'];
+const ZALGO_DOWN = ['\u0316','\u0317','\u0318','\u0319','\u031c','\u031d','\u031e','\u031f','\u0320','\u0321','\u0322','\u0323','\u0324','\u0325','\u0326','\u0327','\u0328','\u0329','\u032a','\u032b','\u032c','\u032d','\u032e','\u032f','\u0330','\u0331','\u0332','\u0333','\u0339','\u033a','\u033b','\u033c','\u0345','\u0347','\u0348','\u0349','\u034d','\u034e','\u0353','\u0354','\u0355','\u0356','\u0359','\u035a','\u035c','\u035d','\u035e','\u035f','\u0360','\u0361','\u0362','\u0489'];
+// Deterministic zalgo: uses charCode as seed so the same text always produces the same result
+function applyZalgo(text: string, intensity: "low" | "mid" | "high" = "mid"): string {
+  const ups  = intensity === "low" ? 1 : intensity === "mid" ? 3 : 6;
+  const mids = intensity === "low" ? 0 : intensity === "mid" ? 1 : 2;
+  const downs = intensity === "low" ? 1 : intensity === "mid" ? 2 : 4;
+  let result = "";
+  for (let ci = 0; ci < text.length; ci++) {
+    const ch = text[ci];
+    const code = ch.charCodeAt(0);
+    result += ch;
+    for (let i = 0; i < ups;   i++) result += ZALGO_UP  [(code * (i + 1) * 13 + ci * 7)  % ZALGO_UP.length];
+    for (let i = 0; i < mids;  i++) result += ZALGO_MID [(code * (i + 3) * 17 + ci * 11) % ZALGO_MID.length];
+    for (let i = 0; i < downs; i++) result += ZALGO_DOWN[(code * (i + 2) * 19 + ci * 5)  % ZALGO_DOWN.length];
+  }
+  return result;
+}
 
 // ── Helper components ─────────────────────────────────────────────────────
 function GlitchTextUsername({ text, className, style }: { text: string; className?: string; style?: React.CSSProperties }) {
@@ -1121,6 +1146,9 @@ export default function Chat() {
     const { colorClass, colorStyle } = getColorInfo(roleColor, animation);
     const fontStyle = getFontStyle(font);
     const base = `font-black tracking-wide`;
+    // Apply zalgo text transform if selected
+    const intensity = font === "zalgo:low" ? "low" : font === "zalgo:high" ? "high" : "mid";
+    const displayText = font.startsWith("zalgo:") ? applyZalgo(text, intensity) : text;
 
     // Parse pipe-separated effects (e.g. "efx:matrix|efx:galaxy|efx:border:gold")
     const effects = (!animation || animation === "none") ? [] : animation.split("|").filter(e => e && e !== "none");
@@ -1143,8 +1171,8 @@ export default function Chat() {
 
     // Build base text node (glitch vs plain)
     const textNode = hasGlitch
-      ? <GlitchTextUsername text={text} className={textClass} style={finalStyle} />
-      : <span className={textClass} style={finalStyle} data-text={text}>{text}</span>;
+      ? <GlitchTextUsername text={displayText} className={textClass} style={finalStyle} />
+      : <span className={textClass} style={finalStyle} data-text={displayText}>{displayText}</span>;
 
     // If any background canvas effect is needed, wrap in a relative container
     const needsCanvasWrap = matrixEffect || hasGalaxy || hasBlackhole;
@@ -1923,7 +1951,7 @@ export default function Chat() {
                               <div className="space-y-2">
                                 {/* Category filter */}
                                 <div className="flex flex-wrap gap-1">
-                                  {["All", "Sans", "Serif", "Display", "Hand", "Code", "Gaming", "FLB"].map(cat => (
+                                  {["All", "Sans", "Serif", "Display", "Hand", "Code", "Gaming", "Special", "FLB"].map(cat => (
                                     <button key={cat} onClick={() => setApFontCategory(cat)} className={`text-[10px] px-2 py-0.5 rounded border transition-all ${apFontCategory === cat ? "border-primary bg-primary/20 text-primary" : "border-white/10 text-white/40 hover:text-white/70"}`}>{cat}</button>
                                   ))}
                                 </div>
