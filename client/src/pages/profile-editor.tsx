@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
-import { useAuth } from "@/context/auth";
+import { useAuth, authFetch } from "@/context/auth";
 import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ export default function ProfileEditor() {
 
   useEffect(() => {
     if (!user) return;
-    fetch(`/api/users/${user.username}`, { credentials: "include" }).then(r => r.json()).then(u => {
+    authFetch(`/api/users/${user.username}`).then(r => r.json()).then(u => {
       setDisplayName(u.displayName || "");
       setDisplayFont(u.displayFont || "sans");
       setBio(u.bio || "");
@@ -67,7 +67,7 @@ export default function ProfileEditor() {
     setUploading(type);
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch("/api/upload", { method: "POST", body: fd, credentials: "include" });
+    const res = await authFetch("/api/upload", { method: "POST", body: fd });
     const data = await res.json();
     setUploading(null);
     return data.url as string;
@@ -90,10 +90,9 @@ export default function ProfileEditor() {
   const handleSave = async () => {
     if (!user) return;
     setSaving(true);
-    const res = await fetch(`/api/users/${user.username}/profile`, {
+    const res = await authFetch(`/api/users/${user.username}/profile`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      credentials: "include",
       body: JSON.stringify({ displayName: displayName || null, displayFont, bio, avatar, banner, bannerColor }),
     });
     if (res.ok) {
