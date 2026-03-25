@@ -70,9 +70,9 @@ function getEmbedUrl(m: Media, season?: number, episode?: number) {
   const s = season || 1;
   const e = episode || 1;
   if (m.media_type === "tv") {
-    return `https://multiembed.mov/?video_id=${m.id}&tmdb=1&s=${s}&e=${e}`;
+    return `/api/movies/embed?type=tv&id=${m.id}&s=${s}&e=${e}`;
   }
-  return `https://multiembed.mov/?video_id=${m.id}&tmdb=1`;
+  return `/api/movies/embed?type=movie&id=${m.id}`;
 }
 
 const POPUP_BLOCKER = `(function(){var _wo=window.open;window.open=function(){return null};})();`;

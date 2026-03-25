@@ -1442,13 +1442,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   }
 
   function injectSafeProxy(html: string, pageOrigin: string): string {
-    // Only inject a lightweight script: block popups and sandbox frame references.
-    // Avoid overriding document.createElement or anything that loops — those crash the tab.
+    // Spoof window.top/parent/frameElement so JS anti-iframe checks pass.
+    // Intercept XHR + fetch so relative-path API calls (like /response.php) are
+    // routed through our snproxy instead of hitting our server directly.
     const script = `<script>(function(){
 try{Object.defineProperty(window,'top',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'parent',{get:function(){return window;}});}catch(e){}
 try{Object.defineProperty(window,'frameElement',{get:function(){return null;}});}catch(e){}
 window.open=function(){return null;};
+var _po=encodeURIComponent('${pageOrigin}');
+var _snp='/api/movies/snproxy?origin='+_po+'&path=';
+var _xo=XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open=function(){var args=Array.prototype.slice.call(arguments);if(typeof args[1]==='string'&&/^\\/[^/]/.test(args[1]))args[1]=_snp+encodeURIComponent(args[1]);return _xo.apply(this,args);};
+var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){var args=Array.prototype.slice.call(arguments);if(typeof args[0]==='string'&&/^\\/[^/]/.test(args[0]))args[0]=_snp+encodeURIComponent(args[0]);return _fo.apply(this,args);};}
 }());</script><base href="${pageOrigin}/">`;
     if (/<head[^>]*>/i.test(html)) return html.replace(/(<head[^>]*>)/i, `$1${script}`);
     return script + html;
@@ -1708,6 +1714,55 @@ window.open=function(){return null;};
       res.send(rewritten);
     } catch (e: any) {
       res.status(502).send(`<html><body style="background:#111;color:#fff;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0"><div style="text-align:center"><h2 style="color:#a855f7">Unable to load player</h2><p style="color:#888">${e.message}</p></div></body></html>`);
+    }
+  });
+
+  // Proxy API calls from within the embed page back to the streaming origin.
+  // The injected XHR/fetch interceptor routes relative-path calls here.
+  const SNPROXY_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+  app.options("/api/movies/snproxy", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "*");
+    res.sendStatus(204);
+  });
+  app.all("/api/movies/snproxy", async (req, res) => {
+    const origin = req.query.origin as string;
+    const path = req.query.path as string;
+    if (!origin || !path) return res.status(400).json({ error: "Missing origin or path" });
+    let targetUrl: string;
+    try { targetUrl = decodeURIComponent(origin) + decodeURIComponent(path); } catch { return res.status(400).json({ error: "Invalid params" }); }
+    try {
+      const opts: RequestInit = {
+        method: req.method === "OPTIONS" ? "GET" : req.method,
+        headers: {
+          "User-Agent": SNPROXY_UA,
+          "Referer": decodeURIComponent(origin) + "/",
+          "Origin": decodeURIComponent(origin),
+          "Accept": (req.headers.accept as string) || "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+      };
+      if (req.method !== "GET" && req.method !== "HEAD" && req.method !== "OPTIONS") {
+        const ct = (req.headers["content-type"] as string) || "application/x-www-form-urlencoded";
+        (opts.headers as Record<string, string>)["Content-Type"] = ct;
+        if (ct.includes("application/json")) {
+          opts.body = JSON.stringify(req.body);
+        } else {
+          opts.body = new URLSearchParams(req.body as Record<string, string>).toString();
+        }
+      }
+      const response = await fetch(targetUrl, opts);
+      const ct = response.headers.get("content-type") || "application/octet-stream";
+      const data = await response.arrayBuffer();
+      res.status(response.status)
+        .setHeader("Content-Type", ct)
+        .setHeader("Access-Control-Allow-Origin", "*")
+        .setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        .setHeader("Access-Control-Allow-Headers", "*")
+        .send(Buffer.from(data));
+    } catch (e: any) {
+      res.status(502).json({ error: e.message });
     }
   });
 
