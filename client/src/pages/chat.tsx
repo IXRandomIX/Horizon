@@ -126,27 +126,47 @@ function BorderBeamUsername({ text, borderKey, className, style }: { text: strin
 // ── Canvas-based username effect components ────────────────────────────────
 function MatrixCanvas({ color }: { color: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const W = 180, H = 55;
+  const W = 130, H = 36;
   useEffect(() => {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext('2d'); if (!ctx) return;
-    const sz = 9, cols = Math.floor(W / sz);
-    const drops: number[] = Array.from({ length: cols }, () => -Math.floor(Math.random() * 15));
+    const sz = 8, cols = Math.floor(W / sz);
+    // Each column: current row position
+    const drops: number[] = Array.from({ length: cols }, () => -Math.floor(Math.random() * 10));
+    // Track opacity per cell for fade trail without opaque background
+    const opacities: number[][] = Array.from({ length: cols }, () => Array(Math.ceil(H / sz) + 1).fill(0));
     let animId: number, tick = 0;
     const frame = () => {
       tick++;
       if (tick % 3 === 0) {
-        ctx.fillStyle = 'rgba(0,0,0,0.13)';
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = color;
-        ctx.font = `bold ${sz}px monospace`;
+        // Fade existing opacities (transparent trail effect without black bg)
+        ctx.clearRect(0, 0, W, H);
         for (let i = 0; i < cols; i++) {
-          const char = Math.random() > 0.5 ? '1' : '0';
-          const y = drops[i] * sz;
-          if (y > 0 && y < H + sz) ctx.fillText(char, i * sz + 1, y);
+          for (let row = 0; row < opacities[i].length; row++) {
+            if (opacities[i][row] > 0) {
+              opacities[i][row] = Math.max(0, opacities[i][row] - 0.18);
+              const y = row * sz;
+              if (opacities[i][row] > 0.05) {
+                ctx.globalAlpha = opacities[i][row];
+                ctx.fillStyle = color;
+                ctx.font = `bold ${sz}px monospace`;
+                ctx.fillText(Math.random() > 0.5 ? '1' : '0', i * sz + 1, y + sz);
+              }
+            }
+          }
+          // Draw head character
+          const headY = drops[i];
+          if (headY >= 0 && headY < opacities[i].length) {
+            opacities[i][headY] = 1;
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = '#ffffff';
+            ctx.font = `bold ${sz}px monospace`;
+            ctx.fillText(Math.random() > 0.5 ? '1' : '0', i * sz + 1, headY * sz + sz);
+          }
           drops[i]++;
-          if (drops[i] * sz > H && Math.random() > 0.96) drops[i] = -Math.floor(Math.random() * 12);
+          if (drops[i] * sz > H && Math.random() > 0.94) drops[i] = -Math.floor(Math.random() * 8);
         }
+        ctx.globalAlpha = 1;
       }
       animId = requestAnimationFrame(frame);
     };
@@ -158,7 +178,7 @@ function MatrixCanvas({ color }: { color: string }) {
 
 function GalaxyCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const W = 180, H = 55;
+  const W = 130, H = 36;
   useEffect(() => {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext('2d'); if (!ctx) return;
@@ -204,8 +224,8 @@ function GalaxyCanvas() {
 
 function BlackholeCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const W = 180, H = 55;
-  const CX = W / 2, CY = H / 2, BH_R = 7;
+  const W = 130, H = 36;
+  const CX = W / 2, CY = H / 2, BH_R = 6;
   useEffect(() => {
     const c = canvasRef.current; if (!c) return;
     const ctx = c.getContext('2d'); if (!ctx) return;
