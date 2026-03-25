@@ -1106,7 +1106,7 @@ export default function Chat() {
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
                 transition={{ duration: 0.15 }}
-                className="mb-2 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl overflow-hidden shadow-2xl shadow-black/60"
+                className="mb-2 rounded-xl border border-white/10 bg-black/90 backdrop-blur-xl shadow-2xl shadow-black/60 flex flex-col max-h-72 overflow-hidden"
               >
                 {/* Header */}
                 <div className="px-4 py-2 border-b border-white/5 flex items-center gap-2">
@@ -1116,7 +1116,7 @@ export default function Chat() {
 
                 {/* Command list */}
                 {filteredCmds.length > 0 && (
-                  <div className="divide-y divide-white/[0.04]">
+                  <div className="divide-y divide-white/[0.04] overflow-y-auto">
                     {filteredCmds.map((c, i) => (
                       <button
                         key={c.cmd}
@@ -1152,7 +1152,7 @@ export default function Chat() {
 
                 {/* Active command full hint */}
                 {activeCmd && (
-                  <div className="px-4 py-3 flex items-start gap-3">
+                  <div className="overflow-y-auto px-4 py-3 flex items-start gap-3">
                     <span className="text-xl leading-none mt-0.5">{activeCmd.icon}</span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-baseline gap-2">
