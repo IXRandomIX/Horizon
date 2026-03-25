@@ -179,11 +179,14 @@ export default function Chat() {
 
   const MOD_TIMES_BAN = ["1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
   const MOD_TIMES_TIMEOUT = ["30 seconds","1 minute","3 minutes","1 hour","10 hours","1 day","2 days","3 days","10 days","1 month","2 months","3 months","1 year","2 years","3 years","10 years"];
+  const isBanCapable = user?.username === "RandomIX" || (user?.roles ?? []).some((r: string) => ["Owner", "CO OWNER"].includes(r));
   const MOD_COMMANDS = [
-    { cmd: "/ban",      syntax: "/ban <username> <time> [reason]",     icon: "🔨", desc: "Temporarily or permanently ban a user from chat.", needsTime: "ban"     as const, needsReason: true  },
-    { cmd: "/timeout",  syntax: "/timeout <username> <time>",          icon: "⏱️", desc: "Silence a user for a set period — they can still read chat.",  needsTime: "timeout" as const, needsReason: false },
-    { cmd: "/unban",    syntax: "/unban <username>",                   icon: "✅", desc: "Lift an active ban and let the user chat again.",              needsTime: null,      needsReason: false },
-    { cmd: "/untimeout",syntax: "/untimeout <username>",               icon: "🔊", desc: "Remove an active timeout and restore posting privileges.",     needsTime: null,      needsReason: false },
+    ...(isBanCapable ? [
+      { cmd: "/ban",   syntax: "/ban <username> <time> [reason]", icon: "🔨", desc: "Temporarily or permanently ban a user from chat.", needsTime: "ban" as const, needsReason: true },
+      { cmd: "/unban", syntax: "/unban <username>",               icon: "✅", desc: "Lift an active ban and let the user chat again.",  needsTime: null,           needsReason: false },
+    ] : []),
+    { cmd: "/timeout",  syntax: "/timeout <username> <time>",    icon: "⏱️", desc: "Silence a user for a set period — they can still read chat.", needsTime: "timeout" as const, needsReason: false },
+    { cmd: "/untimeout",syntax: "/untimeout <username>",          icon: "🔊", desc: "Remove an active timeout and restore posting privileges.",    needsTime: null,                needsReason: false },
   ];
   const showCmdPicker = userHasPermission("admin_panel") && newMessage.startsWith("/") && !newMessage.includes("\n");
   const cmdQuery = showCmdPicker ? newMessage.split(" ")[0].toLowerCase() : "";

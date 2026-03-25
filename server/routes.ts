@@ -86,6 +86,15 @@ async function isPrivileged(caller: string): Promise<boolean> {
   return userRoles.flatMap(r => r.permissions || []).includes("admin_panel");
 }
 
+// Only Owner and CO OWNER can ban; Admin/Mod can only timeout
+const BAN_CAPABLE_ROLES = ["Owner", "CO OWNER"];
+async function canBanUsers(caller: string): Promise<boolean> {
+  if (caller === ADMIN_USER) return true;
+  const user = await storage.getUser(caller);
+  if (!user || !user.roles || user.roles.length === 0) return false;
+  return user.roles.some((r: string) => BAN_CAPABLE_ROLES.includes(r));
+}
+
 async function requirePermission(permission: string, req: any, res: any): Promise<boolean> {
   const caller = await getSessionUser(req);
   if (!caller) { res.status(401).json({ message: "Unauthorized" }); return false; }
@@ -678,6 +687,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const targetUser = words[1]?.toLowerCase();
 
       if (cmd === "/ban" && targetUser) {
+        if (!await canBanUsers(sessionUsername)) {
+          return res.status(200).json({ commandHandled: true, error: true, message: `Only Owner and CO OWNER can ban users. You can use /timeout instead.` });
+        }
         if (targetUser === ADMIN_USER.toLowerCase() || await isPrivileged(targetUser)) {
           return res.status(200).json({ commandHandled: true, error: true, message: `You cannot ban a staff member.` });
         }
