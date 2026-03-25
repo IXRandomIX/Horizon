@@ -56,12 +56,8 @@ function getYear(m: Media) {
 }
 
 const SOURCES = [
-  { id: "smashy",     label: "Smashy"      },
-  { id: "vidsrc",     label: "VidSrc"      },
-  { id: "vidsrc2",    label: "VidSrc 2"    },
-  { id: "embedsu",    label: "Embed.su"    },
-  { id: "superembed", label: "SuperEmbed"  },
   { id: "vidify",     label: "Vidify"      },
+  { id: "vidsrc2",    label: "VidSrc 2"    },
   { id: "vidsrcco",   label: "VidSrc.co"   },
   { id: "autoembed",  label: "AutoEmbed"   },
   { id: "vidsrcicu",  label: "VidSrc ICU"  },
@@ -69,19 +65,76 @@ const SOURCES = [
   { id: "vidsrccc",   label: "VidSrc CC"   },
   { id: "moviesapi",  label: "MoviesAPI"   },
   { id: "vidlink",    label: "VidLink"     },
+  { id: "embedsu",    label: "Embed.su"    },
+  { id: "superembed", label: "SuperEmbed"  },
   { id: "vidora",     label: "Vidora"      },
+  { id: "smashy",     label: "Smashy"      },
+  { id: "vidsrc",     label: "VidSrc"      },
 ] as const;
 type SourceId = typeof SOURCES[number]["id"];
 
 function getEmbedUrl(m: Media, season: number, episode: number, source: SourceId) {
-  const params = new URLSearchParams({
-    type: m.media_type,
-    id: String(m.id),
-    s: String(season),
-    e: String(episode),
-    source,
-  });
-  return `/api/movies/embed?${params}`;
+  const id = String(m.id);
+  const s = String(season);
+  const e = String(episode);
+  const isTV = m.media_type === "tv";
+
+  // Sources that work as direct iframes (no server proxy needed) — same approach as DocumenTV
+  switch (source) {
+    case "vidify":
+      return isTV
+        ? `https://player.vidify.top/embed/tv/${id}/${s}/${e}?autoplay=false&poster=true&chromecast=true&servericon=false&setting=true&pip=true&download=true`
+        : `https://player.vidify.top/embed/movie/${id}?autoplay=false&poster=true&chromecast=true&servericon=false&setting=true&pip=true&download=true`;
+    case "vidsrc2":
+      return isTV
+        ? `https://vidsrc.xyz/embed/tv?tmdb=${id}&season=${s}&episode=${e}`
+        : `https://vidsrc.xyz/embed/movie?tmdb=${id}`;
+    case "vidsrcco":
+      return isTV
+        ? `https://player.vidsrc.co/embed/tv/${id}/${s}/${e}?server=2`
+        : `https://player.vidsrc.co/embed/movie/${id}?server=2`;
+    case "autoembed":
+      return isTV
+        ? `https://player.autoembed.cc/embed/tv/${id}/${s}/${e}`
+        : `https://player.autoembed.cc/embed/movie/${id}?server=1`;
+    case "vidsrcicu":
+      return isTV
+        ? `https://vidsrc.icu/embed/tv/${id}/${s}/${e}`
+        : `https://vidsrc.icu/embed/movie/${id}`;
+    case "moviekex":
+      return isTV
+        ? `https://moviekex.online/embed/tv/${id}/${s}/${e}`
+        : `https://moviekex.online/embed/movie/${id}`;
+    case "vidsrccc":
+      return isTV
+        ? `https://vidsrc.cc/v2/embed/tv/${id}/${s}/${e}`
+        : `https://vidsrc.cc/v2/embed/movie/${id}`;
+    case "moviesapi":
+      return isTV
+        ? `https://moviesapi.club/tv/${id}-${s}-${e}`
+        : `https://moviesapi.club/movie/${id}`;
+    case "vidlink":
+      return isTV
+        ? `https://vidlink.pro/tv/${id}/${s}/${e}?autoplay=false&poster=true&primaryColor=00c1db`
+        : `https://vidlink.pro/movie/${id}?autoplay=true&poster=true&primaryColor=00c1db`;
+    case "embedsu":
+      return isTV
+        ? `https://embed.su/embed/tv/${id}/${s}/${e}`
+        : `https://embed.su/embed/movie/${id}`;
+    case "vidora":
+      return isTV
+        ? `https://vidora.su/tv/${id}/${s}/${e}?colour=dba4b2&autoplay=true`
+        : `https://vidora.su/movie/${id}?colour=dba4b2&autoplay=true`;
+    case "superembed":
+      return isTV
+        ? `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${s}&e=${e}`
+        : `https://multiembed.mov/?video_id=${id}&tmdb=1`;
+    // smashy and vidsrc (vidsrc.to) go through server proxy for cloudnestra/ad bypass
+    default: {
+      const params = new URLSearchParams({ type: m.media_type, id, s, e, source });
+      return `/api/movies/embed?${params}`;
+    }
+  }
 }
 
 function saveToHistory(m: Media) {
@@ -209,7 +262,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
-  const [source, setSource] = useState<SourceId>("smashy");
+  const [source, setSource] = useState<SourceId>("vidify");
   const containerRef = useRef<HTMLDivElement>(null);
   const isTV = media.media_type === "tv";
 
