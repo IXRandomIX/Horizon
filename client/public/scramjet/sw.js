@@ -20,6 +20,7 @@ const SCRAMJET_STATICS = new Set([
         "/scramjet/config.js",
         "/scramjet/register-sw.js",
         "/scramjet/index.css",
+        "/scramjet/fonts.css",
         "/scramjet/favicon.ico",
         "/scramjet/sj.png",
         "/scramjet/credits.html",
@@ -28,7 +29,7 @@ const SCRAMJET_STATICS = new Set([
 ]);
 
 // Paths that should always pass through regardless of scramjet config
-const PASS_THROUGH_PREFIXES = ["/scram/", "/baremux/", "/libcurl/", "/api/", "/uploads/"];
+const PASS_THROUGH_PREFIXES = ["/scram/", "/baremux/", "/libcurl/", "/api/", "/uploads/", "/scramjet/fonts/"];
 
 async function handleRequest(event) {
         const path = new URL(event.request.url).pathname;
