@@ -155,9 +155,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   const scramjetPublicPath = path.join(process.cwd(), "client/public/scramjet");
 
   // Add COOP/COEP headers required by Scramjet (SharedArrayBuffer)
-  app.use("/scramjet", (_req, res, next) => {
+  // Also prevent sw.js from being cached so the browser always picks up updates
+  app.use("/scramjet", (req, res, next) => {
     res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
     res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+    if (req.path === "/sw.js") {
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      res.setHeader("Service-Worker-Allowed", "/scramjet/");
+    }
     next();
   });
 
