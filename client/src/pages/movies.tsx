@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, Loader2, RefreshCw } from "lucide-react";
+import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p/w342";
@@ -363,53 +363,31 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
         {/* Player */}
         <IframePlayer embedUrl={embedUrl} backdrop={backdrop} />
 
-        {/* Info + source switcher strip */}
-        <div className="px-4 py-3 bg-black/80 border-t border-white/5 flex items-start gap-3 flex-shrink-0">
-          {media.poster_path && (
-            <img
-              src={`${TMDB_IMG}${media.poster_path}`}
-              alt=""
-              className="w-10 rounded-lg object-cover flex-shrink-0 hidden sm:block"
-              style={{ height: "60px" }}
-            />
-          )}
-          <div className="flex-1 min-w-0">
-            {media.overview && (
-              <p className="text-white/50 text-xs line-clamp-2 leading-relaxed">{media.overview}</p>
-            )}
-            <div className="flex items-center gap-2 mt-2 flex-wrap">
-              {media.vote_average > 0 && (
-                <span className="flex items-center gap-1 text-[10px] text-yellow-400">
-                  <Star className="w-3 h-3 fill-current" />
-                  {media.vote_average.toFixed(1)}
-                </span>
-              )}
-              <span className="text-[10px] text-white/30 flex-shrink-0">Source:</span>
-              <div className="flex items-center gap-1 flex-wrap">
-                {SOURCES.map(src => (
-                  <button
-                    key={src.id}
-                    data-testid={`button-source-${src.id}`}
-                    onClick={() => setSource(src.id)}
-                    className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors font-medium ${
-                      source === src.id
-                        ? "bg-primary/30 border-primary/60 text-primary"
-                        : "bg-white/5 border-white/10 text-white/40 hover:text-white/70 hover:border-white/25"
-                    }`}
-                  >
-                    {src.label}
-                  </button>
-                ))}
-              </div>
-              <span className="text-[10px] text-white/20 flex items-center gap-1 flex-shrink-0">
-                · if unavailable, try another source
-              </span>
-              <span className="text-[10px] text-white/20 ml-auto flex items-center gap-1 flex-shrink-0">
-                <RefreshCw className="w-2.5 h-2.5" />
-                Proxied
-              </span>
-            </div>
+        {/* Source switcher strip */}
+        <div className="px-4 py-3 bg-black/80 border-t border-white/5 flex-shrink-0">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-[11px] text-white/50 font-semibold uppercase tracking-widest">Switch Server</span>
+            <span className="text-[10px] text-amber-400/80">— if video says "Not Available", tap another</span>
           </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {SOURCES.map(src => (
+              <button
+                key={src.id}
+                data-testid={`button-source-${src.id}`}
+                onClick={() => setSource(src.id)}
+                className={`text-xs px-3 py-1 rounded-lg border transition-colors font-medium ${
+                  source === src.id
+                    ? "bg-primary/30 border-primary/60 text-primary"
+                    : "bg-white/5 border-white/15 text-white/55 hover:text-white hover:bg-white/10 hover:border-white/30"
+                }`}
+              >
+                {src.label}
+              </button>
+            ))}
+          </div>
+          {media.overview && (
+            <p className="text-white/35 text-[11px] line-clamp-2 leading-relaxed mt-2">{media.overview}</p>
+          )}
         </div>
       </div>
     </div>
