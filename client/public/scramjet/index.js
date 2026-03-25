@@ -80,8 +80,8 @@ form.addEventListener("submit", async (event) => {
                 "://" +
                 location.host +
                 "/wisp/";
-        if ((await connection.getTransport()) !== "/libcurl/index.mjs") {
-                await connection.setTransport("/libcurl/index.mjs", [
+        if ((await connection.getTransport()) !== "/libcurl/index.mjs?v=3") {
+                await connection.setTransport("/libcurl/index.mjs?v=3", [
                         { websocket: wispUrl },
                 ]);
         }

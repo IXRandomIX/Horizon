@@ -168,6 +168,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.use("/scramjet", express.static(scramjetPublicPath));
   app.use("/scram",    express.static(scramjetDistPath));
+  app.use("/libcurl", (_req, res, next) => {
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    next();
+  });
   app.use("/libcurl",  express.static(libcurlDistPath));
   app.use("/baremux",  express.static(baremuxDistPath));
 

@@ -6439,7 +6439,7 @@ var LibcurlClient = class {
     });
     return {
       body: payload.body,
-      headers: payload.raw_headers,
+      headers: Object.fromEntries(payload.headers),
       status: payload.status,
       statusText: payload.statusText
     };
