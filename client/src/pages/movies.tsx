@@ -195,27 +195,29 @@ function HlsVideoPlayer({
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
-  const [status, setStatus] = useState<"loading" | "hls" | "iframe">("loading");
+  // Start in "hls" attempt mode; fall back to iframe if HLS fails
+  const [mode, setMode] = useState<"hls-loading" | "hls-ready" | "iframe">("hls-loading");
+  const [iframeLoaded, setIframeLoaded] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    setStatus("loading");
+    setMode("hls-loading");
 
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
 
-    const fallback = () => setStatus("iframe");
+    const fallback = () => setMode("iframe");
 
     if (Hls.isSupported()) {
       const hls = new Hls({ enableWorker: true, maxBufferLength: 30 });
       hlsRef.current = hls;
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setStatus("hls");
+        setMode("hls-ready");
         video.play().catch(() => {});
       });
 
@@ -228,7 +230,7 @@ function HlsVideoPlayer({
     } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
       video.src = streamUrl;
       video.addEventListener("loadedmetadata", () => {
-        setStatus("hls");
+        setMode("hls-ready");
         video.play().catch(() => {});
       }, { once: true });
       video.addEventListener("error", fallback, { once: true });
@@ -236,8 +238,8 @@ function HlsVideoPlayer({
       fallback();
     }
 
-    // If the M3U8 doesn't resolve in 8 seconds, fall back
-    const timeout = setTimeout(fallback, 8000);
+    // If HLS doesn't resolve in 6 seconds, fall back immediately
+    const timeout = setTimeout(fallback, 6000);
 
     return () => {
       clearTimeout(timeout);
@@ -246,17 +248,13 @@ function HlsVideoPlayer({
     };
   }, [streamUrl]);
 
-  // Inject popup blocker into iframe once it loads
-  const onIframeLoad = () => {
-    try {
-      const win = iframeRef.current?.contentWindow;
-      if (win) win.eval(POPUP_BLOCKER);
-    } catch { /* cross-origin, nothing to do */ }
-  };
+  // Pre-load the iframe in background while HLS is attempting
+  // so when we fall back it's already loaded or loading
+  const showIframe = mode === "iframe";
 
   return (
     <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%", minHeight: 280 }}>
-      {backdrop && status === "loading" && (
+      {backdrop && mode === "hls-loading" && !iframeLoaded && (
         <img src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
       )}
 
@@ -267,25 +265,32 @@ function HlsVideoPlayer({
         controls
         playsInline
         data-testid="video-player"
-        style={{ display: status === "hls" ? "block" : "none" }}
+        style={{ display: mode === "hls-ready" ? "block" : "none" }}
       />
 
-      {/* Iframe fallback */}
-      {status === "iframe" && (
-        <iframe
-          ref={iframeRef}
-          key={embedUrl}
-          src={embedUrl}
-          onLoad={onIframeLoad}
-          className="absolute inset-0 w-full h-full border-0"
-          allowFullScreen
-          allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
-          sandbox="allow-scripts allow-same-origin allow-forms allow-presentation"
-          data-testid="iframe-player"
-        />
-      )}
+      {/* Iframe — always mounted so it pre-loads; only shown when HLS fails */}
+      <iframe
+        ref={iframeRef}
+        key={embedUrl}
+        src={embedUrl}
+        onLoad={() => {
+          setIframeLoaded(true);
+          // Switch to iframe mode as soon as it's loaded — no need to wait for HLS to fail
+          setMode("iframe");
+          try {
+            const win = iframeRef.current?.contentWindow;
+            if (win) win.eval(POPUP_BLOCKER);
+          } catch { /* cross-origin — browser blocks it, that's fine */ }
+        }}
+        className="absolute inset-0 w-full h-full border-0"
+        allowFullScreen
+        allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
+        data-testid="iframe-player"
+        style={{ display: showIframe ? "block" : "none" }}
+      />
 
-      {status === "loading" && (
+      {/* Loading spinner while HLS is attempting and iframe hasn't loaded yet */}
+      {mode === "hls-loading" && !iframeLoaded && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
           <Loader2 className="w-10 h-10 text-primary animate-spin" />
           <p className="text-white/60 text-sm">Loading stream…</p>
