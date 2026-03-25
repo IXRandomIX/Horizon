@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, Loader2 } from "lucide-react";
+import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, Loader2, SkipForward, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p/w342";
@@ -235,9 +235,14 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
-  const [source, setSource] = useState<SourceId>("vidify");
+  const [sourceIdx, setSourceIdx] = useState(0);
+  const source = SOURCES[sourceIdx].id;
   const containerRef = useRef<HTMLDivElement>(null);
   const isTV = media.media_type === "tv";
+
+  const tryNextSource = useCallback(() => {
+    setSourceIdx(i => (i + 1) % SOURCES.length);
+  }, []);
 
   const { data: seasons = [] } = useQuery<SeasonInfo[]>({
     queryKey: ["/api/movies/tv", media.id, "seasons"],
@@ -297,6 +302,15 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              data-testid="button-next-server"
+              onClick={tryNextSource}
+              title="Try next server"
+              className="flex items-center gap-1.5 px-2.5 h-8 rounded-lg bg-amber-500/20 hover:bg-amber-500/40 border border-amber-500/30 text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              <SkipForward className="w-3.5 h-3.5" />
+              Next Server
+            </button>
             <button
               data-testid="button-fullscreen"
               onClick={toggleFullscreen}
@@ -366,17 +380,17 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
         {/* Source switcher strip */}
         <div className="px-4 py-3 bg-black/80 border-t border-white/5 flex-shrink-0">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-[11px] text-white/50 font-semibold uppercase tracking-widest">Switch Server</span>
-            <span className="text-[10px] text-amber-400/80">— if video says "Not Available", tap another</span>
+            <span className="text-[11px] text-white/50 font-semibold uppercase tracking-widest">Servers</span>
+            <span className="text-[10px] text-amber-400/70">— video not playing? hit <strong>Next Server</strong> above or pick one below</span>
           </div>
           <div className="flex items-center gap-1.5 flex-wrap">
-            {SOURCES.map(src => (
+            {SOURCES.map((src, idx) => (
               <button
                 key={src.id}
                 data-testid={`button-source-${src.id}`}
-                onClick={() => setSource(src.id)}
+                onClick={() => setSourceIdx(idx)}
                 className={`text-xs px-3 py-1 rounded-lg border transition-colors font-medium ${
-                  source === src.id
+                  idx === sourceIdx
                     ? "bg-primary/30 border-primary/60 text-primary"
                     : "bg-white/5 border-white/15 text-white/55 hover:text-white hover:bg-white/10 hover:border-white/30"
                 }`}
