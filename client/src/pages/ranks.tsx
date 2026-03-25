@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
-import { useAuth } from "@/context/auth";
 import { RANKS, QUESTS, getRankForXP, getNextRank } from "@shared/quests";
-import { Trophy, Star, Zap, CheckCircle, Clock, RefreshCw, Crown, Users } from "lucide-react";
+import { Trophy, Star, Zap, CheckCircle, Clock, RefreshCw } from "lucide-react";
 
 const QUEST_TYPE_COLORS: Record<string, string> = {
   games_played: "#a855f7",
@@ -39,71 +38,39 @@ function Countdown({ nextResetAt }: { nextResetAt: string }) {
   return <span className="font-mono font-bold text-white">{timeLeft}</span>;
 }
 
-interface LeaderboardUser {
-  username: string;
-  displayName: string | null;
-  avatar: string | null;
-  xp: number;
-  rank: { rank: number; name: string; xpNeeded: number; color: string };
-}
-
-interface LeaderboardData {
-  staff: LeaderboardUser[];
-  byRank: Record<number, LeaderboardUser[]>;
-}
-
-function Avatar({ user }: { user: LeaderboardUser }) {
-  if (user.avatar) {
-    return <img src={user.avatar} alt={user.username} className="w-8 h-8 rounded-lg object-cover" />;
-  }
-  return (
-    <div className="w-8 h-8 rounded-lg bg-white/10 border border-white/10 flex items-center justify-center text-xs font-black text-white/50">
-      {user.username[0]?.toUpperCase()}
-    </div>
-  );
-}
-
 export default function RanksPage() {
-  const { user } = useAuth();
   const [rankData, setRankData] = useState<any>(null);
-  const [leaderboard, setLeaderboard] = useState<LeaderboardData | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const fetchAll = useCallback(async () => {
+  const fetchRankData = useCallback(async () => {
     const token = localStorage.getItem("horizon_session_token");
     if (!token) return;
-    const headers = { Authorization: `Bearer ${token}` };
     try {
-      const [meRes, lbRes] = await Promise.all([
-        fetch("/api/ranks/me", { headers }),
-        fetch("/api/ranks/leaderboard", { headers }),
-      ]);
-      if (meRes.ok) {
-        const ct = meRes.headers.get("content-type") ?? "";
-        if (ct.includes("application/json")) setRankData(await meRes.json());
-      }
-      if (lbRes.ok) {
-        const ct = lbRes.headers.get("content-type") ?? "";
-        if (ct.includes("application/json")) setLeaderboard(await lbRes.json());
+      const res = await fetch("/api/ranks/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const ct = res.headers.get("content-type") ?? "";
+        if (ct.includes("application/json")) setRankData(await res.json());
       }
     } catch {
-      // retry silently on next interval
+      // silent
     }
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    fetchAll();
-  }, [fetchAll]);
+    fetchRankData();
+  }, [fetchRankData]);
 
   // Auto-refresh when cycle expires
   useEffect(() => {
     if (!rankData?.cycle?.nextResetAt) return;
     const diff = new Date(rankData.cycle.nextResetAt).getTime() - Date.now();
     if (diff <= 0) return;
-    const t = setTimeout(() => fetchAll(), diff + 500);
+    const t = setTimeout(() => fetchRankData(), diff + 500);
     return () => clearTimeout(t);
-  }, [rankData?.cycle?.nextResetAt, fetchAll]);
+  }, [rankData?.cycle?.nextResetAt, fetchRankData]);
 
   const xp: number = rankData?.xp ?? 0;
   const isStaff: boolean = rankData?.isStaff ?? false;
@@ -128,7 +95,6 @@ export default function RanksPage() {
     return acc;
   }, {});
 
-  // Ranked tiers from highest to lowest (skip Unranked rank:0 in ladder display)
   const rankedTiers = [...RANKS].filter(r => r.rank !== 0).sort((a, b) => a.rank - b.rank);
 
   return (
@@ -144,7 +110,7 @@ export default function RanksPage() {
             <p className="text-white/40 text-sm mt-2">Complete quests to earn XP and climb the ranks</p>
           </div>
           <button
-            onClick={fetchAll}
+            onClick={fetchRankData}
             className="mt-1 p-2 rounded-xl text-white/30 hover:text-white/70 hover:bg-white/5 transition-all"
             title="Refresh"
           >
@@ -166,7 +132,9 @@ export default function RanksPage() {
               {isStaff ? (
                 <p className="text-2xl font-black text-yellow-400">∞ XP</p>
               ) : (
-                <p className="text-2xl font-black text-white">{xp.toLocaleString()} <span className="text-white/40 text-sm font-normal">XP</span></p>
+                <p className="text-2xl font-black text-white">
+                  {xp.toLocaleString()} <span className="text-white/40 text-sm font-normal">XP</span>
+                </p>
               )}
             </div>
           </div>
@@ -251,112 +219,6 @@ export default function RanksPage() {
               ))}
             </div>
           )}
-        </div>
-
-        {/* Leaderboard */}
-        <div className="space-y-4">
-          <h2 className="text-white text-lg font-black uppercase tracking-widest flex items-center gap-2">
-            <Users className="w-5 h-5 text-blue-400" /> Leaderboard
-          </h2>
-
-          {/* Staff Section */}
-          {leaderboard && leaderboard.staff.length > 0 && (
-            <div className="rounded-2xl border border-yellow-500/20 bg-yellow-500/5 overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 border-b border-yellow-500/10">
-                <Crown className="w-4 h-4 text-yellow-400" />
-                <p className="text-xs font-black uppercase tracking-widest text-yellow-400">Staff</p>
-              </div>
-              <div className="divide-y divide-white/5">
-                {leaderboard.staff.map((u) => (
-                  <div key={u.username} className="flex items-center gap-3 px-4 py-3">
-                    <Avatar user={u} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-white truncate">{u.displayName || u.username}</p>
-                      <p className="text-xs text-white/30 truncate">@{u.username}</p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      {/* Potential rank based on XP */}
-                      <div className="text-right">
-                        <p className="text-[10px] text-white/30 uppercase tracking-widest">Potential</p>
-                        <p className="text-xs font-bold" style={{ color: u.rank.color }}>
-                          {u.rank.rank === 0 ? "Unranked" : u.rank.name}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
-                        STAFF
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Rank Tiers */}
-          <div className="space-y-3">
-            {rankedTiers.map((tier) => {
-              const users = leaderboard?.byRank[tier.rank] ?? [];
-              return (
-                <div key={tier.rank} className="rounded-2xl border border-white/10 overflow-hidden">
-                  {/* Tier Header */}
-                  <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5" style={{ background: `${tier.color}0d` }}>
-                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black" style={{ background: `${tier.color}22`, color: tier.color }}>
-                      {tier.rank}
-                    </div>
-                    <p className="text-sm font-black" style={{ color: tier.color }}>{tier.name}</p>
-                    <span className="text-[10px] text-white/20 ml-1">{tier.xpNeeded.toLocaleString()} XP</span>
-                    <span className="ml-auto text-[10px] text-white/30 font-bold">{users.length} {users.length === 1 ? "user" : "users"}</span>
-                  </div>
-                  {/* Users in tier */}
-                  {users.length === 0 ? (
-                    <div className="px-4 py-3 text-xs text-white/20 italic">No users at this rank yet</div>
-                  ) : (
-                    <div className="divide-y divide-white/[0.04] bg-white/[0.01]">
-                      {users.map((u, idx) => (
-                        <div key={u.username} className="flex items-center gap-3 px-4 py-2.5">
-                          <span className="text-xs font-bold text-white/20 w-5 text-right flex-shrink-0">#{idx + 1}</span>
-                          <Avatar user={u} />
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-bold text-white truncate">{u.displayName || u.username}</p>
-                            <p className="text-xs text-white/30">@{u.username}</p>
-                          </div>
-                          <span className="text-xs font-bold text-white/50 flex-shrink-0">{u.xp.toLocaleString()} XP</span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-
-            {/* Unranked */}
-            {leaderboard && (() => {
-              const unranked = leaderboard.byRank[0] ?? [];
-              if (unranked.length === 0) return null;
-              return (
-                <div className="rounded-2xl border border-white/10 overflow-hidden opacity-60">
-                  <div className="flex items-center gap-3 px-4 py-2.5 border-b border-white/5 bg-white/[0.02]">
-                    <div className="w-6 h-6 rounded-lg flex items-center justify-center text-xs font-black bg-white/10 text-white/30">?</div>
-                    <p className="text-sm font-black text-white/30">Unranked</p>
-                    <span className="ml-auto text-[10px] text-white/20 font-bold">{unranked.length} {unranked.length === 1 ? "user" : "users"}</span>
-                  </div>
-                  <div className="divide-y divide-white/[0.04] bg-white/[0.01]">
-                    {unranked.map((u, idx) => (
-                      <div key={u.username} className="flex items-center gap-3 px-4 py-2.5">
-                        <span className="text-xs font-bold text-white/20 w-5 text-right flex-shrink-0">#{idx + 1}</span>
-                        <Avatar user={u} />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-white/50 truncate">{u.displayName || u.username}</p>
-                          <p className="text-xs text-white/20">@{u.username}</p>
-                        </div>
-                        <span className="text-xs font-bold text-white/30 flex-shrink-0">{u.xp.toLocaleString()} XP</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
-          </div>
         </div>
 
         {/* Rank Ladder */}

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import {
   Gamepad2, Globe, Megaphone, ShieldCheck, Wrench, Lock, MessageCircle,
   Users, Sparkles, BrickWall, UserCircle, Heart, Inbox, MessageSquare,
-  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen, Youtube, Trophy
+  LogOut, UsersRound, MailOpen, Clapperboard, Sword, ScrollText, Monitor, BookOpen, Youtube, Trophy, BarChart2
 } from "lucide-react";
 import { getRankForXP } from "@shared/quests";
 import {
@@ -92,6 +92,7 @@ export function AppSidebar() {
     { name: "Movies", path: "/movies", icon: Clapperboard },
     { name: "HorizonTube", path: "/horizontube", icon: Youtube },
     { name: "Ranks & Quests", path: "/ranks", icon: Trophy },
+    { name: "Leaderboard", path: "/leaderboard", icon: BarChart2 },
     { name: "Games Portal", path: "/games", icon: Gamepad2 },
     { name: "Dragon X V2", path: "/eaglercraft", icon: Sword },
     { name: "Eaglercraft Launcher", path: "/eaglercraft-launcher", icon: Monitor },

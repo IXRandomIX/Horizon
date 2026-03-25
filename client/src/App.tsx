@@ -26,6 +26,7 @@ import GlobalInboxPage from "@/pages/global-inbox";
 import MoviesPage from "@/pages/movies";
 import HorizonTubePage from "@/pages/horizontube";
 import RanksPage from "@/pages/ranks";
+import LeaderboardPage from "@/pages/leaderboard";
 import EaglerCraft from "@/pages/eaglercraft";
 import EaglerCraftLauncher from "@/pages/eaglercraft-launcher";
 import ChangeLogsPage from "@/pages/change-logs";
@@ -59,6 +60,7 @@ function Router() {
       <Route path="/movies" component={MoviesPage} />
       <Route path="/horizontube" component={HorizonTubePage} />
       <Route path="/ranks" component={RanksPage} />
+      <Route path="/leaderboard" component={LeaderboardPage} />
       <Route path="/eaglercraft" component={EaglerCraft} />
       <Route path="/eaglercraft-launcher" component={EaglerCraftLauncher} />
       <Route path="/change-logs" component={ChangeLogsPage} />
