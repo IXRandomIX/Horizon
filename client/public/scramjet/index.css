@@ -1,0 +1,430 @@
+@import url("https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,300;0,400;0,500;1,300;1,400&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@900&display=swap");
+
+body {
+        font-family: "Roboto", Arial, Helvetica, sans-serif;
+        margin: 0;
+        background: #000;
+        display: flex;
+        flex-direction: column;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+}
+
+.center-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        transition: opacity 0.8s ease;
+}
+
+/* ── Loading Screen ── */
+#loading-screen {
+        position: fixed;
+        inset: 0;
+        background: #000;
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+}
+
+#loading-content {
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+        align-items: flex-start;
+        padding: 0 24px;
+}
+
+.load-line {
+        font-family: "Cinzel Decorative", serif;
+        margin: 0;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+        letter-spacing: 3px;
+        color: rgba(255, 255, 255, 0.75);
+        font-size: 1rem;
+        font-weight: 400;
+        white-space: nowrap;
+}
+
+#load-line1 {
+        font-size: 1.1rem;
+        color: rgba(255, 255, 255, 0.6);
+}
+
+#load-line2 {
+        font-size: 1rem;
+        color: rgba(255, 255, 255, 0.55);
+}
+
+.load-dots {
+        font-size: 1.4rem;
+        letter-spacing: 8px;
+        color: rgba(255, 255, 255, 0.4);
+        animation: blink-dots 1.2s step-start infinite;
+}
+
+@keyframes blink-dots {
+        0%, 100% { opacity: 0; }
+        50%       { opacity: 1; }
+}
+
+.load-launch {
+        font-family: "Cinzel Decorative", serif;
+        font-size: 1.6rem;
+        font-weight: 900;
+        letter-spacing: 5px;
+        background: linear-gradient(90deg, #e040fb, #9c27b0, #5c6bc0, #42a5f5, #9c27b0, #e040fb);
+        background-size: 300% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: horizon-shift 4s ease infinite;
+}
+
+@keyframes glitch-shake {
+        0%   { transform: translate(0); }
+        10%  { transform: translate(-3px, 1px) skewX(-2deg); }
+        20%  { transform: translate(3px, -1px) skewX(2deg); }
+        30%  { transform: translate(-2px, 2px); }
+        40%  { transform: translate(2px, -2px) skewX(-1deg); }
+        50%  { transform: translate(0); }
+        60%  { transform: translate(-1px, 1px) skewX(1deg); }
+        70%  { transform: translate(1px, -1px); }
+        80%  { transform: translate(-2px, 0) skewX(-2deg); }
+        90%  { transform: translate(2px, 1px); }
+        100% { transform: translate(0); }
+}
+
+@keyframes glitch-clip-1 {
+        0%   { clip-path: inset(20% 0 60% 0); transform: translate(-4px); }
+        50%  { clip-path: inset(50% 0 10% 0); transform: translate(4px); }
+        100% { clip-path: inset(20% 0 60% 0); transform: translate(-4px); }
+}
+
+@keyframes glitch-clip-2 {
+        0%   { clip-path: inset(65% 0 5% 0); transform: translate(4px); }
+        50%  { clip-path: inset(5% 0 75% 0); transform: translate(-4px); }
+        100% { clip-path: inset(65% 0 5% 0); transform: translate(4px); }
+}
+
+.glitch-active {
+        position: relative;
+        animation: horizon-shift 4s ease infinite, glitch-shake 0.18s steps(1) infinite;
+}
+
+.glitch-active::before,
+.glitch-active::after {
+        content: attr(data-text);
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        font-family: "Cinzel Decorative", serif;
+        font-weight: 900;
+        letter-spacing: 5px;
+        font-size: inherit;
+}
+
+.glitch-active::before {
+        color: #42a5f5;
+        -webkit-text-fill-color: #42a5f5;
+        animation: glitch-clip-1 0.22s steps(1) infinite;
+        opacity: 0.7;
+}
+
+.glitch-active::after {
+        color: #e040fb;
+        -webkit-text-fill-color: #e040fb;
+        animation: glitch-clip-2 0.19s steps(1) infinite;
+        opacity: 0.7;
+}
+
+@keyframes horizon-shift {
+        0%   { background-position: 0% 50%; }
+        50%  { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+}
+
+.horizon-title {
+        font-family: "Cinzel Decorative", serif;
+        font-weight: 900;
+        font-style: normal;
+        font-size: 3rem;
+        letter-spacing: 6px;
+        margin: 0 0 8px 0;
+        background: linear-gradient(90deg, #e040fb, #9c27b0, #5c6bc0, #42a5f5, #9c27b0, #e040fb);
+        background-size: 300% auto;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        animation: horizon-shift 4s ease infinite;
+}
+
+.horizon-subtitle {
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 0.78rem;
+        text-align: center;
+        max-width: 650px;
+        margin: 0 0 12px 0;
+        line-height: 1.6;
+        padding: 0 16px;
+}
+
+.flex-center {
+        display: flex;
+        justify-content: center;
+}
+
+.header-center {
+        align-items: center;
+        flex-direction: column;
+        margin-top: 10%;
+}
+
+.left-margin {
+        margin: 0px 16px;
+}
+
+#sj-frame {
+        border: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: calc(100vh - 56px);
+        background-color: #000;
+}
+
+/* ── Browser Navigation Bar ── */
+#sj-navbar {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        height: 56px;
+        background: #000;
+        border-top: 2px solid transparent;
+        background-clip: padding-box;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        padding: 0 12px;
+        z-index: 10000;
+        box-shadow: 0 -2px 20px rgba(156, 39, 176, 0.25);
+}
+
+#sj-navbar::before {
+        content: "";
+        position: absolute;
+        top: -2px;
+        left: 0;
+        right: 0;
+        height: 2px;
+        background: linear-gradient(90deg, #e040fb, #9c27b0, #5c6bc0, #42a5f5, #9c27b0, #e040fb);
+        background-size: 300% auto;
+        animation: horizon-shift 4s ease infinite;
+}
+
+#sj-navbar button {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.75);
+        border-radius: 8px;
+        width: 38px;
+        height: 38px;
+        font-size: 1.2rem;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: background 0.15s, color 0.15s, transform 0.1s;
+        flex-shrink: 0;
+}
+
+#sj-navbar button:hover {
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+        transform: scale(1.08);
+}
+
+#sj-navbar button:active {
+        transform: scale(0.95);
+}
+
+#sj-navbar button:disabled {
+        opacity: 0.3;
+        cursor: not-allowed;
+        transform: none;
+}
+
+#nav-url {
+        flex: 1;
+        font-size: 0.78rem;
+        color: rgba(255, 255, 255, 0.45);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 0 10px;
+        font-family: "Courier New", monospace;
+}
+
+#nav-home {
+        font-size: 1.3rem !important;
+}
+
+#sj-error {
+        color: #ff6666 !important;
+        white-space: pre-wrap;
+}
+
+#sj-error-code {
+        font-size: 12px;
+        color: #fff;
+        font-family: "Courier New", Courier, monospace;
+}
+
+.logo {
+        height: 25vh;
+}
+
+.logo-wrapper .text {
+        font-size: 75px;
+        color: #fff;
+}
+
+.logo-wrapper h1 {
+        color: white;
+}
+
+footer {
+        margin: 0 16px;
+        margin-top: auto;
+        display: flex;
+        flex-direction: column;
+        line-height: 30px;
+        margin-bottom: 20px;
+}
+
+footer > div {
+        display: flex;
+        justify-content: left;
+        align-items: center;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+}
+
+footer a,
+footer span {
+        margin: 0 15px;
+        text-decoration: none;
+        color: #fff;
+        font-size: 15px;
+}
+
+footer a {
+        cursor: pointer;
+}
+
+footer a:hover {
+        text-decoration: underline;
+}
+
+.desc p {
+        width: 560px;
+        color: rgba(253, 253, 253, 0.514);
+}
+
+@keyframes glow-pulse {
+        0%   { opacity: 0.8; }
+        50%  { opacity: 1; }
+        100% { opacity: 0.8; }
+}
+
+.search-wrapper {
+        position: relative;
+        border-radius: 50px;
+        padding: 2px;
+        background: linear-gradient(90deg, #e040fb, #9c27b0, #5c6bc0, #42a5f5, #9c27b0, #e040fb);
+        background-size: 300% auto;
+        animation: horizon-shift 4s ease infinite, glow-pulse 2.5s ease infinite;
+        margin-top: 5px;
+}
+
+.search-wrapper::before {
+        content: "";
+        position: absolute;
+        inset: -3px;
+        border-radius: 54px;
+        background: linear-gradient(90deg, #e040fb, #9c27b0, #5c6bc0, #42a5f5, #9c27b0, #e040fb);
+        background-size: 300% auto;
+        animation: horizon-shift 4s ease infinite;
+        filter: blur(10px);
+        opacity: 0.5;
+        z-index: -1;
+}
+
+#sj-address {
+        background: #000;
+        font-family: inherit;
+        padding: 0 20px;
+        height: 48px;
+        border: none;
+        outline: none;
+        width: 380px;
+        border-radius: 50px;
+        color: #fff;
+        font-size: 0.95rem;
+        display: block;
+}
+
+#sj-address::placeholder {
+        color: rgba(255, 255, 255, 0.4);
+}
+
+.credit {
+        border-radius: 10px;
+        padding: 10px;
+        display: block;
+        border: #fff 1px solid;
+        color: #fff;
+        display: flex;
+        flex-wrap: wrap;
+        margin-bottom: 15px;
+}
+
+.credit label {
+        margin-left: auto;
+        margin-right: 15px;
+}
+
+.credit a,
+.credit label {
+        color: white;
+        text-decoration: underline;
+        text-align: right;
+}
+
+.credit pre {
+        display: none;
+        width: 100%;
+}
+
+.credit label::after {
+        content: "show license";
+        cursor: pointer;
+}
+
+.credit input:checked + label::after {
+        content: "hide license";
+}
+
+.credit input:checked ~ pre {
+        display: block;
+}

@@ -1,0 +1,63 @@
+<!doctype html>
+<html>
+        <head>
+                <meta charset="utf-8" />
+                <meta
+                        name="viewport"
+                        content="width=device-width, initial-scale=1.0, shrink-to-fit=no"
+                />
+                <title>Horizon Browser</title>
+
+                <link rel="shortcut icon" content="favicon.webp" />
+        
+                <script src="/scram/scramjet.all.js"></script>
+                <script src="/baremux/index.js"></script>
+                
+                <link rel="stylesheet" href="index.css" />
+                <script src="register-sw.js" defer></script>
+                <script src="search.js" defer></script>
+                <script src="index.js" defer></script>
+                <script src="loading.js" defer></script>
+        </head>
+
+        <body>
+                <!-- Loading Screen -->
+                <div id="loading-screen">
+                        <div id="loading-content">
+                                <p id="load-line1" class="load-line"></p>
+                                <p id="load-line2" class="load-line"></p>
+                                <p id="load-line3" class="load-line load-dots"></p>
+                                <p id="load-line4" class="load-line load-launch"></p>
+                        </div>
+                </div>
+
+                <!-- Main Content (hidden until loading done) -->
+                <div class="center-wrapper" id="main-content" style="opacity:0;pointer-events:none;">
+                        <h1 class="horizon-title">HORIZON BROWSER</h1>
+                        <p class="horizon-subtitle">Before using this browser put duckduckgo.com in the search bar before starting, if it ever shows a scramjet error, press the reload button on the bottom a few times to get it working, not the refresh button on your computer</p>
+                        <form id="sj-form" class="flex-center">
+                                <input
+                                        id="sj-search-engine"
+                                        value="https://www.google.com/search?q=%s"
+                                        type="hidden"
+                                />
+                                <div class="search-wrapper">
+                                        <input id="sj-address" type="text" placeholder="Search because yes" />
+                                </div>
+                        </form>
+                        <div class="desc left-margin">
+                                <p id="sj-error"></p>
+                                <pre id="sj-error-code"></pre>
+                        </div>
+                </div>
+
+                <!-- Browser Nav Bar (shown when proxy iframe is active) -->
+                <div id="sj-navbar" style="display:none;">
+                        <button id="nav-back" title="Go back">&#8592;</button>
+                        <button id="nav-forward" title="Go forward">&#8594;</button>
+                        <button id="nav-reload" title="Reload">&#8635;</button>
+                        <span id="nav-url"></span>
+                        <button id="nav-home" title="Go home">&#8962;</button>
+                </div>
+        </body>
+</html>

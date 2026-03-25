@@ -6,6 +6,7 @@ import { QUESTS, getRankForXP } from "@shared/quests";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import express from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
@@ -147,6 +148,35 @@ async function isStaffUser(username: string): Promise<boolean> {
 }
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
+  // ─── Scramjet Proxy Setup ─────────────────────────────────────────────────
+  const scramjetDistPath = path.join(process.cwd(), "node_modules/@mercuryworkshop/scramjet/dist");
+  const libcurlDistPath  = path.join(process.cwd(), "node_modules/@mercuryworkshop/libcurl-transport/dist");
+  const baremuxDistPath  = path.join(process.cwd(), "node_modules/@mercuryworkshop/bare-mux/dist");
+  const scramjetPublicPath = path.join(process.cwd(), "client/public/scramjet");
+
+  // Add COOP/COEP headers required by Scramjet (SharedArrayBuffer)
+  app.use("/scramjet", (_req, res, next) => {
+    res.setHeader("Cross-Origin-Opener-Policy", "same-origin");
+    res.setHeader("Cross-Origin-Embedder-Policy", "require-corp");
+    next();
+  });
+
+  app.use("/scramjet", express.static(scramjetPublicPath));
+  app.use("/scram",    express.static(scramjetDistPath));
+  app.use("/libcurl",  express.static(libcurlDistPath));
+  app.use("/baremux",  express.static(baremuxDistPath));
+
+  // Wisp WebSocket handler for Scramjet transport
+  const { server: wispServer } = await import("@mercuryworkshop/wisp-js/server") as any;
+  httpServer.on("upgrade", (req: any, socket: any, head: any) => {
+    if (req.url?.endsWith("/wisp/")) {
+      wispServer.routeRequest(req, socket, head);
+    } else {
+      socket.end();
+    }
+  });
+  // ─── End Scramjet Setup ───────────────────────────────────────────────────
+
   const CHAT_TIME_MAP: Record<string, number> = {
     "30 seconds": 30 * 1000,
     "1 minute": 60 * 1000,
