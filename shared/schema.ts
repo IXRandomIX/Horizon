@@ -65,12 +65,21 @@ export const users = pgTable("users", {
   xp: integer("xp").default(0),
 });
 
+export const questCycles = pgTable("quest_cycles", {
+  id: serial("id").primaryKey(),
+  questIds: text("quest_ids").array().notNull(),
+  startedAt: timestamp("started_at").notNull().defaultNow(),
+});
+
+export type QuestCycle = typeof questCycles.$inferSelect;
+
 export const userQuestProgress = pgTable("user_quest_progress", {
   id: serial("id").primaryKey(),
   username: text("username").notNull(),
   questId: text("quest_id").notNull(),
   progress: integer("progress").default(0),
   completed: boolean("completed").default(false),
+  cycleId: integer("cycle_id").notNull().default(0),
 });
 
 export const proxies = pgTable("proxies", {

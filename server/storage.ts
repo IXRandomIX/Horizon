@@ -1,5 +1,6 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, questCycles, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack } from "@shared/schema";
+import { QUESTS } from "@shared/quests";
 import { eq, and, or, sql, ne, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
@@ -87,9 +88,10 @@ export interface IStorage {
   // XP & Quests
   getUserXP(username: string): Promise<number>;
   addUserXP(username: string, amount: number): Promise<number>;
-  getQuestProgress(username: string): Promise<any[]>;
-  incrementQuestProgress(username: string, questId: string, amount: number): Promise<{ progress: number; completed: boolean }>;
-  markQuestCompleted(username: string, questId: string): Promise<void>;
+  getCurrentCycle(): Promise<{ id: number; questIds: string[]; startedAt: Date; nextResetAt: Date }>;
+  getQuestProgress(username: string, cycleId: number): Promise<any[]>;
+  incrementQuestProgress(username: string, questId: string, amount: number, cycleId: number): Promise<{ progress: number; completed: boolean }>;
+  markQuestCompleted(username: string, questId: string, cycleId: number): Promise<void>;
 
   // Change Log
   getChangeLogEntries(): Promise<ChangeLogEntry[]>;
@@ -448,34 +450,63 @@ export class DatabaseStorage implements IStorage {
     return newXP;
   }
 
-  async getQuestProgress(username: string): Promise<any[]> {
-    return await db.select().from(userQuestProgress).where(eq(userQuestProgress.username, username));
+  async getCurrentCycle(): Promise<{ id: number; questIds: string[]; startedAt: Date; nextResetAt: Date }> {
+    const CYCLE_MS = 5 * 60 * 60 * 1000; // 5 hours
+    const [latest] = await db.select().from(questCycles).orderBy(desc(questCycles.id)).limit(1);
+    if (!latest || Date.now() - latest.startedAt.getTime() >= CYCLE_MS) {
+      return this.createNewCycle();
+    }
+    const nextResetAt = new Date(latest.startedAt.getTime() + CYCLE_MS);
+    return { id: latest.id, questIds: latest.questIds as string[], startedAt: latest.startedAt, nextResetAt };
   }
 
-  async incrementQuestProgress(username: string, questId: string, amount: number): Promise<{ progress: number; completed: boolean }> {
+  private async createNewCycle(): Promise<{ id: number; questIds: string[]; startedAt: Date; nextResetAt: Date }> {
+    const CYCLE_MS = 5 * 60 * 60 * 1000;
+    const byType: Record<string, string[]> = {};
+    for (const q of QUESTS) {
+      if (!byType[q.type]) byType[q.type] = [];
+      byType[q.type].push(q.id);
+    }
+    const selected: string[] = [];
+    for (const ids of Object.values(byType)) {
+      const shuffled = [...ids].sort(() => Math.random() - 0.5);
+      selected.push(...shuffled.slice(0, 2));
+    }
+    const [cycle] = await db.insert(questCycles).values({ questIds: selected, startedAt: new Date() }).returning();
+    const nextResetAt = new Date(cycle.startedAt.getTime() + CYCLE_MS);
+    return { id: cycle.id, questIds: cycle.questIds as string[], startedAt: cycle.startedAt, nextResetAt };
+  }
+
+  async getQuestProgress(username: string, cycleId: number): Promise<any[]> {
+    return await db.select().from(userQuestProgress).where(
+      and(eq(userQuestProgress.username, username), eq(userQuestProgress.cycleId, cycleId))
+    );
+  }
+
+  async incrementQuestProgress(username: string, questId: string, amount: number, cycleId: number): Promise<{ progress: number; completed: boolean }> {
     const [existing] = await db.select().from(userQuestProgress).where(
-      and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId))
+      and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId), eq(userQuestProgress.cycleId, cycleId))
     );
     if (existing) {
       if (existing.completed) return { progress: existing.progress ?? 0, completed: true };
       const newProgress = (existing.progress ?? 0) + amount;
       const [updated] = await db.update(userQuestProgress)
         .set({ progress: newProgress })
-        .where(and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId)))
+        .where(and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId), eq(userQuestProgress.cycleId, cycleId)))
         .returning();
       return { progress: updated.progress ?? 0, completed: updated.completed ?? false };
     } else {
       const [created] = await db.insert(userQuestProgress)
-        .values({ username, questId, progress: amount, completed: false })
+        .values({ username, questId, progress: amount, completed: false, cycleId })
         .returning();
       return { progress: created.progress ?? 0, completed: created.completed ?? false };
     }
   }
 
-  async markQuestCompleted(username: string, questId: string): Promise<void> {
+  async markQuestCompleted(username: string, questId: string, cycleId: number): Promise<void> {
     await db.update(userQuestProgress)
       .set({ completed: true })
-      .where(and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId)));
+      .where(and(eq(userQuestProgress.username, username), eq(userQuestProgress.questId, questId), eq(userQuestProgress.cycleId, cycleId)));
   }
 }
 

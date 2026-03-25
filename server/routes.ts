@@ -103,12 +103,13 @@ async function requirePermission(permission: string, req: any, res: any): Promis
   return true;
 }
 
-async function trackXPAction(username: string, type: string): Promise<void> {
-  const relevantQuests = QUESTS.filter(q => q.type === type);
+async function trackXPAction(username: string, type: string, cycle?: { id: number; questIds: string[] }): Promise<void> {
+  const activeCycle = cycle ?? await storage.getCurrentCycle();
+  const relevantQuests = QUESTS.filter(q => q.type === type && activeCycle.questIds.includes(q.id));
   for (const quest of relevantQuests) {
-    const result = await storage.incrementQuestProgress(username, quest.id, 1);
+    const result = await storage.incrementQuestProgress(username, quest.id, 1, activeCycle.id);
     if (!result.completed && result.progress >= quest.target) {
-      await storage.markQuestCompleted(username, quest.id);
+      await storage.markQuestCompleted(username, quest.id, activeCycle.id);
       await storage.addUserXP(username, quest.xp);
     }
   }
@@ -713,10 +714,17 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const caller = await getSessionUser(req);
     if (!caller) return res.status(401).json({ message: "Unauthorized" });
     const staff = await isStaffUser(caller);
-    const xp = staff ? Infinity : await storage.getUserXP(caller);
-    const rank = staff ? { rank: -1, name: "STAFF", xpNeeded: 0, color: "#FFD700" } : getRankForXP(xp);
-    const questProgress = await storage.getQuestProgress(caller);
-    res.json({ xp: staff ? null : xp, rank, questProgress, isStaff: staff });
+    const cycle = await storage.getCurrentCycle();
+    const xp = staff ? null : await storage.getUserXP(caller);
+    const rank = staff ? { rank: -1, name: "STAFF", xpNeeded: 0, color: "#FFD700" } : getRankForXP(xp ?? 0);
+    const questProgress = staff ? [] : await storage.getQuestProgress(caller, cycle.id);
+    res.json({
+      xp,
+      rank,
+      questProgress,
+      isStaff: staff,
+      cycle: { id: cycle.id, questIds: cycle.questIds, nextResetAt: cycle.nextResetAt.toISOString() }
+    });
   });
 
   app.post("/api/xp/track", async (req, res) => {
@@ -726,7 +734,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (staff) return res.json({ ok: true });
     const { type } = req.body;
     if (!type) return res.status(400).json({ message: "type required" });
-    await trackXPAction(caller, type);
+    const cycle = await storage.getCurrentCycle();
+    await trackXPAction(caller, type, cycle);
     const xp = await storage.getUserXP(caller);
     const rank = getRankForXP(xp);
     res.json({ xp, rank });
