@@ -1846,6 +1846,42 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
         return isTV
           ? `https://player.smashy.stream/tv?tmdb=${id}&s=${season}&e=${episode}`
           : `https://player.smashy.stream/movie?tmdb=${id}`;
+      case "vidify":
+        return isTV
+          ? `https://player.vidify.top/embed/tv/${id}/${season}/${episode}?autoplay=false&poster=true`
+          : `https://player.vidify.top/embed/movie/${id}?autoplay=false&poster=true`;
+      case "vidsrcco":
+        return isTV
+          ? `https://player.vidsrc.co/embed/tv/${id}/${season}/${episode}?server=2`
+          : `https://player.vidsrc.co/embed/movie/${id}?server=2`;
+      case "autoembed":
+        return isTV
+          ? `https://player.autoembed.cc/embed/tv/${id}/${season}/${episode}`
+          : `https://player.autoembed.cc/embed/movie/${id}?server=1`;
+      case "vidsrcicu":
+        return isTV
+          ? `https://vidsrc.icu/embed/tv/${id}/${season}/${episode}`
+          : `https://vidsrc.icu/embed/movie/${id}`;
+      case "moviekex":
+        return isTV
+          ? `https://moviekex.online/embed/tv/${id}/${season}/${episode}`
+          : `https://moviekex.online/embed/movie/${id}`;
+      case "vidsrccc":
+        return isTV
+          ? `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`
+          : `https://vidsrc.cc/v2/embed/movie/${id}`;
+      case "moviesapi":
+        return isTV
+          ? `https://moviesapi.club/tv/${id}-${season}-${episode}`
+          : `https://moviesapi.club/movie/${id}`;
+      case "vidlink":
+        return isTV
+          ? `https://vidlink.pro/tv/${id}/${season}/${episode}?autoplay=false&poster=true&primaryColor=00c1db`
+          : `https://vidlink.pro/movie/${id}?autoplay=true&poster=true&primaryColor=00c1db`;
+      case "vidora":
+        return isTV
+          ? `https://vidora.su/tv/${id}/${season}/${episode}?colour=dba4b2&autoplay=true`
+          : `https://vidora.su/movie/${id}?colour=dba4b2&autoplay=true`;
       default:
         return isTV
           ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`
@@ -1854,7 +1890,11 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   }
 
   // Source priority order for automatic fallback (smashy first — broad anime coverage, self-contained SPA)
-  const SOURCE_FALLBACK_ORDER = ["smashy", "vidsrc2", "superembed", "vidsrc", "embedsu"];
+  const SOURCE_FALLBACK_ORDER = [
+    "smashy", "vidsrc2", "vidify", "vidsrcco", "autoembed",
+    "vidsrcicu", "moviekex", "vidsrccc", "moviesapi", "vidlink",
+    "superembed", "vidsrc", "embedsu", "vidora",
+  ];
 
   // Detect "unavailable" responses from player sites so we can fallback
   function looksUnavailable(html: string): boolean {

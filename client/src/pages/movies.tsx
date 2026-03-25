@@ -64,6 +64,15 @@ const SOURCES = [
   { id: "vidsrc2",    label: "VidSrc 2"    },
   { id: "embedsu",    label: "Embed.su"    },
   { id: "superembed", label: "SuperEmbed"  },
+  { id: "vidify",     label: "Vidify"      },
+  { id: "vidsrcco",   label: "VidSrc.co"   },
+  { id: "autoembed",  label: "AutoEmbed"   },
+  { id: "vidsrcicu",  label: "VidSrc ICU"  },
+  { id: "moviekex",   label: "MovieKex"    },
+  { id: "vidsrccc",   label: "VidSrc CC"   },
+  { id: "moviesapi",  label: "MoviesAPI"   },
+  { id: "vidlink",    label: "VidLink"     },
+  { id: "vidora",     label: "Vidora"      },
 ] as const;
 type SourceId = typeof SOURCES[number]["id"];
 
