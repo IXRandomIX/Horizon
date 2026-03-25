@@ -106,10 +106,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.createProxy({ name: "Lunaar", url: "https://vps-d38e82a1.vps.ovh.us/", useWebview: true });
         await storage.createProxy({ name: "Platinum", url: "https://the.chicanoveterans.org/@", useWebview: true });
       }
-      const roles = await storage.getRoles();
+      const ALL_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "talk_in_private", "manage_proxies"];
+      let roles = await storage.getRoles();
       if (roles.length === 0) {
-        await storage.createRole({ name: "Owner", color: "#FFD700", permissions: ["admin_panel", "manage_channels", "server_settings", "manage_roles"], displayOnBoard: true });
-        await storage.createRole({ name: "Admin", color: "#A855F7", permissions: ["admin_panel", "manage_channels"], displayOnBoard: true });
+        await storage.createRole({ name: "Owner", color: "#FFD700", permissions: ALL_PERMISSIONS, displayOnBoard: true });
+        await storage.createRole({ name: "Admin", color: "#A855F7", permissions: ["admin_panel", "manage_channels", "talk_in_private"], displayOnBoard: true });
+        await storage.createRole({ name: "CO OWNER", color: "#ef4444", permissions: ALL_PERMISSIONS, displayOnBoard: true });
+        roles = await storage.getRoles();
+      }
+      // Ensure CO OWNER role exists
+      const coOwnerRole = roles.find((r: any) => r.name === "CO OWNER");
+      if (!coOwnerRole) {
+        await storage.createRole({ name: "CO OWNER", color: "#ef4444", permissions: ALL_PERMISSIONS, displayOnBoard: true });
+      }
+      // Ensure Admin role has talk_in_private
+      const adminRole = roles.find((r: any) => r.name === "Admin");
+      if (adminRole && !adminRole.permissions.includes("talk_in_private")) {
+        await storage.updateRole(adminRole.id, { permissions: [...adminRole.permissions, "talk_in_private"] });
       }
       const adminUser = await storage.getUser(ADMIN_USER);
       if (adminUser && !adminUser.roles.includes("Owner")) {
@@ -561,6 +574,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.post("/api/chat/channels/:channelId/messages", async (req, res) => {
     const sessionUsername = await getSessionUser(req);
     if (!sessionUsername) return res.status(401).json({ message: "Unauthorized" });
+    // Enforce readOnlyPublic: only allow posting if user has talk_in_private or is owner
+    const allChannels = await storage.getChannels();
+    const targetChannel = allChannels.find((c: any) => c.id === Number(req.params.channelId));
+    if (targetChannel?.readOnlyPublic && sessionUsername !== ADMIN_USER) {
+      const allowed = await requirePermission("talk_in_private", req, res);
+      if (!allowed) return;
+    }
     const { content, replyToId, replyToUsername, replyToContent } = req.body;
     const username = sessionUsername;
     const user = await storage.getUser(username);
@@ -632,19 +652,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/proxies", async (req, res) => {
-    if (!await requirePermission("admin_panel", req, res)) return;
+    if (!await requirePermission("manage_proxies", req, res)) return;
     const proxy = await storage.createProxy(req.body);
     res.status(201).json(proxy);
   });
 
   app.patch("/api/proxies/:id", async (req, res) => {
-    if (!await requirePermission("admin_panel", req, res)) return;
+    if (!await requirePermission("manage_proxies", req, res)) return;
     const proxy = await storage.updateProxy(Number(req.params.id), req.body);
     res.json(proxy);
   });
 
   app.delete("/api/proxies/:id", async (req, res) => {
-    if (!await requirePermission("admin_panel", req, res)) return;
+    if (!await requirePermission("manage_proxies", req, res)) return;
     await storage.deleteProxy(Number(req.params.id));
     res.status(204).end();
   });

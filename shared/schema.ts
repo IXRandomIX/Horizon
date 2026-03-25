@@ -13,6 +13,7 @@ export const channels = pgTable("channels", {
   name: text("name").notNull(),
   isPrivate: boolean("is_private").default(false),
   allowedUsers: text("allowed_users").array().default(sql`'{}'::text[]`),
+  readOnlyPublic: boolean("read_only_public").default(false),
 });
 
 export const roles = pgTable("roles", {

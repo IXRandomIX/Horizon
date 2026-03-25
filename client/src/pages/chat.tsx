@@ -115,6 +115,7 @@ export default function Chat() {
   const [newChannelName, setNewChannelName] = useState("");
   const [isPrivate, setIsPrivate] = useState(false);
   const [allowedUsers, setAllowedUsers] = useState("");
+  const [readOnlyPublic, setReadOnlyPublic] = useState(false);
   const [roles, setRoles] = useState<any[]>([]);
   const [newRoleName, setNewRoleName] = useState("");
   const [newRoleColor, setNewRoleColor] = useState("#9ca3af");
@@ -131,8 +132,30 @@ export default function Chat() {
   const { toast } = useToast();
   const { markChatRead } = useNotifications();
 
-  const AVAILABLE_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "proxy_helper"];
-  const READ_ONLY_CHANNELS = ["announcements", "rules"];
+  const AVAILABLE_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "talk_in_private", "manage_proxies"];
+  const PERMISSION_LABELS: Record<string, string> = {
+    admin_panel: "Admin Panel",
+    manage_channels: "Manage Channels",
+    server_settings: "Server Settings",
+    manage_roles: "Manage Roles",
+    talk_in_private: "Talk in Private/Restricted Channels",
+    manage_proxies: "Manage Proxies",
+  };
+
+  const isChannelReadOnly = (channel: any): boolean => {
+    if (!channel) return false;
+    if (channel.readOnlyPublic) return true;
+    return false;
+  };
+
+  const canPostInChannel = (channel: any): boolean => {
+    if (!channel) return false;
+    if (!user) return false;
+    if (user.username === "RandomIX" || user.isAdmin) return true;
+    if (userHasPermission("talk_in_private")) return true;
+    if (channel.readOnlyPublic) return false;
+    return true;
+  };
 
   const userHasPermission = (permission: string): boolean => {
     if (!user) return false;
@@ -298,7 +321,8 @@ export default function Chat() {
       body: JSON.stringify({ 
         name: newChannelName, 
         isPrivate, 
-        allowedUsers: allowedUsers.split(",").map(u => u.trim()).filter(u => u) 
+        allowedUsers: allowedUsers.split(",").map(u => u.trim()).filter(u => u),
+        readOnlyPublic: !isPrivate && readOnlyPublic,
       }),
     });
     if (res.ok) {
@@ -306,6 +330,7 @@ export default function Chat() {
       setNewChannelName("");
       setIsPrivate(false);
       setAllowedUsers("");
+      setReadOnlyPublic(false);
       fetchChannels();
     }
   };
@@ -635,7 +660,7 @@ export default function Chat() {
       <div className="w-64 border-r border-white/5 bg-black/50 flex flex-col hidden md:flex">
         <div className="p-4 border-b border-white/5 flex items-center justify-between">
           <h2 className="font-display font-bold text-lg tracking-widest text-gradient-animated">CHANNELS</h2>
-          {user.isAdmin && (
+          {userHasPermission("manage_channels") && (
             <Dialog open={showChannelsPanel} onOpenChange={setShowChannelsPanel}>
               <DialogTrigger asChild>
                 <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white"><Plus className="w-4 h-4" /></Button>
@@ -646,11 +671,17 @@ export default function Chat() {
                   <div className="space-y-2">
                     <Input placeholder="Channel Name" value={newChannelName} onChange={(e) => setNewChannelName(e.target.value)} className="bg-white/5 border-white/10" />
                     <div className="flex items-center gap-2">
-                      <input type="checkbox" id="private" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} />
+                      <input type="checkbox" id="private" checked={isPrivate} onChange={(e) => { setIsPrivate(e.target.checked); if (e.target.checked) setReadOnlyPublic(false); }} />
                       <label htmlFor="private" className="text-sm text-white">Private Channel</label>
                     </div>
                     {isPrivate && (
                       <Input placeholder="Allowed Users (comma separated)" value={allowedUsers} onChange={(e) => setAllowedUsers(e.target.value)} className="bg-white/5 border-white/10" />
+                    )}
+                    {!isPrivate && (
+                      <div className="flex items-center gap-2">
+                        <input type="checkbox" id="readOnlyPublic" checked={readOnlyPublic} onChange={(e) => setReadOnlyPublic(e.target.checked)} />
+                        <label htmlFor="readOnlyPublic" className="text-sm text-white">View-only (everyone can see, only staff can post)</label>
+                      </div>
                     )}
                     <Button onClick={handleCreateChannel} className="w-full">Create Channel</Button>
                   </div>
@@ -675,7 +706,7 @@ export default function Chat() {
                   <Hash className="w-4 h-4" />
                   <span className="font-medium">{ch.name}</span>
                 </button>
-                {user.isAdmin && (
+                {userHasPermission("manage_channels") && (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
@@ -940,7 +971,7 @@ export default function Chat() {
           <form onSubmit={handleSendMessage} className={`flex gap-3 ${replyingTo ? 'rounded-b-xl' : 'rounded-xl'} bg-white/[0.02] border border-white/10 p-2 focus-within:border-primary/50 transition-all`}>
             <Popover>
               <PopoverTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><Smile className="w-5 h-5" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && !canPostInChannel(activeChannel)}><Smile className="w-5 h-5" /></Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0 bg-transparent border-0 shadow-none">
                 <EmojiPicker onSelect={(emoji) => setNewMessage(prev => prev + emoji)} />
@@ -949,7 +980,7 @@ export default function Chat() {
 
             <Dialog open={showImageUpload} onOpenChange={setShowImageUpload}>
               <DialogTrigger asChild>
-                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name)}><ImageIcon className="w-5 h-5" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="text-muted-foreground hover:text-white" disabled={activeChannel && !canPostInChannel(activeChannel)}><ImageIcon className="w-5 h-5" /></Button>
               </DialogTrigger>
               <DialogContent className="bg-black border-white/10">
                 <DialogHeader><DialogTitle className="text-white">Send Image or GIF</DialogTitle></DialogHeader>
@@ -983,13 +1014,13 @@ export default function Chat() {
             </Dialog>
 
             <Input 
-              placeholder={activeChannel ? (READ_ONLY_CHANNELS.includes(activeChannel.name) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`) : "Select a channel"} 
+              placeholder={activeChannel ? (!canPostInChannel(activeChannel) ? `#${activeChannel.name} - View only` : `Message #${activeChannel.name}`) : "Select a channel"} 
               value={newMessage} 
               onChange={(e) => setNewMessage(e.target.value)}
               className="bg-transparent border-none focus-visible:ring-0 text-lg h-10"
-              disabled={!activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}
+              disabled={!activeChannel || !canPostInChannel(activeChannel)}
             />
-            <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel || (activeChannel && READ_ONLY_CHANNELS.includes(activeChannel.name) && user?.username !== "RandomIX")}>
+            <Button type="submit" size="icon" className="bg-primary hover:bg-primary/90 text-white shadow-lg shadow-primary/20" disabled={!newMessage.trim() || !activeChannel || !canPostInChannel(activeChannel)}>
               <Send className="w-5 h-5" />
             </Button>
           </form>
@@ -1025,14 +1056,14 @@ export default function Chat() {
                             <h4 className="text-white text-sm font-bold">Create New Role</h4>
                             <Input placeholder="Role Name" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} className="bg-white/5 border-white/10" />
                             <Input type="color" value={newRoleColor} onChange={(e) => setNewRoleColor(e.target.value)} className="h-10 w-full bg-transparent p-0 border-none" />
-                            <div className="grid grid-cols-2 gap-2 text-white text-xs">
+                            <div className="grid grid-cols-1 gap-2 text-white text-xs">
                               {AVAILABLE_PERMISSIONS.map(perm => (
                                 <div key={perm} className="flex items-center gap-2">
                                   <input type="checkbox" checked={rolePermissions.includes(perm)} onChange={(e) => {
                                     if (e.target.checked) setRolePermissions([...rolePermissions, perm]);
                                     else setRolePermissions(rolePermissions.filter(p => p !== perm));
                                   }} />
-                                  <label>{perm === "proxy_helper" ? "Proxy Helper" : perm.replace("_", " ")}</label>
+                                  <label>{PERMISSION_LABELS[perm] ?? perm.replace(/_/g, " ")}</label>
                                 </div>
                               ))}
                             </div>
@@ -1115,7 +1146,7 @@ export default function Chat() {
                     </Dialog>
                     )}
                   </div>
-                  {userHasPermission("proxy_helper") && (
+                  {userHasPermission("manage_proxies") && (
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Proxies</label>
                     <Dialog>
