@@ -289,7 +289,7 @@ export default function Chat() {
   useEffect(() => {
     if (user) {
       fetchBanStatus();
-      const interval = setInterval(fetchBanStatus, 15000);
+      const interval = setInterval(fetchBanStatus, 3000);
       return () => clearInterval(interval);
     }
   }, [user, fetchBanStatus]);
