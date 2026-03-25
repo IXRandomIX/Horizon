@@ -74,15 +74,8 @@ form.addEventListener("submit", async (event) => {
 
         const url = search(address.value, searchEngine.value);
 
-        let wispUrl =
-                (location.protocol === "https:" ? "wss" : "ws") +
-                "://" +
-                location.host +
-                "/wisp/";
-        if ((await connection.getTransport()) !== "/libcurl/index.mjs?v=3") {
-                await connection.setTransport("/libcurl/index.mjs?v=3", [
-                        { websocket: wispUrl },
-                ]);
+        if ((await connection.getTransport()) !== "/scramjet/fetch-transport.js") {
+                await connection.setTransport("/scramjet/fetch-transport.js", []);
         }
 
         // Remove any existing frame

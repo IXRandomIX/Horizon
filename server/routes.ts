@@ -175,14 +175,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/libcurl",  express.static(libcurlDistPath));
   app.use("/baremux",  express.static(baremuxDistPath));
 
-  // Wisp WebSocket handler for Scramjet transport
+  // ── Server-side HTTP proxy for Scramjet (works in dev AND production) ───────
+  // Bypasses the need for Wisp WebSocket entirely; makes real HTTP requests
+  // from the server and streams the response back to the client.
+  const STRIP_REQ_HEADERS = new Set(["host", "origin", "referer", "cookie"]);
+  const STRIP_RESP_HEADERS = new Set(["content-encoding", "transfer-encoding", "content-length"]);
+  app.post("/api/proxy-fetch", express.raw({ type: "*/*", limit: "20mb" }), async (req: any, res: any) => {
+    const targetUrl = req.headers["x-proxy-url"] as string;
+    const method = ((req.headers["x-proxy-method"] as string) || "GET").toUpperCase();
+    let reqHeaders: Record<string, string> = {};
+    try { reqHeaders = JSON.parse((req.headers["x-proxy-headers"] as string) || "{}"); } catch {}
+
+    if (!targetUrl) { res.status(400).end(); return; }
+
+    try {
+      const cleanHeaders: Record<string, string> = {};
+      for (const [k, v] of Object.entries(reqHeaders)) {
+        if (!STRIP_REQ_HEADERS.has(k.toLowerCase())) cleanHeaders[k] = String(v);
+      }
+      const fetchOpts: RequestInit = { method, headers: cleanHeaders, redirect: "manual" };
+      if (!["GET", "HEAD"].includes(method) && req.body?.length > 0) {
+        (fetchOpts as any).body = req.body;
+      }
+
+      const response = await fetch(targetUrl, fetchOpts);
+
+      const respHeaders: Record<string, string> = {};
+      response.headers.forEach((v: string, k: string) => {
+        if (!STRIP_RESP_HEADERS.has(k.toLowerCase())) respHeaders[k] = v;
+      });
+
+      res.setHeader("X-Proxy-Status", response.status.toString());
+      res.setHeader("X-Proxy-StatusText", response.statusText);
+      res.setHeader("X-Proxy-Headers", JSON.stringify(respHeaders));
+      res.setHeader("Access-Control-Expose-Headers", "X-Proxy-Status,X-Proxy-StatusText,X-Proxy-Headers");
+      const bodyBuf = Buffer.from(await response.arrayBuffer());
+      res.end(bodyBuf);
+    } catch {
+      res.status(502).end();
+    }
+  });
+
+  // Wisp WebSocket handler (kept as fallback for WebSocket-inside-proxy connections)
   const { server: wispServer } = await import("@mercuryworkshop/wisp-js/server") as any;
   httpServer.on("upgrade", (req: any, socket: any, head: any) => {
     if (req.url?.endsWith("/wisp/")) {
       wispServer.routeRequest(req, socket, head);
-    } else {
-      socket.end();
     }
+    // Don't call socket.end() — let other handlers (Vite HMR etc.) work
   });
   // ─── End Scramjet Setup ───────────────────────────────────────────────────
 
