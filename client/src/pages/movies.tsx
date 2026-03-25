@@ -228,27 +228,11 @@ interface SeasonInfo {
 }
 
 function IframePlayer({ embedUrl, backdrop }: { embedUrl: string; backdrop: string | null }) {
-  const [loaded, setLoaded] = useState(false);
-
-  // Reset loaded state when the URL changes (new movie, source, episode)
-  useEffect(() => { setLoaded(false); }, [embedUrl]);
-
   return (
     <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%", minHeight: 280 }}>
-      {/* Backdrop placeholder shown while iframe is loading */}
-      {!loaded && backdrop && (
-        <img src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
-      )}
-      {!loaded && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
-          <Loader2 className="w-10 h-10 text-primary animate-spin" />
-          <p className="text-white/60 text-sm">Loading player…</p>
-        </div>
-      )}
       <iframe
         key={embedUrl}
         src={embedUrl}
-        onLoad={() => setLoaded(true)}
         className="absolute inset-0 w-full h-full border-0"
         allowFullScreen
         allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
