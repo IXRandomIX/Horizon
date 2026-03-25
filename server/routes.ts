@@ -76,6 +76,21 @@ async function requireAdmin(req: any, res: any): Promise<boolean> {
   return true;
 }
 
+async function requirePermission(permission: string, req: any, res: any): Promise<boolean> {
+  const caller = await getSessionUser(req);
+  if (!caller) { res.status(401).json({ message: "Unauthorized" }); return false; }
+  if (caller === ADMIN_USER) return true;
+  const user = await storage.getUser(caller);
+  if (!user || !user.roles || user.roles.length === 0) {
+    res.status(403).json({ message: "Forbidden" }); return false;
+  }
+  const allRoles = await storage.getRoles();
+  const userRoles = allRoles.filter(r => user.roles.includes(r.name));
+  const hasPermission = userRoles.some(r => r.permissions && r.permissions.includes(permission));
+  if (!hasPermission) { res.status(403).json({ message: "Forbidden" }); return false; }
+  return true;
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   const setupChat = async () => {
     try {
@@ -196,7 +211,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/users/:username/roles", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_roles", req, res)) return;
     const { roles: roleNames } = req.body;
     const user = await storage.assignRolesToUser(req.params.username, roleNames);
     res.json(sanitizeUser(user));
@@ -317,7 +332,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/global-inbox", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("server_settings", req, res)) return;
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ message: "Content required" });
     const msg = await storage.createGlobalMessage(content.trim(), ADMIN_USER);
@@ -325,7 +340,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.patch("/api/global-inbox/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("server_settings", req, res)) return;
     const { content } = req.body;
     if (!content?.trim()) return res.status(400).json({ message: "Content required" });
     const msg = await storage.updateGlobalMessage(Number(req.params.id), content.trim());
@@ -333,7 +348,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.delete("/api/global-inbox/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("server_settings", req, res)) return;
     await storage.deleteGlobalMessage(Number(req.params.id));
     res.status(204).end();
   });
@@ -466,25 +481,25 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/chat/channels", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_channels", req, res)) return;
     const channel = await storage.createChannel(req.body);
     res.status(201).json(channel);
   });
 
   app.patch("/api/chat/channels/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_channels", req, res)) return;
     const channel = await storage.updateChannel(Number(req.params.id), req.body);
     res.json(channel);
   });
 
   app.delete("/api/chat/channels/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_channels", req, res)) return;
     await storage.deleteChannel(Number(req.params.id));
     res.status(204).end();
   });
 
   app.delete("/api/chat/channels/:id/messages", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_channels", req, res)) return;
     await storage.clearChannelMessages(Number(req.params.id));
     res.status(204).end();
   });
@@ -495,19 +510,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/chat/roles", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_roles", req, res)) return;
     const role = await storage.createRole(req.body);
     res.status(201).json(role);
   });
 
   app.patch("/api/chat/roles/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_roles", req, res)) return;
     const role = await storage.updateRole(Number(req.params.id), req.body);
     res.json(role);
   });
 
   app.delete("/api/chat/roles/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_roles", req, res)) return;
     await storage.deleteRole(Number(req.params.id));
     res.status(204).end();
   });
@@ -532,7 +547,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/chat/users/:username/roles", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("manage_roles", req, res)) return;
     const { roles: roleNames } = req.body;
     const user = await storage.assignRolesToUser(req.params.username, roleNames);
     res.json(sanitizeUser(user));
@@ -617,19 +632,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.post("/api/proxies", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("admin_panel", req, res)) return;
     const proxy = await storage.createProxy(req.body);
     res.status(201).json(proxy);
   });
 
   app.patch("/api/proxies/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("admin_panel", req, res)) return;
     const proxy = await storage.updateProxy(Number(req.params.id), req.body);
     res.json(proxy);
   });
 
   app.delete("/api/proxies/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("admin_panel", req, res)) return;
     await storage.deleteProxy(Number(req.params.id));
     res.status(204).end();
   });
@@ -2918,7 +2933,7 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   });
 
   app.post("/api/changelog", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("server_settings", req, res)) return;
     const { content, imageUrl } = req.body;
     if (!content?.trim()) return res.status(400).json({ message: "Content required" });
     const entry = await storage.createChangeLogEntry(content.trim(), imageUrl || "");
@@ -2926,14 +2941,14 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   });
 
   app.patch("/api/changelog/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("server_settings", req, res)) return;
     const { content, imageUrl } = req.body;
     const entry = await storage.updateChangeLogEntry(Number(req.params.id), content, imageUrl);
     res.json(entry);
   });
 
   app.delete("/api/changelog/:id", async (req, res) => {
-    if (!await requireAdmin(req, res)) return;
+    if (!await requirePermission("server_settings", req, res)) return;
     await storage.deleteChangeLogEntry(Number(req.params.id));
     res.status(204).end();
   });
