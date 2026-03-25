@@ -1,8 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, ChevronRight, Loader2 } from "lucide-react";
+import { Search, X, Maximize2, Minimize2, Play, Film, Tv, Star, Clock, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import Hls from "hls.js";
 
 const TMDB_IMG = "https://image.tmdb.org/t/p/w342";
 const TMDB_BACKDROP = "https://image.tmdb.org/t/p/w780";
@@ -59,23 +58,24 @@ function getYear(m: Media) {
   return d ? d.substring(0, 4) : "";
 }
 
-function getStreamUrl(m: Media, season?: number, episode?: number) {
-  if (m.media_type === "tv") {
-    return `/api/movies/m3u8?type=tv&id=${m.id}&s=${season || 1}&e=${episode || 1}`;
-  }
-  return `/api/movies/m3u8?type=movie&id=${m.id}`;
-}
+const SOURCES = [
+  { id: "vidsrc",     label: "VidSrc"      },
+  { id: "vidsrc2",    label: "VidSrc 2"    },
+  { id: "embedsu",    label: "Embed.su"    },
+  { id: "superembed", label: "SuperEmbed"  },
+] as const;
+type SourceId = typeof SOURCES[number]["id"];
 
-function getEmbedUrl(m: Media, season?: number, episode?: number) {
-  const s = season || 1;
-  const e = episode || 1;
-  if (m.media_type === "tv") {
-    return `/api/movies/embed?type=tv&id=${m.id}&s=${s}&e=${e}`;
-  }
-  return `/api/movies/embed?type=movie&id=${m.id}`;
+function getEmbedUrl(m: Media, season: number, episode: number, source: SourceId) {
+  const params = new URLSearchParams({
+    type: m.media_type,
+    id: String(m.id),
+    s: String(season),
+    e: String(episode),
+    source,
+  });
+  return `/api/movies/embed?${params}`;
 }
-
-const POPUP_BLOCKER = `(function(){var _wo=window.open;window.open=function(){return null};})();`;
 
 function saveToHistory(m: Media) {
   try {
@@ -183,119 +183,33 @@ interface SeasonInfo {
   episodeCount: number;
 }
 
-function HlsVideoPlayer({
-  streamUrl,
-  embedUrl,
-  backdrop,
-}: {
-  streamUrl: string;
-  embedUrl: string;
-  backdrop: string | null;
-}) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
-  const iframeRef = useRef<HTMLIFrameElement>(null);
-  // Start in "hls" attempt mode; fall back to iframe if HLS fails
-  const [mode, setMode] = useState<"hls-loading" | "hls-ready" | "iframe">("hls-loading");
-  const [iframeLoaded, setIframeLoaded] = useState(false);
+function IframePlayer({ embedUrl, backdrop }: { embedUrl: string; backdrop: string | null }) {
+  const [loaded, setLoaded] = useState(false);
 
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-
-    setMode("hls-loading");
-
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-
-    const fallback = () => setMode("iframe");
-
-    if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, maxBufferLength: 30 });
-      hlsRef.current = hls;
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setMode("hls-ready");
-        video.play().catch(() => {});
-      });
-
-      hls.on(Hls.Events.ERROR, (_evt, data) => {
-        if (data.fatal) fallback();
-      });
-
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = streamUrl;
-      video.addEventListener("loadedmetadata", () => {
-        setMode("hls-ready");
-        video.play().catch(() => {});
-      }, { once: true });
-      video.addEventListener("error", fallback, { once: true });
-    } else {
-      fallback();
-    }
-
-    // If HLS doesn't resolve in 6 seconds, fall back immediately
-    const timeout = setTimeout(fallback, 6000);
-
-    return () => {
-      clearTimeout(timeout);
-      hlsRef.current?.destroy();
-      hlsRef.current = null;
-    };
-  }, [streamUrl]);
-
-  // Pre-load the iframe in background while HLS is attempting
-  // so when we fall back it's already loaded or loading
-  const showIframe = mode === "iframe";
+  // Reset loaded state when the URL changes (new movie, source, episode)
+  useEffect(() => { setLoaded(false); }, [embedUrl]);
 
   return (
     <div className="relative w-full bg-black" style={{ paddingBottom: "56.25%", minHeight: 280 }}>
-      {backdrop && mode === "hls-loading" && !iframeLoaded && (
-        <img src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover opacity-30" />
+      {/* Backdrop placeholder shown while iframe is loading */}
+      {!loaded && backdrop && (
+        <img src={backdrop} alt="" className="absolute inset-0 w-full h-full object-cover opacity-20" />
       )}
-
-      {/* Native HLS video element */}
-      <video
-        ref={videoRef}
-        className="absolute inset-0 w-full h-full"
-        controls
-        playsInline
-        data-testid="video-player"
-        style={{ display: mode === "hls-ready" ? "block" : "none" }}
-      />
-
-      {/* Iframe — always mounted so it pre-loads; only shown when HLS fails */}
+      {!loaded && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
+          <Loader2 className="w-10 h-10 text-primary animate-spin" />
+          <p className="text-white/60 text-sm">Loading player…</p>
+        </div>
+      )}
       <iframe
-        ref={iframeRef}
         key={embedUrl}
         src={embedUrl}
-        onLoad={() => {
-          setIframeLoaded(true);
-          // Switch to iframe mode as soon as it's loaded — no need to wait for HLS to fail
-          setMode("iframe");
-          try {
-            const win = iframeRef.current?.contentWindow;
-            if (win) win.eval(POPUP_BLOCKER);
-          } catch { /* cross-origin — browser blocks it, that's fine */ }
-        }}
+        onLoad={() => setLoaded(true)}
         className="absolute inset-0 w-full h-full border-0"
         allowFullScreen
         allow="fullscreen; autoplay; encrypted-media; picture-in-picture"
         data-testid="iframe-player"
-        style={{ display: showIframe ? "block" : "none" }}
       />
-
-      {/* Loading spinner while HLS is attempting and iframe hasn't loaded yet */}
-      {mode === "hls-loading" && !iframeLoaded && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 z-10">
-          <Loader2 className="w-10 h-10 text-primary animate-spin" />
-          <p className="text-white/60 text-sm">Loading stream…</p>
-        </div>
-      )}
     </div>
   );
 }
@@ -304,6 +218,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [season, setSeason] = useState(1);
   const [episode, setEpisode] = useState(1);
+  const [source, setSource] = useState<SourceId>("vidsrc");
   const containerRef = useRef<HTMLDivElement>(null);
   const isTV = media.media_type === "tv";
 
@@ -319,8 +234,7 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
 
   const currentSeason = seasons.find(s => s.number === season);
   const maxEpisodes = currentSeason?.episodeCount || 24;
-  const streamUrl = getStreamUrl(media, season, episode);
-  const embedUrl = getEmbedUrl(media, season, episode);
+  const embedUrl = getEmbedUrl(media, season, episode, source);
 
   useEffect(() => {
     saveToHistory(media);
@@ -429,10 +343,10 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
           </div>
         )}
 
-        {/* HLS Video Player */}
-        <HlsVideoPlayer key={streamUrl} streamUrl={streamUrl} embedUrl={embedUrl} backdrop={backdrop} />
+        {/* Player */}
+        <IframePlayer embedUrl={embedUrl} backdrop={backdrop} />
 
-        {/* Info strip */}
+        {/* Info + source switcher strip */}
         <div className="px-4 py-3 bg-black/80 border-t border-white/5 flex items-start gap-3 flex-shrink-0">
           {media.poster_path && (
             <img
@@ -446,14 +360,34 @@ function PlayerModal({ media, onClose }: { media: Media; onClose: () => void }) 
             {media.overview && (
               <p className="text-white/50 text-xs line-clamp-2 leading-relaxed">{media.overview}</p>
             )}
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+            <div className="flex items-center gap-2 mt-2 flex-wrap">
               {media.vote_average > 0 && (
                 <span className="flex items-center gap-1 text-[10px] text-yellow-400">
                   <Star className="w-3 h-3 fill-current" />
                   {media.vote_average.toFixed(1)}
                 </span>
               )}
-              <span className="text-[10px] text-white/30">HLS · multiembed</span>
+              <span className="text-[10px] text-white/30">Source:</span>
+              <div className="flex items-center gap-1 flex-wrap">
+                {SOURCES.map(src => (
+                  <button
+                    key={src.id}
+                    data-testid={`button-source-${src.id}`}
+                    onClick={() => setSource(src.id)}
+                    className={`text-[10px] px-2 py-0.5 rounded-md border transition-colors font-medium ${
+                      source === src.id
+                        ? "bg-primary/30 border-primary/60 text-primary"
+                        : "bg-white/5 border-white/10 text-white/40 hover:text-white/70 hover:border-white/25"
+                    }`}
+                  >
+                    {src.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-[10px] text-white/20 ml-auto flex items-center gap-1">
+                <RefreshCw className="w-2.5 h-2.5" />
+                Proxied
+              </span>
             </div>
           </div>
         </div>

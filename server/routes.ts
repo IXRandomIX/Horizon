@@ -1690,17 +1690,39 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){var a=A
     res.sendStatus(204);
   });
 
-  app.get("/api/movies/embed", async (req, res) => {
-    const { type, id, s, e } = req.query as Record<string, string>;
-    if (!id) return res.status(400).send("Missing id");
-    let targetUrl: string;
-    if (type === "tv") {
-      const season = s || "1";
-      const episode = e || "1";
-      targetUrl = `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${season}&e=${episode}`;
-    } else {
-      targetUrl = `https://multiembed.mov/?video_id=${id}&tmdb=1`;
+  // Build the upstream player URL for a given source ID
+  function buildSourceUrl(source: string, type: string, id: string, s: string, e: string): string {
+    const season = s || "1";
+    const episode = e || "1";
+    const isTV = type === "tv";
+    switch (source) {
+      case "vidsrc":
+        return isTV
+          ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`
+          : `https://vidsrc.to/embed/movie/${id}`;
+      case "vidsrc2":
+        return isTV
+          ? `https://vidsrc.xyz/embed/tv/${id}?season=${season}&episode=${episode}`
+          : `https://vidsrc.xyz/embed/movie/${id}`;
+      case "embedsu":
+        return isTV
+          ? `https://embed.su/embed/tv/${id}/${season}/${episode}`
+          : `https://embed.su/embed/movie/${id}`;
+      case "superembed":
+        return isTV
+          ? `https://multiembed.mov/?video_id=${id}&tmdb=1&s=${season}&e=${episode}`
+          : `https://multiembed.mov/?video_id=${id}&tmdb=1`;
+      default:
+        return isTV
+          ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`
+          : `https://vidsrc.to/embed/movie/${id}`;
     }
+  }
+
+  app.get("/api/movies/embed", async (req, res) => {
+    const { type, id, s, e, source } = req.query as Record<string, string>;
+    if (!id) return res.status(400).send("Missing id");
+    const targetUrl = buildSourceUrl(source || "vidsrc", type || "movie", id, s || "1", e || "1");
     try {
       const response = await fetch(targetUrl, {
         headers: {
@@ -1708,6 +1730,7 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){var a=A
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "Accept-Language": "en-US,en;q=0.9",
           "Accept-Encoding": "identity",
+          "Referer": "https://www.google.com/",
         },
         redirect: "follow",
       });
