@@ -16,7 +16,6 @@ const navUrl = document.getElementById("nav-url");
 const { ScramjetController } = $scramjetLoadController();
 
 const scramjet = new ScramjetController({
-        prefix: "/scramjet/service/",
         files: {
                 wasm: "/scram/scramjet.wasm.wasm",
                 all: "/scram/scramjet.all.js",
