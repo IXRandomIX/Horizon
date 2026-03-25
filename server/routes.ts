@@ -2396,9 +2396,25 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     return out;
   }
 
-  // No video CDN interception — let googlevideo.com serve directly to the browser
-  // for maximum speed. Content blockers don't target CDN domains.
-  const GV_INTERCEPTOR = ``;
+  // Intercept googlevideo.com video stream requests and route through our proxy
+  // so they work even when the CDN domain is blocked on the user's network.
+  const GV_INTERCEPTOR = `<script>
+(function(){
+  var P='/api/yt-gvideo?u=';
+  var GV=/^https?:\\/\\/[a-z0-9.-]+\\.googlevideo\\.com/;
+  var _f=window.fetch;
+  window.fetch=function(url,opts){
+    if(typeof url==='string'&&GV.test(url))url=P+encodeURIComponent(url);
+    else if(url&&url.url&&GV.test(url.url))url=new Request(P+encodeURIComponent(url.url),url);
+    return _f.call(this,url,opts);
+  };
+  var _o=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(m,url){
+    if(typeof url==='string'&&GV.test(url))url=P+encodeURIComponent(url);
+    return _o.apply(this,[m,url].concat([].slice.call(arguments,2)));
+  };
+})();
+</script>`;
 
   // ── yt-dlp video streaming ────────────────────────────────────────────────
   // Architecture: yt-dlp spawned as child process, stdout piped directly to
@@ -2535,35 +2551,41 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   });
 
   // Streaming proxy for googlevideo.com (actual video data — must stream, not buffer)
-  app.get("/api/yt-gvideo", async (req: any, res: any) => {
+  app.get("/api/yt-gvideo", (req: any, res: any) => {
     const rawUrl = req.query.u as string;
     if (!rawUrl || !/^https?:\/\/[a-z0-9.-]+\.googlevideo\.com/.test(rawUrl)) {
       return res.status(403).send("Forbidden");
     }
-    try {
-      const upstream = await fetch(rawUrl, {
-        headers: {
-          "User-Agent": YT_UA,
-          "Referer": "https://www.youtube-nocookie.com/",
-          "Origin": "https://www.youtube-nocookie.com",
-          ...(req.headers.range ? { "Range": req.headers.range } : {}),
-        },
-        redirect: "follow",
-      });
-      res.status(upstream.status);
-      const passHeaders = ["content-type", "content-length", "content-range", "accept-ranges", "cache-control", "expires"];
+    const parsedUrl = new URL(rawUrl);
+    const isHttps = parsedUrl.protocol === "https:";
+    const mod = isHttps ? require("https") : require("http");
+    const options = {
+      hostname: parsedUrl.hostname,
+      port: parsedUrl.port || (isHttps ? 443 : 80),
+      path: parsedUrl.pathname + parsedUrl.search,
+      method: "GET",
+      headers: {
+        "User-Agent": YT_UA,
+        "Referer": "https://www.youtube-nocookie.com/",
+        "Origin": "https://www.youtube-nocookie.com",
+        ...(req.headers.range ? { "Range": req.headers.range } : {}),
+      },
+    };
+    const passHeaders = ["content-type", "content-length", "content-range", "accept-ranges", "cache-control", "expires"];
+    const proxyReq = mod.request(options, (upstream: any) => {
+      res.status(upstream.statusCode);
       for (const h of passHeaders) {
-        const v = upstream.headers.get(h);
-        if (v) res.setHeader(h, v);
+        if (upstream.headers[h]) res.setHeader(h, upstream.headers[h]);
       }
       res.setHeader("Access-Control-Allow-Origin", "*");
-      if (!upstream.body) return res.end();
-      const { Readable } = await import("stream");
-      Readable.fromWeb(upstream.body as any).pipe(res);
-    } catch (e: any) {
+      upstream.pipe(res);
+      req.on("close", () => proxyReq.destroy());
+    });
+    proxyReq.on("error", (e: any) => {
       console.error("[yt-gvideo] error:", e.message);
       if (!res.headersSent) res.status(502).json({ message: "Video stream error" });
-    }
+    });
+    proxyReq.end();
   });
 
   app.use(YT_PROXY_PATH, async (req: any, res: any) => {
