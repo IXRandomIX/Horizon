@@ -6,7 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider, useAuth } from "@/context/auth";
 import { NotificationsProvider } from "@/context/notifications";
-import NotFound from "@/pages/not-found";
 import Games from "@/pages/games";
 import Browser from "@/pages/browser";
 import Proxies from "@/pages/proxies";
@@ -62,7 +61,9 @@ function Router() {
       <Route path="/eaglercraft-launcher" component={EaglerCraftLauncher} />
       <Route path="/change-logs" component={ChangeLogsPage} />
       <Route path="/chat-rules" component={ChatRulesPage} />
-      <Route component={NotFound} />
+      <Route>
+        <Redirect to="/announcements" />
+      </Route>
     </Switch>
   );
 }
