@@ -850,8 +850,11 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(429).json({ message: "You are timed out.", timedOut: true, expiresAt: activeTimeout.expiresAt });
     }
 
-    // ── 5-second spam cooldown (skip for privileged users) ────────────────
-    if (!isPriv) {
+    // ── 5-second spam cooldown (skip only for Owner role) ────────────────
+    const senderUser = await storage.getUser(sessionUsername);
+    const senderRoles: string[] = senderUser?.roles ?? [];
+    const isOwnerExempt = sessionUsername === ADMIN_USER || senderRoles.includes("Owner");
+    if (!isOwnerExempt) {
       const last = lastMessageAt.get(sessionUsername) ?? 0;
       const elapsed = Date.now() - last;
       if (elapsed < MESSAGE_COOLDOWN_MS) {
@@ -862,7 +865,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     lastMessageAt.set(sessionUsername, Date.now());
 
     const username = sessionUsername;
-    const user = await storage.getUser(username);
+    const user = senderUser;
     const msg = await storage.createMessage({
       channelId: Number(req.params.channelId),
       username,
