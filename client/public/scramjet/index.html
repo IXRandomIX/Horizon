@@ -14,6 +14,36 @@
                 <script>
                 (async () => {
                         if (!navigator.serviceWorker) return;
+
+                        // ── IDB PRE-CREATION (ROOT-CAUSE FIX) ──────────────────────────────────────
+                        // scramjet.init() (called later from index.js) opens "$scramjet" IDB at
+                        // version 1 WITH an upgrade handler that creates the required object stores.
+                        // But the ScramjetServiceWorker constructor ALSO opens the same IDB at
+                        // version 1 WITHOUT an upgrade handler.  If the SW constructor's open
+                        // request wins the race (DB doesn't exist yet → upgradeneeded fires with
+                        // no handler → stores are never created), then init()'s open at the same
+                        // version 1 will NOT fire the upgrade again, leaving all stores absent.
+                        // Every subsequent put/get throws "object store not found", init() rejects,
+                        // and loadConfig() in the SW always returns null → proxy never works.
+                        //
+                        // Fix: open the DB here, with an upgrade handler, BEFORE we register the
+                        // SW.  Because we await this promise, the SW is only registered after the
+                        // stores exist, so the SW constructor's open always sees a populated DB.
+                        await new Promise((resolve, reject) => {
+                                const req = indexedDB.open("$scramjet", 1);
+                                req.onupgradeneeded = (e) => {
+                                        const db = e.target.result;
+                                        for (const store of ["config", "cookies", "redirectTrackers", "referrerPolicies", "publicSuffixList"]) {
+                                                if (!db.objectStoreNames.contains(store)) {
+                                                        db.createObjectStore(store);
+                                                }
+                                        }
+                                };
+                                req.onsuccess = (e) => { e.target.result.close(); resolve(); };
+                                req.onerror = () => resolve(); // non-fatal — init() will retry
+                        });
+                        // ───────────────────────────────────────────────────────────────────────────
+
                         // Unregister every old SW on every page load so stale ones never linger
                         const regs = await navigator.serviceWorker.getRegistrations();
                         for (const r of regs) await r.unregister();

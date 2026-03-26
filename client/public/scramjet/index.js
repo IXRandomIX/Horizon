@@ -76,22 +76,15 @@ form.addEventListener("submit", async (event) => {
                 throw err;
         }
 
-        // Ensure scramjet.init() has fully completed (IDB config written + config
-        // message sent to SW) before we navigate. This is the production fix:
-        // without this await the SW's loadConfig() reads an empty IDB on first visit.
+        // Ensure scramjet.init() has fully completed (IDB config written) before
+        // navigating. The IDB stores are now pre-created by the inline script in
+        // index.html BEFORE the SW is registered, which eliminates the race where
+        // the SW constructor opened the DB first (without stores) and init() then
+        // could not write the config ("object store not found").
         try {
                 await scramjetInitPromise;
         } catch (err) {
                 console.warn("scramjet.init() failed, proceeding anyway:", err);
-        }
-
-        // Re-send the config to the SW controller directly, in case it started
-        // before init() completed and therefore missed the postMessage.
-        if (navigator.serviceWorker.controller) {
-                navigator.serviceWorker.controller.postMessage({
-                        scramjet$type: "loadConfig",
-                        config: scramjet.config,
-                });
         }
 
         const url = search(address.value, searchEngine.value);
