@@ -1085,6 +1085,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Horizon AI (Gemini) ──────────────────────────────────────────────────
+  const AI_MODELS = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro"];
+
+  async function callGeminiWithFallback(apiKey: string, parts: any[]): Promise<string> {
+    const genAI = new GoogleGenerativeAI(apiKey);
+    let lastErr: any;
+    for (const modelName of AI_MODELS) {
+      try {
+        const model = genAI.getGenerativeModel({ model: modelName });
+        const result = await model.generateContent(parts);
+        return result.response.text();
+      } catch (err: any) {
+        const raw = (err.message || "").toLowerCase();
+        const isRateLimit = raw.includes("quota") || raw.includes("429") || raw.includes("resource_exhausted");
+        if (isRateLimit) {
+          lastErr = err;
+          // Wait briefly then try next model
+          await new Promise(r => setTimeout(r, 500));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastErr;
+  }
+
   app.post("/api/ai/chat", aiUpload.array("files", 20), async (req, res) => {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return res.status(503).json({ message: "Horizon AI is not configured yet. Please add your GEMINI_API_KEY in the Secrets panel." });
@@ -1093,8 +1118,6 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const files = (req.files as Express.Multer.File[]) || [];
 
     try {
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
       const systemPrompt = `You are Horizon AI — an advanced AI assistant that combines the intelligence of the best AI systems. You excel at:\n- Answering complex questions with clear, detailed explanations\n- Analyzing images, photos, and documents\n- Solving math problems step-by-step (showing all work)\n- Explaining science, code, and technical topics\n- Being helpful, accurate, and friendly\n\nWhen analyzing images or files, describe what you see in detail before answering the question. Format responses clearly with markdown when appropriate.`;
       const parts: any[] = [{ text: systemPrompt + "\n\nUser: " + (message || "Please analyze the attached file(s) and describe what you see.") }];
       for (const file of files) {
@@ -1106,13 +1129,15 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
           parts.push({ text: `\n[File: ${file.originalname}]\n${file.buffer.toString("utf-8").slice(0, 8000)}` });
         }
       }
-      const result = await model.generateContent(parts);
-      res.json({ response: result.response.text() });
+      const response = await callGeminiWithFallback(apiKey, parts);
+      res.json({ response });
     } catch (err: any) {
-      const raw = err.message || "";
+      const raw = (err.message || "").toLowerCase();
       let friendly = "AI generation failed. Please try again.";
-      if (raw.includes("quota") || raw.includes("429") || raw.includes("RESOURCE_EXHAUSTED")) friendly = "Rate limit reached. Please try again later.";
-      else if (raw.includes("API_KEY_INVALID") || raw.includes("API key")) friendly = "Invalid API key.";
+      if (raw.includes("quota") || raw.includes("429") || raw.includes("resource_exhausted"))
+        friendly = "Horizon AI is currently busy — please try again in a moment.";
+      else if (raw.includes("api_key_invalid") || raw.includes("api key"))
+        friendly = "Invalid API key.";
       res.status(500).json({ message: friendly });
     }
   });
