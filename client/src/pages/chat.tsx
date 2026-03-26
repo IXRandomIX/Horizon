@@ -642,12 +642,12 @@ export default function Chat() {
     }
   }, [messages]);
 
-  // Real-time polling for new messages
+  // Real-time polling for new messages (incremental - only fetches new ones)
   useEffect(() => {
     if (!activeChannel) return;
     const interval = setInterval(() => {
-      fetchMessages(activeChannel.id);
-    }, 2000); // Poll every 2 seconds
+      fetchMessages(activeChannel.id, true);
+    }, 4000);
     return () => clearInterval(interval);
   }, [activeChannel]);
 
@@ -662,7 +662,7 @@ export default function Chat() {
   useEffect(() => {
     if (user) {
       fetchBanStatus();
-      const interval = setInterval(fetchBanStatus, 3000);
+      const interval = setInterval(fetchBanStatus, 15000);
       return () => clearInterval(interval);
     }
   }, [user, fetchBanStatus]);
@@ -672,7 +672,7 @@ export default function Chat() {
     if (!user) return;
     const interval = setInterval(() => {
       fetchRoles();
-    }, 5000); // Poll every 5 seconds
+    }, 30000);
     return () => clearInterval(interval);
   }, [user]);
 
@@ -763,13 +763,8 @@ export default function Chat() {
     }
   };
 
-  // Real-time polling for roles
   useEffect(() => {
     fetchRoles();
-    const interval = setInterval(() => {
-      fetchRoles();
-    }, 5000); // Poll every 5 seconds
-    return () => clearInterval(interval);
   }, []);
 
   const handleCreateChannel = async () => {
@@ -854,10 +849,29 @@ export default function Chat() {
     }
   };
 
-  const fetchMessages = async (channelId: number) => {
-    const res = await fetch(`/api/chat/channels/${channelId}/messages`);
+  const lastMessageIdRef = useRef<number>(0);
+
+  const fetchMessages = async (channelId: number, incremental = false) => {
+    const sinceParam = incremental && lastMessageIdRef.current > 0
+      ? `?since=${lastMessageIdRef.current}`
+      : "";
+    const res = await fetch(`/api/chat/channels/${channelId}/messages${sinceParam}`);
     const data = await res.json();
-    setMessages(data);
+    if (!Array.isArray(data) || data.length === 0) return;
+    if (incremental) {
+      setMessages(prev => {
+        const existingIds = new Set(prev.map((m: any) => m.id));
+        const newMsgs = data.filter((m: any) => !existingIds.has(m.id));
+        if (newMsgs.length === 0) return prev;
+        const maxId = Math.max(...newMsgs.map((m: any) => m.id));
+        if (maxId > lastMessageIdRef.current) lastMessageIdRef.current = maxId;
+        return [...prev, ...newMsgs];
+      });
+    } else {
+      setMessages(data);
+      const maxId = Math.max(...data.map((m: any) => m.id), 0);
+      lastMessageIdRef.current = maxId;
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {

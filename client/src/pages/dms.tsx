@@ -64,7 +64,7 @@ export default function DMsPage() {
 
   useEffect(() => {
     if (!activeUser) return;
-    const interval = setInterval(loadMessages, 2500);
+    const interval = setInterval(loadMessages, 6000);
     return () => clearInterval(interval);
   }, [activeUser, user?.username]);
 

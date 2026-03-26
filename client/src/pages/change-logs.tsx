@@ -44,7 +44,7 @@ export default function ChangeLogsPage() {
   useEffect(() => {
     load();
     markChangeLogsRead();
-    const interval = setInterval(load, 6000);
+    const interval = setInterval(load, 30000);
     return () => clearInterval(interval);
   }, []);
 

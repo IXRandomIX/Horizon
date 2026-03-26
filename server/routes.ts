@@ -749,7 +749,10 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   app.get("/api/chat/channels/:channelId/messages", async (req, res) => {
-    const messages = await storage.getMessages(Number(req.params.channelId));
+    const channelId = Number(req.params.channelId);
+    const sinceId = req.query.since ? Number(req.query.since) : undefined;
+    const limit = req.query.limit ? Number(req.query.limit) : 100;
+    const messages = await storage.getMessages(channelId, limit, sinceId);
     res.json(messages);
   });
 

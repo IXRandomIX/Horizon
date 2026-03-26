@@ -1,7 +1,7 @@
 import { db } from "./db";
 import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, questCycles, chatBans, chatTimeouts, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack, type ChatBan, type ChatTimeout } from "@shared/schema";
 import { QUESTS } from "@shared/quests";
-import { eq, and, or, sql, ne, desc } from "drizzle-orm";
+import { eq, and, or, sql, ne, desc, inArray, gt } from "drizzle-orm";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -13,7 +13,7 @@ export interface IStorage {
   updateChannel(id: number, data: any): Promise<Channel>;
   deleteChannel(id: number): Promise<void>;
 
-  getMessages(channelId: number): Promise<any[]>;
+  getMessages(channelId: number, limit?: number, sinceId?: number): Promise<any[]>;
   createMessage(msg: any): Promise<Message>;
   updateMessage(id: number, content: string): Promise<Message>;
   deleteMessage(id: number): Promise<void>;
@@ -169,14 +169,40 @@ export class DatabaseStorage implements IStorage {
   async deleteChannel(id: number): Promise<void> {
     await db.delete(channels).where(eq(channels.id, id));
   }
-  async getMessages(channelId: number): Promise<any[]> {
-    const msgs = await db.select().from(messages).where(eq(messages.channelId, channelId));
-    const enriched = await Promise.all(msgs.map(async (msg) => {
-      const user = await this.getUser(msg.username);
-      const reactList = await this.getReactions(msg.id);
-      return { ...msg, roles: user?.roles || [], avatar: user?.avatar || "", reactions: reactList };
-    }));
-    return enriched;
+  async getMessages(channelId: number, limit = 100, sinceId?: number): Promise<any[]> {
+    const conditions = sinceId
+      ? and(eq(messages.channelId, channelId), gt(messages.id, sinceId))
+      : eq(messages.channelId, channelId);
+
+    const msgs = await db
+      .select()
+      .from(messages)
+      .where(conditions)
+      .orderBy(desc(messages.id))
+      .limit(limit);
+
+    const ordered = msgs.reverse();
+    if (ordered.length === 0) return [];
+
+    const usernames = [...new Set(ordered.map(m => m.username))];
+    const msgIds = ordered.map(m => m.id);
+
+    const [allUsers, allReactions] = await Promise.all([
+      db.select().from(users).where(inArray(users.username, usernames)),
+      db.select().from(reactions).where(inArray(reactions.messageId, msgIds)),
+    ]);
+
+    const userMap = new Map(allUsers.map(u => [u.username, u]));
+    const reactMap = new Map<number, Reaction[]>();
+    for (const r of allReactions) {
+      if (!reactMap.has(r.messageId)) reactMap.set(r.messageId, []);
+      reactMap.get(r.messageId)!.push(r);
+    }
+
+    return ordered.map(msg => {
+      const u = userMap.get(msg.username);
+      return { ...msg, roles: u?.roles || [], avatar: u?.avatar || "", reactions: reactMap.get(msg.id) || [] };
+    });
   }
   async createMessage(msg: any): Promise<Message> {
     const [inserted] = await db.insert(messages).values(msg).returning();

@@ -44,7 +44,7 @@ export default function GlobalInboxPage() {
   useEffect(() => {
     load();
     markGlobalInboxRead();
-    const interval = setInterval(load, 4000);
+    const interval = setInterval(load, 15000);
     return () => clearInterval(interval);
   }, []);
 
