@@ -1844,7 +1844,14 @@ export default function Chat() {
                             <h4 className="text-white text-sm font-bold">Assign Roles to User</h4>
                             <Input placeholder="Username" value={assignUsername} onChange={(e) => setAssignUsername(e.target.value)} className="bg-white/5 border-white/10" />
                             <div className="space-y-2 bg-white/5 p-3 rounded border border-white/10 max-h-48 overflow-y-auto">
-                              {roles.map(role => (
+                              {roles.filter(role => {
+                                const isOwnerUser = user?.isAdmin || (user?.roles ?? []).includes("Owner");
+                                const isCoOwnerUser = !isOwnerUser && (user?.roles ?? []).includes("CO OWNER");
+                                const isAdminUser = !isOwnerUser && !isCoOwnerUser && (user?.roles ?? []).includes("Admin");
+                                if (isAdminUser && (role.name === "CO OWNER" || role.name === "Owner")) return false;
+                                if (isCoOwnerUser && role.name === "Owner") return false;
+                                return true;
+                              }).map(role => (
                                 <div key={role.id} className="flex items-center gap-2">
                                   <input 
                                     type="checkbox" 

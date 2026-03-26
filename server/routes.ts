@@ -743,8 +743,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.post("/api/chat/users/:username/roles", async (req, res) => {
     if (!await requirePermission("manage_roles", req, res)) return;
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+
     const { roles: roleNames } = req.body;
-    const user = await storage.assignRolesToUser(req.params.username, roleNames);
+    const assignedRoles: string[] = Array.isArray(roleNames) ? roleNames : [];
+
+    // Determine caller's highest role level
+    const isOwner = caller === ADMIN_USER || (await storage.getUser(caller))?.roles?.includes("Owner");
+    const callerUser = caller !== ADMIN_USER ? await storage.getUser(caller) : null;
+    const callerRoles: string[] = callerUser?.roles ?? [];
+    const isCoOwner = !isOwner && callerRoles.includes("CO OWNER");
+    const isAdmin = !isOwner && !isCoOwner && callerRoles.includes("Admin");
+
+    // Enforce hierarchy: block assigning roles above your own level
+    if (isAdmin) {
+      if (assignedRoles.includes("CO OWNER") || assignedRoles.includes("Owner")) {
+        return res.status(403).json({ message: "Admins cannot assign CO OWNER or Owner roles." });
+      }
+    } else if (isCoOwner) {
+      if (assignedRoles.includes("Owner")) {
+        return res.status(403).json({ message: "CO OWNERs cannot assign the Owner role." });
+      }
+    }
+
+    const user = await storage.assignRolesToUser(req.params.username, assignedRoles);
     res.json(sanitizeUser(user));
   });
 
