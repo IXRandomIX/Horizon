@@ -786,12 +786,14 @@ export default function Chat() {
       }),
     });
     if (res.ok) {
+      const newChannel = await res.json();
       toast({ title: "Channel created" });
       setNewChannelName("");
       setIsPrivate(false);
       setAllowedUsers("");
       setReadOnlyPublic(false);
-      fetchChannels();
+      await fetchChannels();
+      setActiveChannel(newChannel);
     }
   };
 
