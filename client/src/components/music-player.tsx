@@ -337,7 +337,7 @@ export default function MusicPlayer() {
     let lastTick = 0;
     const onTime = () => {
       const now = Date.now();
-      if (now - lastTick < 500) return;
+      if (now - lastTick < 1000) return;
       lastTick = now;
       setCurrentTime(audio.currentTime);
       setProgress(audio.duration ? audio.currentTime / audio.duration : 0);
