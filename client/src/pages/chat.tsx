@@ -1466,7 +1466,7 @@ export default function Chat() {
                     {renderUsername(msg.username, msg.roleColor, msg.animation || "none", msg.font || "sans")}
                     <div className="flex items-center gap-1.5 flex-wrap">
                       {(msg.roles && msg.roles.length > 0) ? (
-                        msg.roles.map((roleName: string) => {
+                        msg.roles.filter((roleName: string) => roles.some(r => r.name === roleName)).map((roleName: string) => {
                           const roleData = roles.find(r => r.name === roleName);
                           const rc = roleData?.color || "#9ca3af";
                           const { cls: rCls, style: rStyle } = getRoleColorInfo(rc);

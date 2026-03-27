@@ -748,6 +748,19 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
 
   app.delete("/api/chat/roles/:id", async (req, res) => {
     if (!await requirePermission("manage_roles", req, res)) return;
+    const allRoles = await storage.getRoles();
+    const roleToDelete = allRoles.find(r => r.id === Number(req.params.id));
+    if (roleToDelete) {
+      const affectedUsers = await storage.getUsersByRole(roleToDelete.name);
+      for (const u of affectedUsers) {
+        const updatedRoles = ((u.roles as string[]) || []).filter(r => r !== roleToDelete.name);
+        await storage.assignRolesToUser(u.username, updatedRoles);
+        // Recalculate roleColor based on remaining roles
+        const remainingRoleData = allRoles.filter(r => updatedRoles.includes(r.name));
+        const newColor = remainingRoleData.length > 0 ? remainingRoleData[0].color : "#9ca3af";
+        await storage.updateUser(u.username, { roleColor: newColor });
+      }
+    }
     await storage.deleteRole(Number(req.params.id));
     res.status(204).end();
   });

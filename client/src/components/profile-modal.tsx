@@ -157,7 +157,7 @@ export function ProfileModal({ username, onClose }: ProfileModalProps) {
           {/* Roles badges */}
           {profile?.roles?.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
-              {(profile.roles as string[]).map((r: string) => {
+              {(profile.roles as string[]).filter((r: string) => allRoles.some((ar: any) => ar.name === r)).map((r: string) => {
                 const roleObj = allRoles.find((ar: any) => ar.name === r);
                 const color = roleObj?.color || "#9ca3af";
                 return (
