@@ -15,27 +15,38 @@ export default function LoginPage() {
 
   const handle = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!username.trim()) { toast({ title: "Username required", variant: "destructive" }); return; }
+    if (!username.trim()) {
+      toast({ title: "Username required", variant: "destructive" });
+      return;
+    }
     setLoading(true);
     try {
       if (tab === "login") {
         await login(username.trim(), password);
-        toast({ title: `Welcome back, ${username.trim()}!` });
       } else {
-        if (!password) { toast({ title: "Password required to register", variant: "destructive" }); setLoading(false); return; }
+        if (!password) {
+          toast({ title: "Password required to register", variant: "destructive" });
+          setLoading(false);
+          return;
+        }
         if (!/^[a-zA-Z0-9]+$/.test(username.trim())) {
           toast({ title: "Username can only contain letters and numbers", variant: "destructive" });
           setLoading(false);
           return;
         }
         await register(username.trim(), password);
-        toast({ title: `Account created! Welcome, ${username.trim()}!` });
       }
     } catch (err: any) {
       toast({ title: err.message || "Something went wrong", variant: "destructive" });
     } finally {
       setLoading(false);
     }
+  };
+
+  const switchTab = (t: "login" | "register") => {
+    setTab(t);
+    setUsername("");
+    setPassword("");
   };
 
   return (
@@ -61,14 +72,16 @@ export default function LoginPage() {
         <div className="bg-white/[0.03] border border-white/10 rounded-3xl p-8 backdrop-blur-xl">
           <div className="flex gap-2 mb-8 bg-white/5 rounded-xl p-1">
             <button
-              onClick={() => setTab("login")}
+              type="button"
+              onClick={() => switchTab("login")}
               data-testid="tab-login"
               className={`flex-1 py-2.5 rounded-lg text-sm font-bold tracking-widest uppercase transition-all ${tab === "login" ? "bg-primary text-white shadow-lg" : "text-white/40 hover:text-white/70"}`}
             >
               Sign In
             </button>
             <button
-              onClick={() => setTab("register")}
+              type="button"
+              onClick={() => switchTab("register")}
               data-testid="tab-register"
               className={`flex-1 py-2.5 rounded-lg text-sm font-bold tracking-widest uppercase transition-all ${tab === "register" ? "bg-primary text-white shadow-lg" : "text-white/40 hover:text-white/70"}`}
             >
@@ -90,12 +103,12 @@ export default function LoginPage() {
                   setUsername(val);
                 }}
                 className="bg-black/50 border-white/10 h-12 text-white placeholder:text-white/20 focus:border-primary/50"
-                required
+                autoComplete={tab === "login" ? "username" : "new-username"}
               />
             </div>
             <div>
               <label className="text-xs text-white/40 uppercase tracking-widest mb-1.5 block">
-                Password {tab === "login" ? <span className="text-white/20 normal-case">(required for accounts with one)</span> : ""}
+                Password{tab === "login" ? <span className="text-white/20 normal-case ml-1">(required for accounts with one)</span> : ""}
               </label>
               <Input
                 data-testid="input-password"
@@ -104,6 +117,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="bg-black/50 border-white/10 h-12 text-white placeholder:text-white/20 focus:border-primary/50"
+                autoComplete={tab === "login" ? "current-password" : "new-password"}
               />
             </div>
             <Button
@@ -119,7 +133,9 @@ export default function LoginPage() {
           {tab === "login" && (
             <p className="text-center text-white/20 text-xs mt-5">
               Don't have an account?{" "}
-              <button onClick={() => setTab("register")} className="text-primary hover:underline">Register here</button>
+              <button type="button" onClick={() => switchTab("register")} className="text-primary hover:underline">
+                Register here
+              </button>
             </p>
           )}
         </div>
