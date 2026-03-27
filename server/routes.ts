@@ -445,6 +445,36 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json(requests);
   });
 
+  // ─── Notifications ────────────────────────────────────────────────────────
+  app.get("/api/notifications", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    const notifs = await storage.getNotifications(caller);
+    res.json(notifs);
+  });
+
+  app.post("/api/notifications/:id/read", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    await storage.markNotificationRead(parseInt(req.params.id));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/notifications/read-all", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    await storage.markAllNotificationsRead(caller);
+    res.json({ ok: true });
+  });
+
+  app.get("/api/notifications/unread-count", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+    const notifs = await storage.getNotifications(caller);
+    const count = notifs.filter(n => !n.read).length;
+    res.json({ count });
+  });
+
   app.get("/api/friendship/:username", async (req, res) => {
     const me = req.query.me as string;
     if (!me) return res.status(400).json({ message: "me required" });
@@ -1079,7 +1109,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       ? `You have been given ${formatted} XP from ${caller}!`
       : `${formatted} XP has been removed from your account by ${caller}.`;
 
-    await storage.sendDM(caller, actualUsername, notifMsg);
+    await storage.createNotification(actualUsername, notifMsg, action === "add" ? "xp_add" : "xp_remove");
 
     res.json({ ok: true, newXP });
   });

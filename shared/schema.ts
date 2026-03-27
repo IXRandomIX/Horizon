@@ -197,6 +197,16 @@ export const insertRoleSchema = createInsertSchema(roles).omit({ id: true });
 export const insertReactionSchema = createInsertSchema(reactions).omit({ id: true });
 
 export type Proxy = typeof proxies.$inferSelect;
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  username: text("username").notNull(),
+  message: text("message").notNull(),
+  type: text("type").default("info").notNull(),
+  read: boolean("read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;
 export type Page = typeof pages.$inferSelect;
 export type Channel = typeof channels.$inferSelect;
 export type Message = typeof messages.$inferSelect;

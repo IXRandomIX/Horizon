@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, questCycles, chatBans, chatTimeouts, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack, type ChatBan, type ChatTimeout } from "@shared/schema";
+import { dummyTable, channels, messages, users, roles, proxies, pages, reactions, friendships, blockedUsers, directMessages, globalMessages, sessions, changeLogEntries, userTracks, userQuestProgress, questCycles, chatBans, chatTimeouts, notifications, type Channel, type Message, type User, type Role, type Proxy, type Page, type Reaction, type Friendship, type DirectMessage, type GlobalMessage, type Session, type ChangeLogEntry, type UserTrack, type ChatBan, type ChatTimeout, type Notification } from "@shared/schema";
 import { QUESTS } from "@shared/quests";
 import { eq, and, or, sql, ne, desc, inArray, gt } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -92,6 +92,12 @@ export interface IStorage {
   getQuestProgress(username: string, cycleId: number): Promise<any[]>;
   incrementQuestProgress(username: string, questId: string, amount: number, cycleId: number): Promise<{ progress: number; completed: boolean }>;
   markQuestCompleted(username: string, questId: string, cycleId: number): Promise<void>;
+
+  // Notifications
+  createNotification(username: string, message: string, type?: string): Promise<Notification>;
+  getNotifications(username: string): Promise<Notification[]>;
+  markNotificationRead(id: number): Promise<void>;
+  markAllNotificationsRead(username: string): Promise<void>;
 
   // Change Log
   getChangeLogEntries(): Promise<ChangeLogEntry[]>;
@@ -594,6 +600,23 @@ export class DatabaseStorage implements IStorage {
     if (existing) return existing;
     const [created] = await db.insert(channels).values({ name: "logs", isPrivate: false, readOnlyPublic: true, isLogs: true }).returning();
     return created;
+  }
+
+  async createNotification(username: string, message: string, type: string = "info"): Promise<Notification> {
+    const [notif] = await db.insert(notifications).values({ username, message, type, read: false }).returning();
+    return notif;
+  }
+
+  async getNotifications(username: string): Promise<Notification[]> {
+    return await db.select().from(notifications).where(eq(notifications.username, username)).orderBy(desc(notifications.createdAt));
+  }
+
+  async markNotificationRead(id: number): Promise<void> {
+    await db.update(notifications).set({ read: true }).where(eq(notifications.id, id));
+  }
+
+  async markAllNotificationsRead(username: string): Promise<void> {
+    await db.update(notifications).set({ read: true }).where(eq(notifications.username, username));
   }
 
   async postBotMessage(channelId: number, content: string): Promise<Message> {
