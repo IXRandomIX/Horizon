@@ -637,7 +637,11 @@ export default function Chat() {
   };
 
   useEffect(() => {
-    if (activeChannel) fetchMessages(activeChannel.id);
+    if (activeChannel) {
+      setMessages([]);
+      lastMessageIdRef.current = 0;
+      fetchMessages(activeChannel.id);
+    }
   }, [activeChannel]);
 
   useEffect(() => {
@@ -866,8 +870,9 @@ export default function Chat() {
       : "";
     const res = await fetch(`/api/chat/channels/${channelId}/messages${sinceParam}`);
     const data = await res.json();
-    if (!Array.isArray(data) || data.length === 0) return;
+    if (!Array.isArray(data)) return;
     if (incremental) {
+      if (data.length === 0) return;
       setMessages(prev => {
         const existingIds = new Set(prev.map((m: any) => m.id));
         const newMsgs = data.filter((m: any) => !existingIds.has(m.id));
@@ -878,7 +883,7 @@ export default function Chat() {
       });
     } else {
       setMessages(data);
-      const maxId = Math.max(...data.map((m: any) => m.id), 0);
+      const maxId = data.length > 0 ? Math.max(...data.map((m: any) => m.id), 0) : 0;
       lastMessageIdRef.current = maxId;
     }
   };
