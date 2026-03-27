@@ -1,3 +1,4 @@
+import { Component, type ReactNode } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -34,6 +35,44 @@ import ChangeLogsPage from "@/pages/change-logs";
 import ChatRulesPage from "@/pages/chat-rules";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import MusicPlayer from "@/components/music-player";
+
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
+  constructor(props: { children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false, error: "" };
+  }
+
+  static getDerivedStateFromError(err: unknown) {
+    return { hasError: true, error: err instanceof Error ? err.message : String(err) };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="fixed inset-0 bg-black flex flex-col items-center justify-center gap-4 text-white p-8">
+          <p className="text-white/40 text-sm">Something went wrong. Please refresh to try again.</p>
+          <button
+            onClick={() => {
+              localStorage.removeItem("horizon_music_history");
+              localStorage.removeItem("horizon_music_current");
+              this.setState({ hasError: false, error: "" });
+            }}
+            className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
+          >
+            Clear cached data &amp; retry
+          </button>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 bg-purple-600 hover:bg-purple-500 rounded-lg text-sm transition-colors"
+          >
+            Refresh page
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 function Router() {
   return (
@@ -124,8 +163,10 @@ export default function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          <AuthGate />
-          <Toaster />
+          <ErrorBoundary>
+            <AuthGate />
+            <Toaster />
+          </ErrorBoundary>
         </AuthProvider>
       </TooltipProvider>
     </QueryClientProvider>

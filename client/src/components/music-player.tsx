@@ -124,7 +124,7 @@ function TrackRow({
       </button>
       <div className="flex-1 min-w-0" onClick={onPlay}>
         <p className={`text-xs font-semibold truncate leading-snug ${isActive ? "text-primary" : "text-white"}`}>{track.title}</p>
-        <p className="text-[10px] text-white/40 truncate">{track.user.username}</p>
+        <p className="text-[10px] text-white/40 truncate">{track.user?.username ?? "Unknown Artist"}</p>
       </div>
       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
         <button data-testid={`button-add-playlist-${track.id}`} onClick={onAddToPlaylist} className="w-6 h-6 flex items-center justify-center rounded text-white/40 hover:text-white hover:bg-white/10 transition-colors">
@@ -155,8 +155,14 @@ export default function MusicPlayer() {
   const [queue, setQueue] = useState<SCTrack[]>([]);
   const [queueIdx, setQueueIdx] = useState(0);
   const [playlists, setPlaylists] = useState<Playlist[]>(() => loadLS(LS_PLAYLISTS, []));
-  const [downloads, setDownloads] = useState<DownloadedTrack[]>(() => loadLS(LS_DOWNLOADS, []));
-  const [history, setHistory] = useState<SCTrack[]>(() => loadLS(LS_HISTORY, []));
+  const [downloads, setDownloads] = useState<DownloadedTrack[]>(() => {
+    const raw = loadLS<DownloadedTrack[]>(LS_DOWNLOADS, []);
+    return raw.filter(d => d.track && d.track.user);
+  });
+  const [history, setHistory] = useState<SCTrack[]>(() => {
+    const raw = loadLS<SCTrack[]>(LS_HISTORY, []);
+    return raw.filter(t => t && t.user);
+  });
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");
   const [showNewPlaylist, setShowNewPlaylist] = useState(false);
@@ -261,6 +267,7 @@ export default function MusicPlayer() {
   const artistStats: ArtistStat[] = (() => {
     const map = new Map<number, ArtistStat>();
     for (const t of history) {
+      if (!t.user) continue;
       const ex = map.get(t.user.id);
       if (ex) ex.playCount++;
       else map.set(t.user.id, { userId: t.user.id, username: t.user.username, avatar_url: t.user.avatar_url, playCount: 1 });
@@ -430,7 +437,7 @@ export default function MusicPlayer() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-bold text-white truncate">{currentTrack ? currentTrack.title : "Nothing playing"}</p>
-                  <p className="text-[10px] text-white/40 truncate">{currentTrack?.user.username || "—"}</p>
+                  <p className="text-[10px] text-white/40 truncate">{currentTrack?.user?.username || "—"}</p>
                 </div>
                 <button data-testid="button-close-music" onClick={() => setIsOpen(false)} className="w-7 h-7 flex items-center justify-center rounded-lg text-white/40 hover:text-white hover:bg-white/10 transition-colors flex-shrink-0">
                   <ChevronDown className="w-4 h-4" />
@@ -675,7 +682,7 @@ export default function MusicPlayer() {
                         </button>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-white truncate">{t.title}</p>
-                          <p className="text-[10px] text-white/40">{t.user.username} · {new Date(downloadedAt).toLocaleDateString()}</p>
+                          <p className="text-[10px] text-white/40">{t.user?.username ?? "Unknown"} · {new Date(downloadedAt).toLocaleDateString()}</p>
                         </div>
                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                           <button onClick={() => handleDownload(t)} disabled={downloadingId === t.id} className="w-6 h-6 flex items-center justify-center rounded text-green-400/60 hover:text-green-400 hover:bg-white/10 transition-colors" title="Re-download">
