@@ -166,22 +166,30 @@ export default function MusicPlayer() {
   const [queue, setQueue] = useState<SCTrack[]>([]);
   const [queueIdx, setQueueIdx] = useState(0);
   const [playlists, setPlaylists] = useState<Playlist[]>(() => {
-    const raw = loadLS<Playlist[]>(LS_PLAYLISTS, []);
-    const slim = raw.map(pl => ({ ...pl, tracks: pl.tracks.filter(t => t && t.user).map(slimTrack) }));
-    saveLS(LS_PLAYLISTS, slim);
-    return slim;
+    try {
+      const raw = loadLS<Playlist[]>(LS_PLAYLISTS, []);
+      if (!Array.isArray(raw)) return [];
+      return raw.map(pl => ({
+        ...pl,
+        tracks: Array.isArray(pl.tracks)
+          ? pl.tracks.filter(t => t && t.user).map(slimTrack)
+          : [],
+      }));
+    } catch { return []; }
   });
   const [downloads, setDownloads] = useState<DownloadedTrack[]>(() => {
-    const raw = loadLS<DownloadedTrack[]>(LS_DOWNLOADS, []);
-    const slim = raw.filter(d => d.track && d.track.user).map(d => ({ ...d, track: slimTrack(d.track) }));
-    saveLS(LS_DOWNLOADS, slim);
-    return slim;
+    try {
+      const raw = loadLS<DownloadedTrack[]>(LS_DOWNLOADS, []);
+      if (!Array.isArray(raw)) return [];
+      return raw.filter(d => d && d.track && d.track.user).map(d => ({ ...d, track: slimTrack(d.track) }));
+    } catch { return []; }
   });
   const [history, setHistory] = useState<SCTrack[]>(() => {
-    const raw = loadLS<SCTrack[]>(LS_HISTORY, []);
-    const slim = raw.filter(t => t && t.user).slice(0, 100).map(slimTrack);
-    saveLS(LS_HISTORY, slim);
-    return slim;
+    try {
+      const raw = loadLS<SCTrack[]>(LS_HISTORY, []);
+      if (!Array.isArray(raw)) return [];
+      return raw.filter(t => t && t.user).slice(0, 100).map(slimTrack);
+    } catch { return []; }
   });
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");

@@ -62,8 +62,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
           <p className="text-white/40 text-sm">Something went wrong. Please refresh to try again.</p>
           <button
             onClick={() => {
-              localStorage.removeItem("horizon_music_history");
-              localStorage.removeItem("horizon_music_current");
+              ["horizon_music_history","horizon_music_current","horizon_music_playlists","horizon_music_downloads"].forEach(k => localStorage.removeItem(k));
               this.setState({ hasError: false, error: "" });
             }}
             className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg text-sm transition-colors"
