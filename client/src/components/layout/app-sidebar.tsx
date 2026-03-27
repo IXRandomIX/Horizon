@@ -27,9 +27,9 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 
-const socialItems = [
+const socialItemsBase = [
   { name: "Friends", path: "/friends", icon: Heart },
-  { name: "Inbox", path: "/inbox", icon: Inbox },
+  { name: "Inbox", path: "/inbox", icon: Inbox, badgeKey: "inbox" },
   { name: "DMs", path: "/dms", icon: MessageSquare },
   { name: "Users", path: "/users", icon: UsersRound },
 ];
@@ -46,7 +46,7 @@ function Badge({ count }: { count: number }) {
 export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
-  const { globalInboxUnread, chatUnread, changeLogsUnread, markGlobalInboxRead, markChatRead, markChangeLogsRead } = useNotifications();
+  const { globalInboxUnread, chatUnread, changeLogsUnread, inboxUnread, markGlobalInboxRead, markChatRead, markChangeLogsRead, markInboxRead } = useNotifications();
   const [rankInfo, setRankInfo] = useState<{ xp: number | null; rank: { name: string; color: string }; isStaff: boolean } | null>(null);
 
   const fetchRankInfo = () => {
@@ -170,13 +170,16 @@ export function AppSidebar() {
           </div>
           <SidebarGroupContent>
             <SidebarMenu className="gap-1.5">
-              {socialItems.map((item) => {
+              {socialItemsBase.map((item) => {
                 const isActive = location === item.path || location.startsWith(item.path + "/");
+                const badge = (item as any).badgeKey === "inbox" ? inboxUnread : 0;
+                const onNavigate = (item as any).badgeKey === "inbox" ? markInboxRead : undefined;
                 return (
                   <SidebarMenuItem key={item.path}>
                     <SidebarMenuButton asChild tooltip={item.name} isActive={isActive}>
                       <Link
                         href={item.path}
+                        onClick={onNavigate}
                         className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 ${
                           isActive
                             ? "bg-primary/10 text-primary border border-primary/20"
@@ -185,6 +188,7 @@ export function AppSidebar() {
                       >
                         <item.icon className={`w-4 h-4 ${isActive ? "text-primary" : ""}`} />
                         <span className="font-medium text-sm tracking-wide">{item.name}</span>
+                        <Badge count={badge} />
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
