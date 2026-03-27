@@ -217,7 +217,7 @@ export function AppSidebar() {
                 <p className={`text-sm font-bold text-white truncate ${fontClass}`}>{displayName}</p>
                 {rankInfo ? (
                   <p className="text-[10px] font-bold truncate" style={{ color: rankInfo.rank.color }}>
-                    {rankInfo.isStaff ? "STAFF · 0 XP" : `${rankInfo.rank.name} · ${(rankInfo.xp ?? 0).toLocaleString()} XP`}
+                    {rankInfo.isStaff ? `STAFF · ${(rankInfo.xp ?? 0).toLocaleString()} XP` : `${rankInfo.rank.name} · ${(rankInfo.xp ?? 0).toLocaleString()} XP`}
                   </p>
                 ) : (
                   <p className="text-xs text-white/30 truncate">@{user?.username}</p>

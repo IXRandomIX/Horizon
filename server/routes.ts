@@ -1026,7 +1026,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!caller) return res.status(401).json({ message: "Unauthorized" });
     const staff = await isStaffUser(caller);
     const cycle = await storage.getCurrentCycle();
-    const xp = staff ? null : await storage.getUserXP(caller);
+    const xp = await storage.getUserXP(caller);
     const rank = staff ? { rank: -1, name: "STAFF", xpNeeded: 0, color: "#FFD700" } : getRankForXP(xp ?? 0);
     const questProgress = staff ? [] : await storage.getQuestProgress(caller, cycle.id);
     res.json({

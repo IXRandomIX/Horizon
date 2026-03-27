@@ -99,7 +99,7 @@ export default function LeaderboardPage() {
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <div className="text-right">
                           <p className="text-[10px] text-white/30 uppercase tracking-widest">XP</p>
-                          <p className="text-[10px] font-black text-white/50 tracking-widest">0</p>
+                          <p className="text-[10px] font-black text-white/50 tracking-widest">{u.xp.toLocaleString()}</p>
                         </div>
                         <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
                           STAFF
