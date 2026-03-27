@@ -487,7 +487,7 @@ export class DatabaseStorage implements IStorage {
 
   async addUserXP(username: string, amount: number): Promise<number> {
     const current = await this.getUserXP(username);
-    const newXP = current + amount;
+    const newXP = Math.max(0, current + amount);
     await db.update(users).set({ xp: newXP }).where(eq(users.username, username));
     return newXP;
   }

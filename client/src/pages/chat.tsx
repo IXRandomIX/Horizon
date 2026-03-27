@@ -1966,6 +1966,7 @@ export default function Chat() {
                                   setXpResult({ newXP: data.newXP, username: xpUsername.trim() });
                                   const amt = parseInt(xpAmount).toLocaleString();
                                   toast({ title: xpAction === "add" ? `+${amt} XP given to @${xpUsername}!` : `−${amt} XP removed from @${xpUsername}.` });
+                                  window.dispatchEvent(new Event("xp-updated"));
                                 }
                               } finally {
                                 setXpLoading(false);
