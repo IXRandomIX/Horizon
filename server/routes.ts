@@ -147,6 +147,39 @@ async function isStaffUser(username: string): Promise<boolean> {
   return userRoles.flatMap(r => r.permissions || []).includes("admin_panel");
 }
 
+const SYSTEM_RANK_ROLES = ["Corporal", "Sergeant", "Chief"] as const;
+
+async function applyRankRoles(username: string): Promise<void> {
+  try {
+    if (username === ADMIN_USER) return;
+    const user = await storage.getUser(username);
+    if (!user) return;
+    // Don't apply to staff users (they have admin_panel)
+    const allRoles = await storage.getRoles();
+    const userRoleObjs = allRoles.filter(r => ((user.roles as string[]) || []).includes(r.name));
+    const isStaff = userRoleObjs.flatMap(r => r.permissions || []).includes("admin_panel");
+    if (isStaff) return;
+
+    const xp = await storage.getUserXP(username);
+    const rank = getRankForXP(Number(xp));
+    const currentRoles = (user.roles as string[]) || [];
+
+    // Determine which rank roles should be granted based on rank achieved
+    const rolesToEnsure: string[] = [];
+    if (rank.rank <= 3 && rank.rank > 0) rolesToEnsure.push("Corporal");
+    if (rank.rank <= 2 && rank.rank > 0) rolesToEnsure.push("Sergeant");
+    if (rank.rank <= 1 && rank.rank > 0) rolesToEnsure.push("Chief");
+
+    const missing = rolesToEnsure.filter(r => !currentRoles.includes(r));
+    if (missing.length === 0) return;
+
+    const newRoles = [...currentRoles, ...missing];
+    await storage.assignRolesToUser(username, newRoles);
+  } catch (err) {
+    console.error("applyRankRoles error:", err);
+  }
+}
+
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // ─── Scramjet Proxy Setup ─────────────────────────────────────────────────
   const scramjetDistPath = path.join(process.cwd(), "node_modules/@mercuryworkshop/scramjet/dist");
@@ -288,7 +321,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         await storage.createProxy({ name: "Lunaar", url: "https://vps-d38e82a1.vps.ovh.us/", useWebview: true });
         await storage.createProxy({ name: "Platinum", url: "https://the.chicanoveterans.org/@", useWebview: true });
       }
-      const ALL_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "talk_in_private", "manage_proxies"];
+      const ALL_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "talk_in_private", "manage_proxies", "username_customizer"];
       let roles = await storage.getRoles();
       if (roles.length === 0) {
         await storage.createRole({ name: "Owner", color: "#FFD700", permissions: ALL_PERMISSIONS, displayOnBoard: true });
@@ -305,6 +338,18 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       const adminRole = roles.find((r: any) => r.name === "Admin");
       if (adminRole && !adminRole.permissions.includes("talk_in_private")) {
         await storage.updateRole(adminRole.id, { permissions: [...adminRole.permissions, "talk_in_private"] });
+      }
+      // Ensure rank-based system roles exist
+      const RANK_ROLE_DEFS = [
+        { name: "Corporal", color: "ugc:rose",       permissions: ["username_customizer"], displayOnBoard: false },
+        { name: "Sergeant", color: "ugc:midnight",   permissions: ["username_customizer"], displayOnBoard: false },
+        { name: "Chief",    color: "ugc:gold-black", permissions: ["username_customizer"], displayOnBoard: false },
+      ];
+      roles = await storage.getRoles();
+      for (const def of RANK_ROLE_DEFS) {
+        if (!roles.find((r: any) => r.name === def.name)) {
+          await storage.createRole(def);
+        }
       }
       const adminUser = await storage.getUser(ADMIN_USER);
       if (adminUser && !adminUser.roles.includes("Owner")) {
@@ -750,6 +795,9 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!await requirePermission("manage_roles", req, res)) return;
     const allRoles = await storage.getRoles();
     const roleToDelete = allRoles.find(r => r.id === Number(req.params.id));
+    if (roleToDelete && (SYSTEM_RANK_ROLES as readonly string[]).includes(roleToDelete.name)) {
+      return res.status(403).json({ message: `The ${roleToDelete.name} role is a permanent rank role and cannot be deleted.` });
+    }
     if (roleToDelete) {
       const affectedUsers = await storage.getUsersByRole(roleToDelete.name);
       for (const u of affectedUsers) {
@@ -1145,6 +1193,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     await trackXPAction(caller, type, cycle);
     const xp = await storage.getUserXP(caller);
     const rank = getRankForXP(Number(xp));
+    // Auto-assign rank roles (fire and forget)
+    applyRankRoles(caller).catch(() => {});
     res.json({ xp, rank });
   });
 

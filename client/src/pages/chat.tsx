@@ -543,7 +543,7 @@ export default function Chat() {
   const { toast } = useToast();
   const { markChatRead } = useNotifications();
 
-  const AVAILABLE_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "talk_in_private", "manage_proxies"];
+  const AVAILABLE_PERMISSIONS = ["admin_panel", "manage_channels", "server_settings", "manage_roles", "talk_in_private", "manage_proxies", "username_customizer"];
   const PERMISSION_LABELS: Record<string, string> = {
     admin_panel: "Admin Panel",
     manage_channels: "Manage Channels",
@@ -551,7 +551,9 @@ export default function Chat() {
     manage_roles: "Manage Roles",
     talk_in_private: "Talk in Private/Restricted Channels",
     manage_proxies: "Manage Proxies",
+    username_customizer: "Username Customizer",
   };
+  const SYSTEM_RANK_ROLE_NAMES = ["Corporal", "Sergeant", "Chief"];
 
   const isChannelReadOnly = (channel: any): boolean => {
     if (!channel) return false;
@@ -1387,7 +1389,7 @@ export default function Chat() {
             </div>
             <Button size="icon" variant="ghost" className="h-8 w-8 text-muted-foreground hover:text-white" onClick={() => { authUser && (window.location.href = "/"); }}><LogOut className="w-4 h-4" /></Button>
           </div>
-          {userHasPermission("admin_panel") && (
+          {(userHasPermission("admin_panel") || userHasPermission("username_customizer")) && (
             <Button variant="outline" className="w-full mt-4 border-primary/30 hover:bg-primary/10 text-primary gap-2" onClick={() => setShowAdminPanel(!showAdminPanel)}>
               <Shield className="w-4 h-4" /> Admin Panel
             </Button>
@@ -1810,7 +1812,9 @@ export default function Chat() {
                 <h3 className="font-display font-black text-xl mb-6 text-gradient-animated tracking-widest">MASTER CONTROL</h3>
                 <div className="space-y-6">
                   <div className="space-y-2">
+                    {(userHasPermission("manage_channels") || userHasPermission("server_settings") || userHasPermission("manage_roles")) && (
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Management</label>
+                    )}
                     {userHasPermission("manage_channels") && (
                     <Dialog open={showChannelsPanel} onOpenChange={setShowChannelsPanel}>
                       <DialogTrigger asChild>
@@ -1934,10 +1938,12 @@ export default function Chat() {
                                 }} className="text-white/50 hover:text-white h-8 w-8" title="Toggle display">
                                   <Eye className="w-4 h-4" />
                                 </Button>
+                                {!SYSTEM_RANK_ROLE_NAMES.includes(role.name) && (
                                 <Button variant="ghost" size="icon" onClick={async () => {
                                   await authFetch(`/api/chat/roles/${role.id}`, { method: "DELETE" });
                                   fetchRoles();
                                 }} className="text-red-500 hover:text-red-400 h-8 w-8"><Trash2 className="w-4 h-4" /></Button>
+                                )}
                               </div>
                             ))}
                           </div>
@@ -2016,7 +2022,7 @@ export default function Chat() {
                   )}
 
                   {/* User Appearance Section */}
-                  {userHasPermission("admin_panel") && (
+                  {(userHasPermission("admin_panel") || userHasPermission("username_customizer")) && (
                   <div className="space-y-2">
                     <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">User Appearance</label>
                     <Dialog>
