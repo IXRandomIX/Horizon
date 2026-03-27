@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronUp, ChevronDown, X, Search, Play, Pause, SkipBack, SkipForward,
@@ -292,7 +292,7 @@ export default function MusicPlayer() {
     playTrack(fakeTrack, [fakeTrack]);
   };
 
-  const artistStats: ArtistStat[] = (() => {
+  const artistStats: ArtistStat[] = useMemo(() => {
     const map = new Map<number, ArtistStat>();
     for (const t of history) {
       if (!t.user) continue;
@@ -301,7 +301,7 @@ export default function MusicPlayer() {
       else map.set(t.user.id, { userId: t.user.id, username: t.user.username, avatar_url: t.user.avatar_url, playCount: 1 });
     }
     return [...map.values()].sort((a, b) => b.playCount - a.playCount);
-  })();
+  }, [history]);
 
   useEffect(() => {
     const audio = audioRef.current;
@@ -334,7 +334,14 @@ export default function MusicPlayer() {
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
-    const onTime = () => { setCurrentTime(audio.currentTime); setProgress(audio.duration ? audio.currentTime / audio.duration : 0); };
+    let lastTick = 0;
+    const onTime = () => {
+      const now = Date.now();
+      if (now - lastTick < 500) return;
+      lastTick = now;
+      setCurrentTime(audio.currentTime);
+      setProgress(audio.duration ? audio.currentTime / audio.duration : 0);
+    };
     const onDur = () => setAudioDur(audio.duration || 0);
     const onEnd = () => handleNextRef.current?.();
     audio.addEventListener("timeupdate", onTime);

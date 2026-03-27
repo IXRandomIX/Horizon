@@ -60,6 +60,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
       return (
         <div className="fixed inset-0 bg-black flex flex-col items-center justify-center gap-4 text-white p-8">
           <p className="text-white/40 text-sm">Something went wrong. Please refresh to try again.</p>
+          {this.state.error ? <p className="text-red-400/60 text-xs max-w-md text-center break-words">{this.state.error}</p> : null}
           <button
             onClick={() => {
               ["horizon_music_history","horizon_music_current","horizon_music_playlists","horizon_music_downloads"].forEach(k => localStorage.removeItem(k));
