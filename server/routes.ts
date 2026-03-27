@@ -1062,21 +1062,24 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       return res.status(400).json({ message: "username, amount, and action required" });
     }
 
-    const targetUser = await storage.getUser(username.toLowerCase());
+    // Case-insensitive user lookup so "TEST", "test", "Test" all work
+    const allUsers = await storage.getAllUsers();
+    const targetUser = allUsers.find(u => u.username.toLowerCase() === username.trim().toLowerCase());
     if (!targetUser) return res.status(404).json({ message: "User not found" });
 
+    const actualUsername = targetUser.username;
     const xpAmount = Math.abs(parseInt(amount));
     if (isNaN(xpAmount) || xpAmount <= 0) return res.status(400).json({ message: "Invalid amount" });
 
     const change = action === "remove" ? -xpAmount : xpAmount;
-    const newXP = await storage.addUserXP(username.toLowerCase(), change);
+    const newXP = await storage.addUserXP(actualUsername, change);
 
     const formatted = xpAmount.toLocaleString();
     const notifMsg = action === "add"
       ? `You have been given ${formatted} XP from ${caller}!`
       : `${formatted} XP has been removed from your account by ${caller}.`;
 
-    await storage.sendDM(caller, username.toLowerCase(), notifMsg);
+    await storage.sendDM(caller, actualUsername, notifMsg);
 
     res.json({ ok: true, newXP });
   });
