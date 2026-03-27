@@ -1043,6 +1043,44 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     res.json({ staff: staffList, byRank });
   });
 
+  // ─── Admin XP Give / Remove ───────────────────────────────────────────────
+  app.post("/api/admin/xp", async (req, res) => {
+    const caller = await getSessionUser(req);
+    if (!caller) return res.status(401).json({ message: "Unauthorized" });
+
+    const callerUser = await storage.getUser(caller);
+    const callerRoles: string[] = (callerUser?.roles as string[]) ?? [];
+    const isOwner = caller === ADMIN_USER || callerRoles.includes("Owner") || callerUser?.isAdmin;
+    const isCoOwner = callerRoles.includes("CO OWNER");
+    const isAdmin = callerRoles.includes("Admin");
+    if (!isOwner && !isCoOwner && !isAdmin) {
+      return res.status(403).json({ message: "Insufficient permissions" });
+    }
+
+    const { username, amount, action } = req.body;
+    if (!username || !amount || !action) {
+      return res.status(400).json({ message: "username, amount, and action required" });
+    }
+
+    const targetUser = await storage.getUser(username.toLowerCase());
+    if (!targetUser) return res.status(404).json({ message: "User not found" });
+
+    const xpAmount = Math.abs(parseInt(amount));
+    if (isNaN(xpAmount) || xpAmount <= 0) return res.status(400).json({ message: "Invalid amount" });
+
+    const change = action === "remove" ? -xpAmount : xpAmount;
+    const newXP = await storage.addUserXP(username.toLowerCase(), change);
+
+    const formatted = xpAmount.toLocaleString();
+    const notifMsg = action === "add"
+      ? `You have been given ${formatted} XP from ${caller}!`
+      : `${formatted} XP has been removed from your account by ${caller}.`;
+
+    await storage.sendDM(caller, username.toLowerCase(), notifMsg);
+
+    res.json({ ok: true, newXP });
+  });
+
   app.post("/api/xp/track", async (req, res) => {
     const caller = await getSessionUser(req);
     if (!caller) return res.status(401).json({ message: "Unauthorized" });

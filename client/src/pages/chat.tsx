@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import type React from "react";
-import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Sparkles, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink, Ban, Clock, Bot } from "lucide-react";
+import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Sparkles, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink, Ban, Clock, Bot, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -486,6 +486,13 @@ export default function Chat() {
   const [proxies, setProxies] = useState<any[]>([]);
   const [editingProxy, setEditingProxy] = useState<{ id: number; name: string; url: string } | null>(null);
   const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
+  // XP Giver & Remover panel
+  const [showXPPanel, setShowXPPanel] = useState(false);
+  const [xpUsername, setXpUsername] = useState("");
+  const [xpAmount, setXpAmount] = useState("");
+  const [xpAction, setXpAction] = useState<"add" | "remove">("add");
+  const [xpLoading, setXpLoading] = useState(false);
+  const [xpResult, setXpResult] = useState<{ newXP: number; username: string } | null>(null);
   // Admin appearance panel
   const [apTarget, setApTarget] = useState("");
   const [apColor, setApColor] = useState("#9ca3af");
@@ -1907,6 +1914,73 @@ export default function Chat() {
                     </Dialog>
                     )}
                   </div>
+
+                  {/* XP Giver & Remover Section */}
+                  {userHasPermission("admin_panel") && (
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-muted-foreground uppercase tracking-widest">XP Management</label>
+                    <Dialog open={showXPPanel} onOpenChange={(o) => { setShowXPPanel(o); if (!o) { setXpResult(null); setXpUsername(""); setXpAmount(""); } }}>
+                      <DialogTrigger asChild>
+                        <Button variant="outline" className="w-full justify-start gap-3 border-white/10 hover:bg-white/5" data-testid="button-open-xp-panel"><Zap className="w-4 h-4" /> XP Giver &amp; Remover</Button>
+                      </DialogTrigger>
+                      <DialogContent className="bg-black border-white/10 w-[380px]">
+                        <DialogHeader><DialogTitle className="text-white flex items-center gap-2"><Zap className="w-4 h-4 text-yellow-400" /> XP Giver &amp; Remover</DialogTitle></DialogHeader>
+                        <div className="space-y-4 py-2">
+                          <div className="flex gap-1 p-1 bg-white/5 rounded">
+                            <button onClick={() => { setXpAction("add"); setXpResult(null); }} className={`flex-1 text-sm py-2 rounded transition-colors font-bold ${xpAction === "add" ? "bg-green-500/20 text-green-400 border border-green-500/40" : "text-white/40 hover:text-white/70"}`}>
+                              + Give XP
+                            </button>
+                            <button onClick={() => { setXpAction("remove"); setXpResult(null); }} className={`flex-1 text-sm py-2 rounded transition-colors font-bold ${xpAction === "remove" ? "bg-red-500/20 text-red-400 border border-red-500/40" : "text-white/40 hover:text-white/70"}`}>
+                              − Remove XP
+                            </button>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-white/50 text-xs">Username</label>
+                            <Input placeholder="Enter username" value={xpUsername} onChange={e => setXpUsername(e.target.value)} className="bg-white/5 border-white/10 text-white" data-testid="input-xp-username" />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-white/50 text-xs">Amount of XP</label>
+                            <Input type="number" min="1" placeholder="e.g. 5000" value={xpAmount} onChange={e => setXpAmount(e.target.value)} className="bg-white/5 border-white/10 text-white" data-testid="input-xp-amount" />
+                          </div>
+                          {xpResult && (
+                            <div className="rounded bg-primary/10 border border-primary/20 p-3 text-center">
+                              <p className="text-white/50 text-xs mb-1">New XP total for <span className="text-white font-bold">@{xpResult.username}</span></p>
+                              <p className="text-primary font-black text-2xl">{xpResult.newXP.toLocaleString()} XP</p>
+                            </div>
+                          )}
+                          <Button
+                            disabled={xpLoading || !xpUsername.trim() || !xpAmount.trim()}
+                            onClick={async () => {
+                              setXpLoading(true);
+                              setXpResult(null);
+                              try {
+                                const res = await authFetch("/api/admin/xp", {
+                                  method: "POST",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ username: xpUsername.trim(), amount: xpAmount, action: xpAction }),
+                                });
+                                const data = await res.json();
+                                if (!res.ok) {
+                                  toast({ title: data.message || "Failed", variant: "destructive" });
+                                } else {
+                                  setXpResult({ newXP: data.newXP, username: xpUsername.trim() });
+                                  const amt = parseInt(xpAmount).toLocaleString();
+                                  toast({ title: xpAction === "add" ? `+${amt} XP given to @${xpUsername}!` : `−${amt} XP removed from @${xpUsername}.` });
+                                }
+                              } finally {
+                                setXpLoading(false);
+                              }
+                            }}
+                            className={`w-full text-white font-bold ${xpAction === "remove" ? "bg-red-600 hover:bg-red-700 border-red-600" : "bg-green-600 hover:bg-green-700 border-green-600"}`}
+                            data-testid="button-xp-submit"
+                          >
+                            {xpLoading ? "Processing..." : xpAction === "add" ? "Give XP" : "Remove XP"}
+                          </Button>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  </div>
+                  )}
 
                   {/* User Appearance Section */}
                   {userHasPermission("admin_panel") && (
