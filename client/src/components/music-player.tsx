@@ -92,6 +92,17 @@ function loadLS<T>(key: string, def: T): T {
 function saveLS(key: string, val: any) {
   try { localStorage.setItem(key, JSON.stringify(val)); } catch {}
 }
+function slimTrack(t: SCTrack): SCTrack {
+  return {
+    id: t.id,
+    title: t.title,
+    artwork_url: t.artwork_url,
+    duration: t.duration,
+    permalink_url: t.permalink_url,
+    sourceUrl: t.sourceUrl,
+    user: t.user ? { id: t.user.id, username: t.user.username, avatar_url: t.user.avatar_url } : t.user,
+  } as SCTrack;
+}
 function fmt(ms: number) {
   const s = Math.floor(ms / 1000), m = Math.floor(s / 60);
   return `${m}:${(s % 60).toString().padStart(2, "0")}`;
@@ -154,14 +165,23 @@ export default function MusicPlayer() {
   const [isLooping, setIsLooping] = useState(false);
   const [queue, setQueue] = useState<SCTrack[]>([]);
   const [queueIdx, setQueueIdx] = useState(0);
-  const [playlists, setPlaylists] = useState<Playlist[]>(() => loadLS(LS_PLAYLISTS, []));
+  const [playlists, setPlaylists] = useState<Playlist[]>(() => {
+    const raw = loadLS<Playlist[]>(LS_PLAYLISTS, []);
+    const slim = raw.map(pl => ({ ...pl, tracks: pl.tracks.filter(t => t && t.user).map(slimTrack) }));
+    saveLS(LS_PLAYLISTS, slim);
+    return slim;
+  });
   const [downloads, setDownloads] = useState<DownloadedTrack[]>(() => {
     const raw = loadLS<DownloadedTrack[]>(LS_DOWNLOADS, []);
-    return raw.filter(d => d.track && d.track.user);
+    const slim = raw.filter(d => d.track && d.track.user).map(d => ({ ...d, track: slimTrack(d.track) }));
+    saveLS(LS_DOWNLOADS, slim);
+    return slim;
   });
   const [history, setHistory] = useState<SCTrack[]>(() => {
     const raw = loadLS<SCTrack[]>(LS_HISTORY, []);
-    return raw.filter(t => t && t.user);
+    const slim = raw.filter(t => t && t.user).slice(0, 100).map(slimTrack);
+    saveLS(LS_HISTORY, slim);
+    return slim;
   });
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [newPlaylistName, setNewPlaylistName] = useState("");
@@ -339,7 +359,7 @@ export default function MusicPlayer() {
     setQueue(tl);
     setQueueIdx(idx >= 0 ? idx : 0);
     setCurrentTrack(track);
-    setHistory(prev => { const next = [track, ...prev.filter(t => t.id !== track.id)].slice(0, 300); saveLS(LS_HISTORY, next); return next; });
+    setHistory(prev => { const next = [slimTrack(track), ...prev.filter(t => t.id !== track.id)].slice(0, 100); saveLS(LS_HISTORY, next); return next; });
   }, []);
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -359,7 +379,7 @@ export default function MusicPlayer() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setDownloads(prev => { const next = [{ track, downloadedAt: Date.now() }, ...prev.filter(d => d.track.id !== track.id)]; saveLS(LS_DOWNLOADS, next); return next; });
+      setDownloads(prev => { const next = [{ track: slimTrack(track), downloadedAt: Date.now() }, ...prev.filter(d => d.track.id !== track.id)]; saveLS(LS_DOWNLOADS, next); return next; });
       toast({ title: "Download started", description: track.title });
     } catch { toast({ title: "Download failed", variant: "destructive" }); }
     finally { setDownloadingId(null); }
@@ -375,7 +395,8 @@ export default function MusicPlayer() {
 
   const addToPlaylist = (plId: string, track: SCTrack) => {
     setPlaylists(prev => {
-      const next = prev.map(pl => pl.id !== plId ? pl : pl.tracks.find(t => t.id === track.id) ? pl : { ...pl, tracks: [...pl.tracks, track] });
+      const slim = slimTrack(track);
+      const next = prev.map(pl => pl.id !== plId ? pl : pl.tracks.find(t => t.id === track.id) ? pl : { ...pl, tracks: [...pl.tracks, slim] });
       saveLS(LS_PLAYLISTS, next); return next;
     });
     setAddToPlaylistTrack(null);

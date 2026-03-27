@@ -1,4 +1,4 @@
-import { Component, type ReactNode } from "react";
+import { Component, type ReactNode, lazy, Suspense } from "react";
 import { Switch, Route, Redirect } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -7,34 +7,43 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AuthProvider, useAuth } from "@/context/auth";
 import { NotificationsProvider } from "@/context/notifications";
-import Games from "@/pages/games";
-import Browser from "@/pages/browser";
-import Proxies from "@/pages/proxies";
-import Tools from "@/pages/tools";
-import GatekeepOS from "@/pages/gatekeep-os";
-import Announcements from "@/pages/announcements";
-import Chat from "@/pages/chat";
-import Partners from "@/pages/partners";
-import Credits from "@/pages/credits";
-import AIPage from "@/pages/ai";
-import TheWall from "@/pages/the-wall";
-import LoginPage from "@/pages/login";
-import ProfileEditor from "@/pages/profile-editor";
-import FriendsPage from "@/pages/friends";
-import InboxPage from "@/pages/inbox";
-import DMsPage from "@/pages/dms";
-import UsersPage from "@/pages/users";
-import GlobalInboxPage from "@/pages/global-inbox";
-import MoviesPage from "@/pages/movies";
-import HorizonTubePage from "@/pages/horizontube";
-import RanksPage from "@/pages/ranks";
-import LeaderboardPage from "@/pages/leaderboard";
-import EaglerCraft from "@/pages/eaglercraft";
-import EaglerCraftLauncher from "@/pages/eaglercraft-launcher";
-import ChangeLogsPage from "@/pages/change-logs";
-import ChatRulesPage from "@/pages/chat-rules";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import MusicPlayer from "@/components/music-player";
+import LoginPage from "@/pages/login";
+
+const Games = lazy(() => import("@/pages/games"));
+const Browser = lazy(() => import("@/pages/browser"));
+const Proxies = lazy(() => import("@/pages/proxies"));
+const Tools = lazy(() => import("@/pages/tools"));
+const GatekeepOS = lazy(() => import("@/pages/gatekeep-os"));
+const Announcements = lazy(() => import("@/pages/announcements"));
+const Chat = lazy(() => import("@/pages/chat"));
+const Partners = lazy(() => import("@/pages/partners"));
+const Credits = lazy(() => import("@/pages/credits"));
+const AIPage = lazy(() => import("@/pages/ai"));
+const TheWall = lazy(() => import("@/pages/the-wall"));
+const ProfileEditor = lazy(() => import("@/pages/profile-editor"));
+const FriendsPage = lazy(() => import("@/pages/friends"));
+const InboxPage = lazy(() => import("@/pages/inbox"));
+const DMsPage = lazy(() => import("@/pages/dms"));
+const UsersPage = lazy(() => import("@/pages/users"));
+const GlobalInboxPage = lazy(() => import("@/pages/global-inbox"));
+const MoviesPage = lazy(() => import("@/pages/movies"));
+const HorizonTubePage = lazy(() => import("@/pages/horizontube"));
+const RanksPage = lazy(() => import("@/pages/ranks"));
+const LeaderboardPage = lazy(() => import("@/pages/leaderboard"));
+const EaglerCraft = lazy(() => import("@/pages/eaglercraft"));
+const EaglerCraftLauncher = lazy(() => import("@/pages/eaglercraft-launcher"));
+const ChangeLogsPage = lazy(() => import("@/pages/change-logs"));
+const ChatRulesPage = lazy(() => import("@/pages/chat-rules"));
+
+function PageLoader() {
+  return (
+    <div className="flex h-full w-full items-center justify-center">
+      <div className="w-6 h-6 border-2 border-purple-500/40 border-t-purple-500 rounded-full animate-spin" />
+    </div>
+  );
+}
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: string }> {
   constructor(props: { children: ReactNode }) {
@@ -76,40 +85,42 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
 
 function Router() {
   return (
-    <Switch>
-      <Route path="/">
-        <Redirect to="/announcements" />
-      </Route>
-      <Route path="/games" component={Games} />
-      <Route path="/browser" component={Browser} />
-      <Route path="/proxies" component={Proxies} />
-      <Route path="/tools" component={Tools} />
-      <Route path="/gatekeep-os" component={GatekeepOS} />
-      <Route path="/announcements" component={Announcements} />
-      <Route path="/chat" component={Chat} />
-      <Route path="/partners" component={Partners} />
-      <Route path="/credits" component={Credits} />
-      <Route path="/ai" component={AIPage} />
-      <Route path="/the-wall" component={TheWall} />
-      <Route path="/profile" component={ProfileEditor} />
-      <Route path="/friends" component={FriendsPage} />
-      <Route path="/inbox" component={InboxPage} />
-      <Route path="/dms/:username" component={DMsPage} />
-      <Route path="/dms" component={DMsPage} />
-      <Route path="/users" component={UsersPage} />
-      <Route path="/global-inbox" component={GlobalInboxPage} />
-      <Route path="/movies" component={MoviesPage} />
-      <Route path="/horizontube" component={HorizonTubePage} />
-      <Route path="/ranks" component={RanksPage} />
-      <Route path="/leaderboard" component={LeaderboardPage} />
-      <Route path="/eaglercraft" component={EaglerCraft} />
-      <Route path="/eaglercraft-launcher" component={EaglerCraftLauncher} />
-      <Route path="/change-logs" component={ChangeLogsPage} />
-      <Route path="/chat-rules" component={ChatRulesPage} />
-      <Route>
-        <Redirect to="/announcements" />
-      </Route>
-    </Switch>
+    <Suspense fallback={<PageLoader />}>
+      <Switch>
+        <Route path="/">
+          <Redirect to="/announcements" />
+        </Route>
+        <Route path="/games" component={Games} />
+        <Route path="/browser" component={Browser} />
+        <Route path="/proxies" component={Proxies} />
+        <Route path="/tools" component={Tools} />
+        <Route path="/gatekeep-os" component={GatekeepOS} />
+        <Route path="/announcements" component={Announcements} />
+        <Route path="/chat" component={Chat} />
+        <Route path="/partners" component={Partners} />
+        <Route path="/credits" component={Credits} />
+        <Route path="/ai" component={AIPage} />
+        <Route path="/the-wall" component={TheWall} />
+        <Route path="/profile" component={ProfileEditor} />
+        <Route path="/friends" component={FriendsPage} />
+        <Route path="/inbox" component={InboxPage} />
+        <Route path="/dms/:username" component={DMsPage} />
+        <Route path="/dms" component={DMsPage} />
+        <Route path="/users" component={UsersPage} />
+        <Route path="/global-inbox" component={GlobalInboxPage} />
+        <Route path="/movies" component={MoviesPage} />
+        <Route path="/horizontube" component={HorizonTubePage} />
+        <Route path="/ranks" component={RanksPage} />
+        <Route path="/leaderboard" component={LeaderboardPage} />
+        <Route path="/eaglercraft" component={EaglerCraft} />
+        <Route path="/eaglercraft-launcher" component={EaglerCraftLauncher} />
+        <Route path="/change-logs" component={ChangeLogsPage} />
+        <Route path="/chat-rules" component={ChatRulesPage} />
+        <Route>
+          <Redirect to="/announcements" />
+        </Route>
+      </Switch>
+    </Suspense>
   );
 }
 

@@ -54,6 +54,17 @@
 - Frontend retries up to 2 times automatically on video error before showing error UI.
 - **Do NOT revert to Invidious `/latest_version` or youtubei.js** — both have proven unreliable.
 
+### Performance (Code Splitting)
+- All page components in `App.tsx` use `React.lazy()` + `Suspense` for code splitting.
+- Only the Login page, AppSidebar, and MusicPlayer are in the initial bundle.
+- Each page loads its JS chunk only when the user navigates to it — prevents "Page Unresponsive" on first load.
+
+### Music Player localStorage
+- Tracks saved to localStorage via `slimTrack()` — only 7 essential fields kept (id, title, artwork_url, duration, permalink_url, sourceUrl, user). Drops ~45 unused SoundCloud fields.
+- History limited to 100 tracks. Total localStorage footprint: ~20KB max (vs ~1.5MB before).
+- On mount, existing bloated localStorage data is sanitized and re-saved automatically.
+- Null-user guard in `artistStats` IIFE prevents crashes from corrupted history.
+
 ## Running
 ```
 npm run dev       # Start dev server (port 5000)
