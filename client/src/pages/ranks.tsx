@@ -129,7 +129,7 @@ export default function RanksPage() {
             </div>
             <div className="ml-auto text-right">
               {isStaff ? (
-                <p className="text-2xl font-black text-yellow-400">∞ XP</p>
+                <p className="text-2xl font-black text-white/50">0 <span className="text-white/30 text-sm font-normal">XP</span></p>
               ) : (
                 <p className="text-2xl font-black text-white">
                   {xp.toLocaleString()} <span className="text-white/40 text-sm font-normal">XP</span>
