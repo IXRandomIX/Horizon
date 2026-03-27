@@ -248,102 +248,133 @@ function BorderBeamUsername({ text, borderKey, className, style }: { text: strin
   );
 }
 
+// ── Shared animation helper: throttle + pause when offscreen or tab hidden ──
+function useThrottledCanvas(
+  canvasRef: React.RefObject<HTMLCanvasElement>,
+  fps: number,
+  draw: (ctx: CanvasRenderingContext2D, dt: number) => void,
+  deps: unknown[]
+) {
+  useEffect(() => {
+    const c = canvasRef.current; if (!c) return;
+    const ctx = c.getContext('2d'); if (!ctx) return;
+    const interval = 1000 / fps;
+    let animId: number;
+    let lastDraw = 0;
+    let inView = true;
+    let tabVisible = !document.hidden;
+    let lastTime = 0;
+
+    const frame = (now: number) => {
+      animId = requestAnimationFrame(frame);
+      if (!inView || !tabVisible) return;
+      if (now - lastDraw < interval) return;
+      const dt = lastTime ? Math.min((now - lastTime) / 1000, 0.1) : 0.016;
+      lastTime = now;
+      lastDraw = now;
+      draw(ctx, dt);
+    };
+
+    const observer = new IntersectionObserver(entries => {
+      inView = entries[0].isIntersecting;
+    }, { threshold: 0 });
+    observer.observe(c);
+
+    const onVisibility = () => { tabVisible = !document.hidden; };
+    document.addEventListener('visibilitychange', onVisibility);
+
+    animId = requestAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(animId);
+      observer.disconnect();
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, deps);
+}
+
 // ── Canvas-based username effect components ────────────────────────────────
 function MatrixCanvas({ color }: { color: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const W = 130, H = 36;
-  useEffect(() => {
-    const c = canvasRef.current; if (!c) return;
-    const ctx = c.getContext('2d'); if (!ctx) return;
-    const sz = 8, cols = Math.floor(W / sz);
-    // Each column: current row position
-    const drops: number[] = Array.from({ length: cols }, () => -Math.floor(Math.random() * 10));
-    // Track opacity per cell for fade trail without opaque background
-    const opacities: number[][] = Array.from({ length: cols }, () => Array(Math.ceil(H / sz) + 1).fill(0));
-    let animId: number, tick = 0;
-    const frame = () => {
-      tick++;
-      if (tick % 3 === 0) {
-        // Fade existing opacities (transparent trail effect without black bg)
-        ctx.clearRect(0, 0, W, H);
-        for (let i = 0; i < cols; i++) {
-          for (let row = 0; row < opacities[i].length; row++) {
-            if (opacities[i][row] > 0) {
-              opacities[i][row] = Math.max(0, opacities[i][row] - 0.18);
-              const y = row * sz;
-              if (opacities[i][row] > 0.05) {
-                ctx.globalAlpha = opacities[i][row];
-                ctx.fillStyle = color;
-                ctx.font = `bold ${sz}px monospace`;
-                ctx.fillText(Math.random() > 0.5 ? '1' : '0', i * sz + 1, y + sz);
-              }
-            }
+  const sz = 8, cols = Math.floor(W / sz);
+  const stateRef = useRef({
+    drops: Array.from({ length: cols }, () => -Math.floor(Math.random() * 10)),
+    opacities: Array.from({ length: cols }, () => Array(Math.ceil(H / sz) + 1).fill(0)),
+  });
+
+  useThrottledCanvas(canvasRef, 12, (ctx) => {
+    const { drops, opacities } = stateRef.current;
+    ctx.clearRect(0, 0, W, H);
+    ctx.font = `bold ${sz}px monospace`;
+    for (let i = 0; i < cols; i++) {
+      for (let row = 0; row < opacities[i].length; row++) {
+        if (opacities[i][row] > 0) {
+          opacities[i][row] = Math.max(0, opacities[i][row] - 0.18);
+          if (opacities[i][row] > 0.05) {
+            ctx.globalAlpha = opacities[i][row];
+            ctx.fillStyle = color;
+            ctx.fillText(Math.random() > 0.5 ? '1' : '0', i * sz + 1, row * sz + sz);
           }
-          // Draw head character
-          const headY = drops[i];
-          if (headY >= 0 && headY < opacities[i].length) {
-            opacities[i][headY] = 1;
-            ctx.globalAlpha = 1;
-            ctx.fillStyle = '#ffffff';
-            ctx.font = `bold ${sz}px monospace`;
-            ctx.fillText(Math.random() > 0.5 ? '1' : '0', i * sz + 1, headY * sz + sz);
-          }
-          drops[i]++;
-          if (drops[i] * sz > H && Math.random() > 0.94) drops[i] = -Math.floor(Math.random() * 8);
         }
-        ctx.globalAlpha = 1;
       }
-      animId = requestAnimationFrame(frame);
-    };
-    animId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(animId);
+      const headY = drops[i];
+      if (headY >= 0 && headY < opacities[i].length) {
+        opacities[i][headY] = 1;
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillText(Math.random() > 0.5 ? '1' : '0', i * sz + 1, headY * sz + sz);
+      }
+      drops[i]++;
+      if (drops[i] * sz > H && Math.random() > 0.94) drops[i] = -Math.floor(Math.random() * 8);
+    }
+    ctx.globalAlpha = 1;
   }, [color]);
+
   return <canvas ref={canvasRef} width={W} height={H} style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)', pointerEvents:'none', borderRadius:3, zIndex:0 }} />;
 }
 
 function GalaxyCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const W = 130, H = 36;
-  useEffect(() => {
-    const c = canvasRef.current; if (!c) return;
-    const ctx = c.getContext('2d'); if (!ctx) return;
-    type GStar = { x: number; y: number; r: number; phase: number; spd: number; big: boolean };
-    const stars: GStar[] = Array.from({ length: 55 }, () => ({
+  type GStar = { x: number; y: number; r: number; phase: number; spd: number; big: boolean };
+  const stateRef = useRef({
+    stars: Array.from({ length: 55 }, (): GStar => ({
       x: Math.random() * W, y: Math.random() * H,
       r: Math.random() * 1.4 + 0.3,
       phase: Math.random() * Math.PI * 2,
       spd: 0.8 + Math.random() * 1.2,
       big: Math.random() > 0.82,
-    }));
-    let t = 0, animId: number;
-    const frame = () => {
-      t += 0.016;
-      ctx.clearRect(0, 0, W, H);
-      const glow = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W * 0.55);
-      glow.addColorStop(0, 'rgba(90,0,210,0.10)');
-      glow.addColorStop(0.5, 'rgba(0,20,160,0.06)');
-      glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-      for (const s of stars) {
-        const op = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(t * s.spd + s.phase));
+    })),
+    t: 0,
+  });
+
+  useThrottledCanvas(canvasRef, 20, (ctx, dt) => {
+    const s = stateRef.current;
+    s.t += dt;
+    ctx.clearRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W/2, H/2, 0, W/2, H/2, W * 0.55);
+    glow.addColorStop(0, 'rgba(90,0,210,0.10)');
+    glow.addColorStop(0.5, 'rgba(0,20,160,0.06)');
+    glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    for (const star of s.stars) {
+      const op = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(s.t * star.spd + star.phase));
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.r, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${op * 0.95})`;
+      ctx.fill();
+      if (star.big && op > 0.7) {
+        ctx.strokeStyle = `rgba(190,170,255,${op * 0.55})`;
+        ctx.lineWidth = 0.5;
         ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${op * 0.95})`;
-        ctx.fill();
-        if (s.big && op > 0.7) {
-          ctx.strokeStyle = `rgba(190,170,255,${op * 0.55})`;
-          ctx.lineWidth = 0.5;
-          ctx.beginPath();
-          ctx.moveTo(s.x - s.r * 3.5, s.y); ctx.lineTo(s.x + s.r * 3.5, s.y);
-          ctx.moveTo(s.x, s.y - s.r * 3.5); ctx.lineTo(s.x, s.y + s.r * 3.5);
-          ctx.stroke();
-        }
+        ctx.moveTo(star.x - star.r * 3.5, star.y); ctx.lineTo(star.x + star.r * 3.5, star.y);
+        ctx.moveTo(star.x, star.y - star.r * 3.5); ctx.lineTo(star.x, star.y + star.r * 3.5);
+        ctx.stroke();
       }
-      animId = requestAnimationFrame(frame);
-    };
-    animId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(animId);
+    }
   }, []);
+
   return <canvas ref={canvasRef} width={W} height={H} style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)', pointerEvents:'none', zIndex:0 }} />;
 }
 
@@ -351,56 +382,50 @@ function BlackholeCanvas() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const W = 130, H = 36;
   const CX = W / 2, CY = H / 2, BH_R = 6;
-  useEffect(() => {
-    const c = canvasRef.current; if (!c) return;
-    const ctx = c.getContext('2d'); if (!ctx) return;
-    type BHStar = { angle: number; dist: number; spd: number; op: number };
-    const stars: BHStar[] = Array.from({ length: 30 }, () => ({
+  type BHStar = { angle: number; dist: number; spd: number; op: number };
+  const stateRef = useRef({
+    stars: Array.from({ length: 30 }, (): BHStar => ({
       angle: Math.random() * Math.PI * 2,
       dist: 18 + Math.random() * 68,
       spd: 0.003 + Math.random() * 0.005,
       op: 0.5 + Math.random() * 0.5,
-    }));
-    let rot = 0, animId: number;
-    const frame = () => {
-      ctx.clearRect(0, 0, W, H);
-      rot += 0.018;
-      // outer glow
-      const glow = ctx.createRadialGradient(CX, CY, BH_R, CX, CY, 32);
-      glow.addColorStop(0, 'rgba(90,0,150,0.45)'); glow.addColorStop(0.5, 'rgba(40,0,80,0.15)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
-      ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
-      // accretion disc rings
-      ctx.save(); ctx.translate(CX, CY); ctx.rotate(rot * 0.4);
-      for (let i = 0; i < 3; i++) {
-        const r = BH_R + 5 + i * 5;
-        const g = ctx.createLinearGradient(-r * 1.8, 0, r * 1.8, 0);
-        g.addColorStop(0, `rgba(255,${120 - i * 25},0,${0.75 - i * 0.17})`);
-        g.addColorStop(0.5, `rgba(180,80,255,${0.5 - i * 0.1})`);
-        g.addColorStop(1, `rgba(255,${120 - i * 25},0,${0.75 - i * 0.17})`);
-        ctx.beginPath(); ctx.ellipse(0, 0, r * 1.8, r * 0.38, 0, 0, Math.PI * 2);
-        ctx.strokeStyle = g; ctx.lineWidth = 2.2 - i * 0.4; ctx.stroke();
-      }
-      ctx.restore();
-      // black hole disc
-      const bhg = ctx.createRadialGradient(CX, CY, 0, CX, CY, BH_R);
-      bhg.addColorStop(0, '#000'); bhg.addColorStop(0.85, '#000'); bhg.addColorStop(1, 'rgba(60,0,90,0.7)');
-      ctx.beginPath(); ctx.arc(CX, CY, BH_R, 0, Math.PI * 2); ctx.fillStyle = bhg; ctx.fill();
-      // infalling stars
-      for (const s of stars) {
-        s.angle += s.spd * (60 / Math.max(s.dist, 5));
-        s.dist -= 0.18;
-        if (s.dist < BH_R) { s.dist = 22 + Math.random() * 60; s.angle = Math.random() * Math.PI * 2; s.op = 0.5 + Math.random() * 0.5; }
-        const sx = CX + Math.cos(s.angle) * s.dist;
-        const sy = CY + Math.sin(s.angle) * s.dist * 0.33;
-        const fade = Math.min(1, (s.dist - BH_R) / 14);
-        ctx.beginPath(); ctx.arc(sx, sy, 0.85, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(255,255,255,${fade * s.op})`; ctx.fill();
-      }
-      animId = requestAnimationFrame(frame);
-    };
-    animId = requestAnimationFrame(frame);
-    return () => cancelAnimationFrame(animId);
+    })),
+    rot: 0,
+  });
+
+  useThrottledCanvas(canvasRef, 20, (ctx, dt) => {
+    const s = stateRef.current;
+    s.rot += dt * 1.08;
+    ctx.clearRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(CX, CY, BH_R, CX, CY, 32);
+    glow.addColorStop(0, 'rgba(90,0,150,0.45)'); glow.addColorStop(0.5, 'rgba(40,0,80,0.15)'); glow.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    ctx.save(); ctx.translate(CX, CY); ctx.rotate(s.rot * 0.4);
+    for (let i = 0; i < 3; i++) {
+      const r = BH_R + 5 + i * 5;
+      const g = ctx.createLinearGradient(-r * 1.8, 0, r * 1.8, 0);
+      g.addColorStop(0, `rgba(255,${120 - i * 25},0,${0.75 - i * 0.17})`);
+      g.addColorStop(0.5, `rgba(180,80,255,${0.5 - i * 0.1})`);
+      g.addColorStop(1, `rgba(255,${120 - i * 25},0,${0.75 - i * 0.17})`);
+      ctx.beginPath(); ctx.ellipse(0, 0, r * 1.8, r * 0.38, 0, 0, Math.PI * 2);
+      ctx.strokeStyle = g; ctx.lineWidth = 2.2 - i * 0.4; ctx.stroke();
+    }
+    ctx.restore();
+    const bhg = ctx.createRadialGradient(CX, CY, 0, CX, CY, BH_R);
+    bhg.addColorStop(0, '#000'); bhg.addColorStop(0.85, '#000'); bhg.addColorStop(1, 'rgba(60,0,90,0.7)');
+    ctx.beginPath(); ctx.arc(CX, CY, BH_R, 0, Math.PI * 2); ctx.fillStyle = bhg; ctx.fill();
+    for (const st of s.stars) {
+      st.angle += st.spd * (60 / Math.max(st.dist, 5));
+      st.dist -= 0.18;
+      if (st.dist < BH_R) { st.dist = 22 + Math.random() * 60; st.angle = Math.random() * Math.PI * 2; st.op = 0.5 + Math.random() * 0.5; }
+      const sx = CX + Math.cos(st.angle) * st.dist;
+      const sy = CY + Math.sin(st.angle) * st.dist * 0.33;
+      const fade = Math.min(1, (st.dist - BH_R) / 14);
+      ctx.beginPath(); ctx.arc(sx, sy, 0.85, 0, Math.PI * 2);
+      ctx.fillStyle = `rgba(255,255,255,${fade * st.op})`; ctx.fill();
+    }
   }, []);
+
   return <canvas ref={canvasRef} width={W} height={H} style={{ position:'absolute', left:'50%', top:'50%', transform:'translate(-50%,-50%)', pointerEvents:'none', zIndex:0 }} />;
 }
 
