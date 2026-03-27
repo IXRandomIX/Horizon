@@ -86,8 +86,8 @@ export interface IStorage {
   setGatekeepLockout(token: string, until: Date): Promise<void>;
 
   // XP & Quests
-  getUserXP(username: string): Promise<number>;
-  addUserXP(username: string, amount: number): Promise<number>;
+  getUserXP(username: string): Promise<string>;
+  addUserXP(username: string, amount: bigint): Promise<string>;
   getCurrentCycle(): Promise<{ id: number; questIds: string[]; startedAt: Date; nextResetAt: Date }>;
   getQuestProgress(username: string, cycleId: number): Promise<any[]>;
   incrementQuestProgress(username: string, questId: string, amount: number, cycleId: number): Promise<{ progress: number; completed: boolean }>;
@@ -480,16 +480,17 @@ export class DatabaseStorage implements IStorage {
     return track;
   }
 
-  async getUserXP(username: string): Promise<number> {
+  async getUserXP(username: string): Promise<string> {
     const user = await this.getUser(username);
-    return user?.xp ?? 0;
+    return String(user?.xp ?? "0");
   }
 
-  async addUserXP(username: string, amount: number): Promise<number> {
-    const current = await this.getUserXP(username);
-    const newXP = Math.max(0, current + amount);
-    await db.update(users).set({ xp: newXP }).where(eq(users.username, username));
-    return newXP;
+  async addUserXP(username: string, amount: bigint): Promise<string> {
+    const current = BigInt(await this.getUserXP(username) || "0");
+    const newXP = current + amount < 0n ? 0n : current + amount;
+    const newXPStr = newXP.toString();
+    await db.update(users).set({ xp: newXPStr }).where(eq(users.username, username));
+    return newXPStr;
   }
 
   async getCurrentCycle(): Promise<{ id: number; questIds: string[]; startedAt: Date; nextResetAt: Date }> {

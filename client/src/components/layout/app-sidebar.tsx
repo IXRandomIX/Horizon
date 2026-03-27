@@ -47,7 +47,7 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user, logout } = useAuth();
   const { globalInboxUnread, chatUnread, changeLogsUnread, inboxUnread, markGlobalInboxRead, markChatRead, markChangeLogsRead, markInboxRead } = useNotifications();
-  const [rankInfo, setRankInfo] = useState<{ xp: number | null; rank: { name: string; color: string }; isStaff: boolean } | null>(null);
+  const [rankInfo, setRankInfo] = useState<{ xp: string | null; rank: { name: string; color: string }; isStaff: boolean } | null>(null);
 
   const fetchRankInfo = () => {
     const token = localStorage.getItem("horizon_session_token");
@@ -217,7 +217,11 @@ export function AppSidebar() {
                 <p className={`text-sm font-bold text-white truncate ${fontClass}`}>{displayName}</p>
                 {rankInfo ? (
                   <p className="text-[10px] font-bold truncate" style={{ color: rankInfo.rank.color }}>
-                    {rankInfo.isStaff ? `STAFF · ${(rankInfo.xp ?? 0).toLocaleString()} XP` : `${rankInfo.rank.name} · ${(rankInfo.xp ?? 0).toLocaleString()} XP`}
+                    {(() => {
+                      const s = String(rankInfo.xp ?? "0").replace(/[^0-9]/g, "") || "0";
+                      const fmt = s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+                      return rankInfo.isStaff ? `STAFF · ${fmt} XP` : `${rankInfo.rank.name} · ${fmt} XP`;
+                    })()}
                   </p>
                 ) : (
                   <p className="text-xs text-white/30 truncate">@{user?.username}</p>

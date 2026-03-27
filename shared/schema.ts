@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, integer, boolean, bigint } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, boolean, numeric } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
@@ -85,7 +85,7 @@ export const users = pgTable("users", {
   avatar: text("avatar").default(""),
   banner: text("banner").default(""),
   bannerColor: text("banner_color").default("#1a1a2e"),
-  xp: bigint("xp", { mode: "number" }).default(0),
+  xp: numeric("xp").default("0"),
 });
 
 export const questCycles = pgTable("quest_cycles", {

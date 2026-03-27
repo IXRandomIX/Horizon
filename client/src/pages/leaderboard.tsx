@@ -2,11 +2,16 @@ import { useEffect, useState, useCallback } from "react";
 import { RANKS, getRankForXP } from "@shared/quests";
 import { Crown, Users, RefreshCw } from "lucide-react";
 
+function formatXP(xp: string | number | null | undefined): string {
+  const s = String(xp ?? "0").replace(/[^0-9]/g, "") || "0";
+  return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
 interface LeaderboardUser {
   username: string;
   displayName: string | null;
   avatar: string | null;
-  xp: number;
+  xp: string;
   rank: { rank: number; name: string; xpNeeded: number; color: string };
 }
 
@@ -99,7 +104,7 @@ export default function LeaderboardPage() {
                       <div className="flex items-center gap-3 flex-shrink-0">
                         <div className="text-right">
                           <p className="text-[10px] text-white/30 uppercase tracking-widest">XP</p>
-                          <p className="text-[10px] font-black text-white/50 tracking-widest">{u.xp.toLocaleString()}</p>
+                          <p className="text-[10px] font-black text-white/50 tracking-widest">{formatXP(u.xp)}</p>
                         </div>
                         <span className="text-[10px] font-black px-2 py-1 rounded-lg bg-yellow-500/15 text-yellow-400 border border-yellow-500/20">
                           STAFF
@@ -142,7 +147,7 @@ export default function LeaderboardPage() {
                               <p className="text-sm font-bold text-white truncate">{u.displayName || u.username}</p>
                               <p className="text-xs text-white/30">@{u.username}</p>
                             </div>
-                            <span className="text-xs font-bold text-white/50 flex-shrink-0">{u.xp.toLocaleString()} XP</span>
+                            <span className="text-xs font-bold text-white/50 flex-shrink-0">{formatXP(u.xp)} XP</span>
                           </div>
                         ))}
                       </div>

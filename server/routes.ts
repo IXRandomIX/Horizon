@@ -133,7 +133,7 @@ async function trackXPAction(username: string, type: string, cycle?: { id: numbe
     const result = await storage.incrementQuestProgress(username, quest.id, 1, activeCycle.id);
     if (!result.completed && result.progress >= quest.target) {
       await storage.markQuestCompleted(username, quest.id, activeCycle.id);
-      await storage.addUserXP(username, quest.xp);
+      await storage.addUserXP(username, BigInt(quest.xp));
     }
   }
 }
@@ -1027,7 +1027,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const staff = await isStaffUser(caller);
     const cycle = await storage.getCurrentCycle();
     const xp = await storage.getUserXP(caller);
-    const rank = staff ? { rank: -1, name: "STAFF", xpNeeded: 0, color: "#FFD700" } : getRankForXP(xp ?? 0);
+    const rank = staff ? { rank: -1, name: "STAFF", xpNeeded: 0, color: "#FFD700" } : getRankForXP(Number(xp));
     const questProgress = staff ? [] : await storage.getQuestProgress(caller, cycle.id);
     res.json({
       xp,
@@ -1050,8 +1050,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const byRank: Record<number, any[]> = {};
     for (const u of allUsers) {
       const userIsStaff = u.username === ADMIN_USER || (u.roles || []).some((r: string) => staffRoleNames.includes(r));
-      const xp = u.xp ?? 0;
-      const rank = getRankForXP(xp);
+      const xp = String(u.xp ?? "0");
+      const rank = getRankForXP(Number(xp));
       const entry = {
         username: u.username,
         displayName: u.displayName,
@@ -1066,9 +1066,13 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         byRank[rank.rank].push(entry);
       }
     }
-    // Sort each rank group by XP descending
+    // Sort each rank group by XP descending using BigInt for accuracy
     for (const k of Object.keys(byRank)) {
-      byRank[Number(k)].sort((a: any, b: any) => b.xp - a.xp);
+      byRank[Number(k)].sort((a: any, b: any) => {
+        const aXP = BigInt(a.xp || "0");
+        const bXP = BigInt(b.xp || "0");
+        return bXP > aXP ? 1 : bXP < aXP ? -1 : 0;
+      });
     }
     res.json({ staff: staffList, byRank });
   });
@@ -1098,13 +1102,16 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     if (!targetUser) return res.status(404).json({ message: "User not found" });
 
     const actualUsername = targetUser.username;
-    const xpAmount = Math.abs(parseInt(amount));
-    if (isNaN(xpAmount) || xpAmount <= 0) return res.status(400).json({ message: "Invalid amount" });
+    const cleanAmount = String(amount).replace(/[^0-9]/g, "");
+    if (!cleanAmount || cleanAmount === "0") return res.status(400).json({ message: "Invalid amount" });
+    const xpAmount = BigInt(cleanAmount);
 
     const change = action === "remove" ? -xpAmount : xpAmount;
     const newXP = await storage.addUserXP(actualUsername, change);
 
-    const formatted = xpAmount.toLocaleString();
+    const formatted = Number(xpAmount) <= Number.MAX_SAFE_INTEGER
+      ? Number(xpAmount).toLocaleString()
+      : xpAmount.toLocaleString();
     const notifMsg = action === "add"
       ? `You have been given ${formatted} XP from ${caller}!`
       : `${formatted} XP has been removed from your account by ${caller}.`;
@@ -1124,7 +1131,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const cycle = await storage.getCurrentCycle();
     await trackXPAction(caller, type, cycle);
     const xp = await storage.getUserXP(caller);
-    const rank = getRankForXP(xp);
+    const rank = getRankForXP(Number(xp));
     res.json({ xp, rank });
   });
 

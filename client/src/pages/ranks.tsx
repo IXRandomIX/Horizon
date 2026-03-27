@@ -71,7 +71,8 @@ export default function RanksPage() {
     return () => clearTimeout(t);
   }, [rankData?.cycle?.nextResetAt, fetchRankData]);
 
-  const xp: number = rankData?.xp ?? 0;
+  const xpStr: string = String(rankData?.xp ?? "0");
+  const xp: number = Number(xpStr);
   const isStaff: boolean = rankData?.isStaff ?? false;
   const currentRank = isStaff
     ? { rank: -1, name: "STAFF", color: "#FFD700", xpNeeded: 0 }
@@ -80,6 +81,11 @@ export default function RanksPage() {
   const progressPct = !isStaff && nextRank
     ? Math.min(100, ((xp - currentRank.xpNeeded) / (nextRank.xpNeeded - currentRank.xpNeeded)) * 100)
     : 100;
+
+  function formatXP(val: string | number | null | undefined): string {
+    const s = String(val ?? "0").replace(/[^0-9]/g, "") || "0";
+    return s.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  }
 
   const questProgress: Record<string, { progress: number; completed: boolean }> = {};
   (rankData?.questProgress || []).forEach((qp: any) => {
@@ -129,10 +135,10 @@ export default function RanksPage() {
             </div>
             <div className="ml-auto text-right">
               {isStaff ? (
-                <p className="text-2xl font-black text-white">{(xp ?? 0).toLocaleString()} <span className="text-white/40 text-sm font-normal">XP</span></p>
+                <p className="text-2xl font-black text-white">{formatXP(xpStr)} <span className="text-white/40 text-sm font-normal">XP</span></p>
               ) : (
                 <p className="text-2xl font-black text-white">
-                  {xp.toLocaleString()} <span className="text-white/40 text-sm font-normal">XP</span>
+                  {formatXP(xpStr)} <span className="text-white/40 text-sm font-normal">XP</span>
                 </p>
               )}
             </div>
@@ -141,7 +147,7 @@ export default function RanksPage() {
             <div className="space-y-2">
               <div className="flex justify-between text-xs text-white/40">
                 <span>Next: <span className="font-bold" style={{ color: nextRank.color }}>{nextRank.name}</span></span>
-                <span>{(nextRank.xpNeeded - xp).toLocaleString()} XP to go</span>
+                <span>{Math.max(0, nextRank.xpNeeded - xp).toLocaleString()} XP to go</span>
               </div>
               <div className="h-2 rounded-full bg-white/10 overflow-hidden">
                 <div
