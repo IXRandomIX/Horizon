@@ -3745,5 +3745,89 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     }
   });
 
+  // ── Soundboard ─────────────────────────────────────────────────────────────
+  const SB_CACHE = new Map<string, { data: any; expires: number }>();
+  const SB_TTL = 5 * 60 * 1000;
+
+  function sbCacheGet(key: string) {
+    const e = SB_CACHE.get(key);
+    if (!e) return null;
+    if (Date.now() > e.expires) { SB_CACHE.delete(key); return null; }
+    return e.data;
+  }
+  function sbCacheSet(key: string, data: any) {
+    SB_CACHE.set(key, { data, expires: Date.now() + SB_TTL });
+  }
+
+  async function fetchMyInstants(query: string, page = 1): Promise<{ sounds: any[]; next: boolean }> {
+    const key = `mi:${query}:${page}`;
+    const cached = sbCacheGet(key);
+    if (cached) return cached;
+    const params = new URLSearchParams({ format: "json", page: String(page) });
+    if (query) params.set("search", query);
+    const res = await fetch(`https://www.myinstants.com/api/v1/instants/?${params}`, {
+      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`myinstants ${res.status}`);
+    const data = await res.json();
+    const sounds = (data.results || []).map((item: any) => ({
+      id: item.slug,
+      name: item.name,
+      sound: item.sound,
+      color: item.color ? `#${item.color}` : "#7c3aed",
+      image: item.image || null,
+      tags: item.tags || "",
+      source: "MyInstants",
+      sourceUrl: `https://www.myinstants.com/en/instant/${item.slug}/`,
+    }));
+    const result = { sounds, next: !!data.next };
+    sbCacheSet(key, result);
+    return result;
+  }
+
+  app.get("/api/soundboard/search", async (req, res) => {
+    try {
+      const q = String(req.query.q || "");
+      const page = parseInt(String(req.query.page || "1"), 10);
+      const result = await fetchMyInstants(q, page);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  app.get("/api/soundboard/popular", async (req, res) => {
+    try {
+      const page = parseInt(String(req.query.page || "1"), 10);
+      const result = await fetchMyInstants("", page);
+      res.json(result);
+    } catch (e: any) {
+      res.status(500).json({ message: e.message });
+    }
+  });
+
+  // Proxy audio so CORS doesn't block browser playback
+  app.get("/api/soundboard/audio", async (req, res) => {
+    const url = String(req.query.url || "");
+    if (!url.startsWith("https://www.myinstants.com/")) {
+      return res.status(400).json({ message: "Invalid audio URL" });
+    }
+    try {
+      const upstream = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://www.myinstants.com/" },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (!upstream.ok) return res.status(502).json({ message: "Audio fetch failed" });
+      res.setHeader("Content-Type", upstream.headers.get("content-type") || "audio/mpeg");
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.send(buf);
+    } catch (e: any) {
+      res.status(502).json({ message: e.message });
+    }
+  });
+
   return httpServer;
 }

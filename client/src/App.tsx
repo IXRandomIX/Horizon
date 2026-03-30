@@ -36,6 +36,7 @@ const EaglerCraft = lazy(() => import("@/pages/eaglercraft"));
 const EaglerCraftLauncher = lazy(() => import("@/pages/eaglercraft-launcher"));
 const ChangeLogsPage = lazy(() => import("@/pages/change-logs"));
 const ChatRulesPage = lazy(() => import("@/pages/chat-rules"));
+const SoundboardPage = lazy(() => import("@/pages/soundboard"));
 
 function PageLoader() {
   return (
@@ -116,6 +117,7 @@ function Router() {
         <Route path="/eaglercraft-launcher" component={EaglerCraftLauncher} />
         <Route path="/change-logs" component={ChangeLogsPage} />
         <Route path="/chat-rules" component={ChatRulesPage} />
+        <Route path="/soundboard" component={SoundboardPage} />
         <Route>
           <Redirect to="/announcements" />
         </Route>
