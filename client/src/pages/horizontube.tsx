@@ -256,7 +256,7 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
   const [isFullscreen, setIsFullscreen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const isShort = video.duration !== null && video.duration <= 180;
-  const embedUrl = `/api/yt-embed/${video.id}`;
+  const embedUrl = `https://www.youtube.com/embed/${video.id}?autoplay=1`;
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -296,11 +296,15 @@ function VideoPlayerModal({ video, onClose }: { video: YTVideo; onClose: () => v
 
         <div className="flex-1 min-h-0 relative" style={isShort ? { aspectRatio: "9/16", maxWidth: "100%", alignSelf: "center" } : {}}>
           <iframe
+            width="100%"
+            height="100%"
             src={embedUrl}
-            className="w-full h-full border-0"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            title="YouTube video player"
+            frameBorder="0"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
             allowFullScreen
             data-testid="iframe-yt-player"
+            className="w-full h-full border-0"
           />
         </div>
       </div>
