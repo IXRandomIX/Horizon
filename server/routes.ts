@@ -1227,7 +1227,7 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   });
 
   // ─── Horizon AI (Gemini) ──────────────────────────────────────────────────
-  const AI_MODELS = ["gemini-1.5-flash", "gemini-1.5-flash-8b", "gemini-1.5-pro"];
+  const AI_MODELS = ["gemini-2.0-flash", "gemini-2.0-flash-lite", "gemini-2.5-flash"];
 
   async function callGeminiWithFallback(apiKey: string, parts: any[]): Promise<string> {
     const genAI = new GoogleGenerativeAI(apiKey);
