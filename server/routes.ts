@@ -8,6 +8,7 @@ import path from "path";
 import fs from "fs";
 import express from "express";
 import { GoogleGenerativeAI } from "@google/generative-ai";
+import { google } from "googleapis";
 
 const uploadsDir = path.join(process.cwd(), "uploads");
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -2744,9 +2745,10 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     }
   });
 
-  // ── HorizonTube (YouTube Data API v3) ────────────────────────────────────
+  // ── HorizonTube (YouTube Data API v3 via official googleapis client) ─────
   const YT_API_KEY = process.env.YOUTUBE_API_KEY || "";
-  const YT_API_BASE = "https://www.googleapis.com/youtube/v3";
+
+  const youtube = google.youtube({ version: "v3", auth: YT_API_KEY });
 
   const ytCache = new Map<string, { data: any; expires: number }>();
   const YT_CACHE_TTL = 30 * 60 * 1000;
@@ -2782,7 +2784,7 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
       ? new Date(publishedAt).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" })
       : "";
     return {
-      id: item.id,
+      id: typeof item.id === "string" ? item.id : (item.id?.videoId || ""),
       kind: "youtube#video",
       title: snippet.title || "",
       description: snippet.description || "",
@@ -2802,7 +2804,7 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     const stats = item.statistics || {};
     const image = (item.brandingSettings || {}).image || {};
     return {
-      id: item.id,
+      id: typeof item.id === "string" ? item.id : (item.id?.channelId || ""),
       title: snippet.title || "",
       description: snippet.description || "",
       customUrl: snippet.customUrl || "",
@@ -2816,30 +2818,36 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
 
   async function ytVideoDetails(ids: string[]): Promise<any[]> {
     if (!ids.length) return [];
-    const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", id: ids.join(","), key: YT_API_KEY });
-    const res = await fetch(`${YT_API_BASE}/videos?${params}`);
-    if (!res.ok) throw new Error(`YouTube videos API error ${res.status}`);
-    const data = await res.json();
-    return (data.items || []).map(mapYtItem);
+    const response = await youtube.videos.list({
+      part: ["snippet", "statistics", "contentDetails"],
+      id: ids,
+    });
+    return (response.data.items || []).map(mapYtItem);
   }
 
   async function ytChannelsByIds(ids: string[]): Promise<any[]> {
     if (!ids.length) return [];
-    const params = new URLSearchParams({ part: "snippet,statistics,brandingSettings", id: ids.join(","), key: YT_API_KEY });
-    const res = await fetch(`${YT_API_BASE}/channels?${params}`);
-    if (!res.ok) throw new Error(`YouTube channels API error ${res.status}`);
-    const data = await res.json();
-    return (data.items || []).map(mapYtChannel);
+    const response = await youtube.channels.list({
+      part: ["snippet", "statistics", "brandingSettings"],
+      id: ids,
+    });
+    return (response.data.items || []).map(mapYtChannel);
   }
 
   async function ytMostPopular(maxResults = 20, pageToken?: string, videoCategoryId?: string): Promise<{ videos: any[]; nextPageToken?: string }> {
-    const params = new URLSearchParams({ part: "snippet,statistics,contentDetails", chart: "mostPopular", regionCode: "US", maxResults: String(maxResults), key: YT_API_KEY });
-    if (pageToken) params.set("pageToken", pageToken);
-    if (videoCategoryId) params.set("videoCategoryId", videoCategoryId);
-    const res = await fetch(`${YT_API_BASE}/videos?${params}`);
-    if (!res.ok) throw new Error(`YouTube popular error ${res.status}`);
-    const data = await res.json();
-    return { videos: (data.items || []).map(mapYtItem), nextPageToken: data.nextPageToken };
+    const params: any = {
+      part: ["snippet", "statistics", "contentDetails"],
+      chart: "mostPopular",
+      regionCode: "US",
+      maxResults,
+    };
+    if (pageToken) params.pageToken = pageToken;
+    if (videoCategoryId) params.videoCategoryId = videoCategoryId;
+    const response = await youtube.videos.list(params);
+    return {
+      videos: (response.data.items || []).map(mapYtItem),
+      nextPageToken: response.data.nextPageToken ?? undefined,
+    };
   }
 
   async function ytSearch(query: string, options: {
@@ -2849,7 +2857,7 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     maxResults?: number; pageToken?: string; channelId?: string;
   } = {}): Promise<{ videos: any[]; nextPageToken?: string }> {
     const { order = "relevance", type = "video", videoDuration, publishedAfter, publishedBefore, videoDefinition, eventType, maxResults = 20, pageToken, channelId } = options;
-    const params: Record<string, string> = { part: "id", type, order, maxResults: String(maxResults), key: YT_API_KEY };
+    const params: any = { part: ["id"], type, order, maxResults };
     if (query) params.q = query;
     if (videoDuration) params.videoDuration = videoDuration;
     if (publishedAfter) params.publishedAfter = publishedAfter;
@@ -2858,23 +2866,19 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     if (eventType) params.eventType = eventType;
     if (pageToken) params.pageToken = pageToken;
     if (channelId) params.channelId = channelId;
-    const res = await fetch(`${YT_API_BASE}/search?${new URLSearchParams(params)}`);
-    if (!res.ok) throw new Error(`YouTube search error ${res.status}`);
-    const data = await res.json();
-    const ids = (data.items || []).map((item: any) => item.id?.videoId || item.id).filter(Boolean);
+    const response = await youtube.search.list(params);
+    const ids = (response.data.items || []).map((item: any) => item.id?.videoId || item.id).filter(Boolean);
     const videos = await ytVideoDetails(ids);
-    return { videos, nextPageToken: data.nextPageToken };
+    return { videos, nextPageToken: response.data.nextPageToken ?? undefined };
   }
 
   async function ytSearchChannels(query: string, pageToken?: string, maxResults = 20): Promise<{ channels: any[]; nextPageToken?: string }> {
-    const params = new URLSearchParams({ part: "id,snippet", q: query, type: "channel", maxResults: String(maxResults), key: YT_API_KEY });
-    if (pageToken) params.set("pageToken", pageToken);
-    const res = await fetch(`${YT_API_BASE}/search?${params}`);
-    if (!res.ok) throw new Error(`YouTube channel search error ${res.status}`);
-    const data = await res.json();
-    const channelIds = (data.items || []).map((item: any) => item.id?.channelId || item.id).filter(Boolean);
+    const params: any = { part: ["id", "snippet"], q: query, type: ["channel"], maxResults };
+    if (pageToken) params.pageToken = pageToken;
+    const response = await youtube.search.list(params);
+    const channelIds = (response.data.items || []).map((item: any) => item.id?.channelId || item.id).filter(Boolean);
     const channels = await ytChannelsByIds(channelIds);
-    return { channels, nextPageToken: data.nextPageToken };
+    return { channels, nextPageToken: response.data.nextPageToken ?? undefined };
   }
 
   // ── Invidious-based search: free, no API key needed, multiple fallback instances ──
