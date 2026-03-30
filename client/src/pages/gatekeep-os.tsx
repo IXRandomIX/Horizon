@@ -107,7 +107,7 @@ export default function GatekeepOS() {
     return (
       <div className="flex flex-col h-full bg-black animate-in fade-in duration-1000 relative">
         <div className="flex-1 w-full relative">
-          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black animate-out fade-out fill-mode-forwards duration-1000 delay-[2000ms] pointer-events-none">
+          <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black animate-out fade-out fill-mode-forwards duration-1000 delay-[250ms] pointer-events-none">
             <h2 className="text-4xl md:text-7xl font-display font-black text-center px-6 leading-tight animate-glitch-gold shadow-gold">
               ACCESS GRANTED<br/>HAHAHAHHAHAH
             </h2>
