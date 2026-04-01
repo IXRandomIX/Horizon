@@ -1954,14 +1954,14 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
       // Update button label: AutoEmbed → EmbedMe
       html = html.replace(/AutoEmbed/g, "EmbedMe");
 
-      // vidora.su is DNS-dead — replace with 2embed.cc
+      // vidora.su is DNS-dead — proxy through our 2embed endpoint (hides 2embed.cc from content blockers)
       html = html.replace(
         /https:\/\/vidora\.su\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}[^'"]*/g,
-        "https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}"
+        "/api/movies/2ep?type=tv&id=${id}&s=${season}&e=${episode}"
       );
       html = html.replace(
         /https:\/\/vidora\.su\/movie\/\$\{id\}[^'"]*/g,
-        "https://www.2embed.cc/embed/${id}"
+        "/api/movies/2ep?type=movie&id=${id}"
       );
       // Update button label: Vidora → 2Embed
       html = html.replace(/\bVidora\b/g, "2Embed");
@@ -2715,6 +2715,43 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   app.all("/api/movies/deadend", (_req, res) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.sendStatus(204);
+  });
+
+  // ── 2embed.cc transparent proxy ─────────────────────────────────────────────
+  // Fetches 2embed.cc content server-side and serves it from our domain so that
+  // content blockers cannot detect or block the 2embed.cc origin at all.
+  app.get("/api/movies/2ep", async (req, res) => {
+    const { type, id, s, e } = req.query as Record<string, string>;
+    if (!id) return res.status(400).send("Missing id");
+    const isTV = type === "tv";
+    const season = s || "1";
+    const episode = e || "1";
+    const targetUrl = isTV
+      ? `https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}`
+      : `https://www.2embed.cc/embed/${id}`;
+    try {
+      const response = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Referer": "https://www.2embed.cc/",
+          "Origin": "https://www.2embed.cc",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9",
+        },
+        redirect: "follow",
+      });
+      if (!response.ok) return res.status(response.status).send("Upstream error");
+      const html = await response.text();
+      const finalUrl = new URL(response.url);
+      const rewritten = injectPopupBlocker(html, finalUrl.origin, finalUrl.pathname + finalUrl.search);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Frame-Options", "ALLOWALL");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.removeHeader("Content-Security-Policy");
+      return res.send(rewritten);
+    } catch (err: any) {
+      return res.status(502).send("2embed proxy error: " + err.message);
+    }
   });
 
   // Proxy cloudnestra.com/rcp/ and /prorcp/ pages through our server so the browser
