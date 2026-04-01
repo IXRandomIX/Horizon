@@ -1934,6 +1934,34 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         "Woah! Look at these movies guys omg!"
       );
 
+      // Fix iframe allow attributes for Chromebook + other devices
+      html = html.replace(
+        '<iframe id="modalIframe" allowfullscreen></iframe>',
+        '<iframe id="modalIframe" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share" referrerpolicy="no-referrer-when-downgrade"></iframe>'
+      );
+
+      // Replace dead sources with working alternatives
+      // autoembed.cc is DNS-dead — replace with multiembed.mov
+      html = html.replace(
+        /https:\/\/player\.autoembed\.cc\/embed\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}/g,
+        "https://multiembed.mov/?video_id=${id}&tmdb=1&s=${season}&e=${episode}"
+      );
+      html = html.replace(
+        /https:\/\/player\.autoembed\.cc\/embed\/movie\/\$\{id\}\?server=1/g,
+        "https://multiembed.mov/?video_id=${id}&tmdb=1"
+      );
+      // vidora.su is DNS-dead — replace with 2embed.cc
+      html = html.replace(
+        /https:\/\/vidora\.su\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}[^'"]*/g,
+        "https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}"
+      );
+      html = html.replace(
+        /https:\/\/vidora\.su\/movie\/\$\{id\}[^'"]*/g,
+        "https://www.2embed.cc/embed/${id}"
+      );
+      // moviesapi.club → moviesapi.to (domain changed)
+      html = html.replace(/moviesapi\.club/g, "moviesapi.to");
+
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Frame-Options", "ALLOWALL");
       res.removeHeader("Content-Security-Policy");
