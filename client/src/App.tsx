@@ -29,7 +29,6 @@ const DMsPage = lazy(() => import("@/pages/dms"));
 const UsersPage = lazy(() => import("@/pages/users"));
 const GlobalInboxPage = lazy(() => import("@/pages/global-inbox"));
 const MoviesPage = lazy(() => import("@/pages/movies"));
-const HorizonTubePage = lazy(() => import("@/pages/horizontube"));
 const RanksPage = lazy(() => import("@/pages/ranks"));
 const LeaderboardPage = lazy(() => import("@/pages/leaderboard"));
 const EaglerCraft = lazy(() => import("@/pages/eaglercraft"));
@@ -110,7 +109,6 @@ function Router() {
         <Route path="/users" component={UsersPage} />
         <Route path="/global-inbox" component={GlobalInboxPage} />
         <Route path="/movies" component={MoviesPage} />
-        <Route path="/horizontube" component={HorizonTubePage} />
         <Route path="/ranks" component={RanksPage} />
         <Route path="/leaderboard" component={LeaderboardPage} />
         <Route path="/eaglercraft" component={EaglerCraft} />

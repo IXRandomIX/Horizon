@@ -3805,25 +3805,63 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     const key = `mi:${query}:${page}`;
     const cached = sbCacheGet(key);
     if (cached) return cached;
-    const params = new URLSearchParams({ format: "json", page: String(page) });
-    if (query) params.set("search", query);
-    const res = await fetch(`https://www.myinstants.com/api/v1/instants/?${params}`, {
-      headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
-      signal: AbortSignal.timeout(8000),
-    });
-    if (!res.ok) throw new Error(`myinstants ${res.status}`);
-    const data = await res.json();
-    const sounds = (data.results || []).map((item: any) => ({
-      id: item.slug,
-      name: item.name,
-      sound: item.sound,
-      color: item.color ? `#${item.color}` : "#7c3aed",
-      image: item.image || null,
-      tags: item.tags || "",
-      source: "MyInstants",
-      sourceUrl: `https://www.myinstants.com/en/instant/${item.slug}/`,
-    }));
-    const result = { sounds, next: !!data.next };
+
+    let sounds: any[];
+    let hasNext = false;
+
+    if (query.trim()) {
+      // Scrape the search page — the API search param is broken and ignores the query
+      const url = `https://www.myinstants.com/en/search/?name=${encodeURIComponent(query.trim())}&page=${page}`;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36", "Accept": "text/html" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`myinstants search ${res.status}`);
+      const html = await res.text();
+
+      // Extract each sound: match the play button and its name anchor together in one block
+      const entries: { slug: string; soundPath: string; name: string }[] = [];
+      const blockRe = /onclick="play\('([^']+)',\s*'[^']+',\s*'([^']+)'\)"[\s\S]*?<a[^>]+class="instant-link[^"]*"[^>]*>([^<]+)<\/a>/g;
+      for (const m of html.matchAll(blockRe)) {
+        entries.push({ soundPath: m[1], slug: m[2], name: m[3].trim() });
+      }
+
+      sounds = entries.map(e => ({
+        id: e.slug,
+        name: e.name,
+        sound: `https://www.myinstants.com${e.soundPath}`,
+        color: "#7c3aed",
+        image: null,
+        tags: "",
+        source: "MyInstants",
+        sourceUrl: `https://www.myinstants.com/en/instant/${e.slug}/`,
+      }));
+
+      // If we got a full page of results, assume there's a next page
+      hasNext = entries.length >= 10;
+    } else {
+      // Popular sounds via API (works fine for non-search)
+      const params = new URLSearchParams({ format: "json", page: String(page) });
+      const res = await fetch(`https://www.myinstants.com/api/v1/instants/?${params}`, {
+        headers: { "User-Agent": "Mozilla/5.0", "Accept": "application/json" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (!res.ok) throw new Error(`myinstants ${res.status}`);
+      const data = await res.json();
+      sounds = (data.results || []).map((item: any) => ({
+        id: item.slug,
+        name: item.name,
+        sound: item.sound,
+        color: item.color ? `#${item.color}` : "#7c3aed",
+        image: item.image || null,
+        tags: item.tags || "",
+        source: "MyInstants",
+        sourceUrl: `https://www.myinstants.com/en/instant/${item.slug}/`,
+      }));
+      hasNext = !!data.next;
+    }
+
+    const result = { sounds, next: hasNext };
     sbCacheSet(key, result);
     return result;
   }
