@@ -1940,16 +1940,20 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         '<iframe id="modalIframe" allowfullscreen allow="autoplay; fullscreen; encrypted-media; picture-in-picture; web-share" referrerpolicy="no-referrer-when-downgrade"></iframe>'
       );
 
-      // Replace dead sources with working alternatives
-      // autoembed.cc is DNS-dead — replace with multiembed.mov
+      // Replace dead/broken sources with working alternatives
+
+      // autoembed.cc is DNS-dead — replace with embedme.top
       html = html.replace(
-        /https:\/\/player\.autoembed\.cc\/embed\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}/g,
-        "https://multiembed.mov/?video_id=${id}&tmdb=1&s=${season}&e=${episode}"
+        /https:\/\/player\.autoembed\.cc\/embed\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}[^'"]*/g,
+        "https://www.embedme.top/embed/tv/${id}/${season}/${episode}/"
       );
       html = html.replace(
-        /https:\/\/player\.autoembed\.cc\/embed\/movie\/\$\{id\}\?server=1/g,
-        "https://multiembed.mov/?video_id=${id}&tmdb=1"
+        /https:\/\/player\.autoembed\.cc\/embed\/movie\/\$\{id\}[^'"]*/g,
+        "https://www.embedme.top/embed/movie/${id}/"
       );
+      // Update button label: AutoEmbed → EmbedMe
+      html = html.replace(/AutoEmbed/g, "EmbedMe");
+
       // vidora.su is DNS-dead — replace with 2embed.cc
       html = html.replace(
         /https:\/\/vidora\.su\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}[^'"]*/g,
@@ -1959,7 +1963,54 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         /https:\/\/vidora\.su\/movie\/\$\{id\}[^'"]*/g,
         "https://www.2embed.cc/embed/${id}"
       );
-      // moviesapi.club → moviesapi.to (domain changed)
+      // Update button label: Vidora → 2Embed
+      html = html.replace(/\bVidora\b/g, "2Embed");
+
+      // vidsrc.xyz (VidSrc 2) is unavailable — replace with vidsrc.net
+      html = html.replace(
+        /https:\/\/vidsrc\.xyz\/embed\/tv\/\$\{id\}\?season=\$\{season\}&episode=\$\{episode\}/g,
+        "https://vidsrc.net/embed/tv?tmdb=${id}&season=${season}&episode=${episode}"
+      );
+      html = html.replace(
+        /https:\/\/vidsrc\.xyz\/embed\/movie\/\$\{id\}/g,
+        "https://vidsrc.net/embed/movie?tmdb=${id}"
+      );
+      html = html.replace(/vidsrc\.xyz/g, "vidsrc.net");
+
+      // vidsrc.icu is unavailable — replace with vidfast.co
+      html = html.replace(
+        /https:\/\/vidsrc\.icu\/embed\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}/g,
+        "https://vidfast.co/tv/${id}/${season}/${episode}?tmdb=1"
+      );
+      html = html.replace(
+        /https:\/\/vidsrc\.icu\/embed\/movie\/\$\{id\}/g,
+        "https://vidfast.co/movie/${id}?tmdb=1"
+      );
+      html = html.replace(/VidSrc ICU/g, "VidFast");
+
+      // vidsrc.cc returns Error 233011 (H.264 codec issue on Chromebook) — replace with flixembed.net
+      html = html.replace(
+        /https:\/\/vidsrc\.cc\/v2\/embed\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}/g,
+        "https://flixembed.net/embed/tv/${id}/${season}/${episode}"
+      );
+      html = html.replace(
+        /https:\/\/vidsrc\.cc\/v2\/embed\/movie\/\$\{id\}/g,
+        "https://flixembed.net/embed/movie/${id}"
+      );
+      html = html.replace(/VidSrc CC/g, "FlixEmbed");
+
+      // player.vidsrc.co blocks iframes on Chromebook — replace with embed.su
+      html = html.replace(
+        /https:\/\/player\.vidsrc\.co\/embed\/tv\/\$\{id\}\/\$\{season\}\/\$\{episode\}[^'"]*/g,
+        "https://embed.su/embed/tv/${id}/${season}/${episode}"
+      );
+      html = html.replace(
+        /https:\/\/player\.vidsrc\.co\/embed\/movie\/\$\{id\}[^'"]*/g,
+        "https://embed.su/embed/movie/${id}"
+      );
+      html = html.replace(/VidSrc\.co/g, "Embed.su");
+
+      // moviesapi.club shows "Sandbox Not Allowed" — use moviesapi.to (domain changed)
       html = html.replace(/moviesapi\.club/g, "moviesapi.to");
 
       res.setHeader("Content-Type", "text/html; charset=utf-8");
@@ -2491,8 +2542,8 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
           : `https://vidsrc.to/embed/movie/${id}`;
       case "vidsrc2":
         return isTV
-          ? `https://vidsrc.xyz/embed/tv/${id}?season=${season}&episode=${episode}`
-          : `https://vidsrc.xyz/embed/movie/${id}`;
+          ? `https://vidsrc.net/embed/tv?tmdb=${id}&season=${season}&episode=${episode}`
+          : `https://vidsrc.net/embed/movie?tmdb=${id}`;
       case "embedsu":
         return isTV
           ? `https://embed.su/embed/tv/${id}/${season}/${episode}`
@@ -2511,36 +2562,36 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
           : `https://player.vidify.top/embed/movie/${id}?autoplay=false&poster=true`;
       case "vidsrcco":
         return isTV
-          ? `https://player.vidsrc.co/embed/tv/${id}/${season}/${episode}?server=2`
-          : `https://player.vidsrc.co/embed/movie/${id}?server=2`;
+          ? `https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}`
+          : `https://www.2embed.cc/embed/${id}`;
       case "autoembed":
         return isTV
-          ? `https://player.autoembed.cc/embed/tv/${id}/${season}/${episode}`
-          : `https://player.autoembed.cc/embed/movie/${id}?server=1`;
+          ? `https://www.embedme.top/embed/tv/${id}/${season}/${episode}/`
+          : `https://www.embedme.top/embed/movie/${id}/`;
       case "vidsrcicu":
         return isTV
-          ? `https://vidsrc.icu/embed/tv/${id}/${season}/${episode}`
-          : `https://vidsrc.icu/embed/movie/${id}`;
+          ? `https://vidfast.co/tv/${id}/${season}/${episode}?tmdb=1`
+          : `https://vidfast.co/movie/${id}?tmdb=1`;
       case "moviekex":
         return isTV
           ? `https://moviekex.online/embed/tv/${id}/${season}/${episode}`
           : `https://moviekex.online/embed/movie/${id}`;
       case "vidsrccc":
         return isTV
-          ? `https://vidsrc.cc/v2/embed/tv/${id}/${season}/${episode}`
-          : `https://vidsrc.cc/v2/embed/movie/${id}`;
+          ? `https://flixembed.net/embed/tv/${id}/${season}/${episode}`
+          : `https://flixembed.net/embed/movie/${id}`;
       case "moviesapi":
         return isTV
-          ? `https://moviesapi.club/tv/${id}-${season}-${episode}`
-          : `https://moviesapi.club/movie/${id}`;
+          ? `https://moviesapi.to/tv/${id}-${season}-${episode}`
+          : `https://moviesapi.to/movie/${id}`;
       case "vidlink":
         return isTV
           ? `https://vidlink.pro/tv/${id}/${season}/${episode}?autoplay=false&poster=true&primaryColor=00c1db`
           : `https://vidlink.pro/movie/${id}?autoplay=true&poster=true&primaryColor=00c1db`;
       case "vidora":
         return isTV
-          ? `https://vidora.su/tv/${id}/${season}/${episode}?colour=dba4b2&autoplay=true`
-          : `https://vidora.su/movie/${id}?colour=dba4b2&autoplay=true`;
+          ? `https://www.2embed.cc/embedtv/${id}&s=${season}&e=${episode}`
+          : `https://www.2embed.cc/embed/${id}`;
       default:
         return isTV
           ? `https://vidsrc.to/embed/tv/${id}/${season}/${episode}`
@@ -2548,11 +2599,12 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     }
   }
 
-  // Source priority order for automatic fallback (smashy first — broad anime coverage, self-contained SPA)
+  // Source priority order for automatic fallback
+  // Prioritize sources that work reliably on Chromebook and other restricted devices
   const SOURCE_FALLBACK_ORDER = [
-    "smashy", "vidsrc2", "vidify", "vidsrcco", "autoembed",
-    "vidsrcicu", "moviekex", "vidsrccc", "moviesapi", "vidlink",
-    "superembed", "vidsrc", "embedsu", "vidora",
+    "smashy", "vidsrc", "embedsu", "superembed", "vidlink",
+    "vidsrc2", "vidify", "autoembed", "vidsrcicu", "vidsrcco",
+    "moviekex", "vidsrccc", "moviesapi", "vidora",
   ];
 
   // Detect "unavailable" responses from player sites so we can fallback
@@ -2563,6 +2615,11 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
            lc.includes("not available at this time") ||
            lc.includes("video is not available") ||
            lc.includes("content not found") ||
+           lc.includes("video not found") ||
+           lc.includes("sandbox not allowed") ||
+           lc.includes("this content is blocked") ||
+           lc.includes("error code: 233011") ||
+           lc.includes("server ip address could not be found") ||
            // vidsrc.xyz / others return minimal HTML when content is missing
            (html.length < 800 && !lc.includes("<video") && !lc.includes("player"));
   }
@@ -2581,7 +2638,6 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
   const INNER_EMBED_DOMAINS = [
     "vsembed.ru", "vsembed.me", "vsembed.com",
     "4sec.ru", "4sec.me",
-    "embed.autoembed.cc",
   ];
 
   async function fetchEmbedSource(src: string, type: string, id: string, s: string, e: string) {
