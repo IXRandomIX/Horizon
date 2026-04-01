@@ -1908,7 +1908,32 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
         headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
       });
       if (!r.ok) return res.status(502).send("upstream error");
-      const html = await r.text();
+      let html = await r.text();
+
+      // Inject Cinzel font
+      html = html.replace(
+        '<link rel="preconnect" href="https://fonts.googleapis.com">',
+        '<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700;900&display=swap" rel="stylesheet">'
+      );
+      // Black background
+      html = html.replace(
+        /\.bg-animation\{[\s\S]*?background:[\s\S]*?var\(--c-bg\);/,
+        ".bg-animation{position:fixed;inset:0;z-index:-3;overflow:hidden;background:#000;"
+      );
+      // Hide blobs
+      html = html.replace(/\.blob\{[\s\S]*?\}/, ".blob{display:none;}");
+      // Page title
+      html = html.replace("<title>DocumenTV</title>", "<title>HORIZON MOVIES</title>");
+      html = html.replace(
+        '<h1 class="page-title">DocumenTV</h1>',
+        '<h1 class="page-title" style="font-family:\'Cinzel\',serif;letter-spacing:2px;">HORIZON MOVIES</h1>'
+      );
+      // Subtitle
+      html = html.replace(
+        "The best source for educational movies!",
+        "Woah! Look at these movies guys omg!"
+      );
+
       res.setHeader("Content-Type", "text/html; charset=utf-8");
       res.setHeader("X-Frame-Options", "ALLOWALL");
       res.removeHeader("Content-Security-Policy");
