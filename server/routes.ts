@@ -1901,6 +1901,23 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   nowggRoute("__cdn2__", "https://cdn.now.gg");
   nowggRoute("__ngg__",  "https://now.gg");
 
+  // ── Movies – proxy ck.nmichaels.org/games/mov.html ───────────────────────
+  app.get("/api/movies/movpage", async (_req, res) => {
+    try {
+      const r = await fetch("http://ck.nmichaels.org/games/mov.html", {
+        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
+      });
+      if (!r.ok) return res.status(502).send("upstream error");
+      const html = await r.text();
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("X-Frame-Options", "ALLOWALL");
+      res.removeHeader("Content-Security-Policy");
+      res.send(html);
+    } catch (err: any) {
+      res.status(502).send("Failed to fetch movie page: " + err.message);
+    }
+  });
+
   // ── Movies (TMDB proxy + bCine.app) ──────────────────────────────────────
   const TMDB_KEY = "3e20e76d6d210b6cb128d17d233b64dc";
   const TMDB_BASE = "https://api.themoviedb.org/3";
