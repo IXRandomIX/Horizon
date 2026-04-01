@@ -71,7 +71,7 @@ function SoundButton({ sound, isMuted }: { sound: Sound; isMuted: boolean }) {
     >
       {sound.image && (
         <div className="w-full aspect-video overflow-hidden">
-          <img src={sound.image} alt={sound.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
+          <img src={`/api/soundboard/image?url=${encodeURIComponent(sound.image)}`} alt={sound.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity" />
         </div>
       )}
       <div className="flex-1 flex flex-col gap-2 p-3">

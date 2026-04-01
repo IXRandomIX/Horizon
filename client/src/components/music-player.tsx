@@ -112,7 +112,14 @@ function fmtSec(s: number) {
   return `${m}:${Math.floor(s % 60).toString().padStart(2, "0")}`;
 }
 function artwork(track: SCTrack) {
-  return track.artwork_url ? track.artwork_url.replace("-large", "-t200x200") : null;
+  if (!track.artwork_url) return null;
+  const url = track.artwork_url.replace("-large", "-t200x200");
+  return `/api/music/artwork?url=${encodeURIComponent(url)}`;
+}
+
+function avatarArtwork(url: string | null) {
+  if (!url) return null;
+  return `/api/music/artwork?url=${encodeURIComponent(url)}`;
 }
 
 function TrackRow({
@@ -835,7 +842,7 @@ export default function MusicPlayer() {
                       <div key={a.userId} className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
                         <span className="text-[10px] text-white/20 w-4 text-right flex-shrink-0">{i + 1}</span>
                         <div className="w-8 h-8 rounded-full overflow-hidden bg-white/10 flex items-center justify-center flex-shrink-0">
-                          {a.avatar_url ? <img src={a.avatar_url} alt="" className="w-full h-full object-cover" /> : <Users className="w-3.5 h-3.5 text-white/30" />}
+                          {a.avatar_url ? <img src={avatarArtwork(a.avatar_url)!} alt="" className="w-full h-full object-cover" /> : <Users className="w-3.5 h-3.5 text-white/30" />}
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-xs font-semibold text-white truncate">{a.username}</p>

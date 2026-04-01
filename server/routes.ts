@@ -3610,40 +3610,72 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     } catch (e: any) { res.status(500).json({ message: e.message }); }
   });
 
+  // Helper: resolve a SoundCloud track to a direct audio URL (includes track_authorization)
+  async function resolveScStreamUrl(trackId: string): Promise<{ url: string; contentType: string }> {
+    const cid = await getScClientId();
+    const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${cid}`, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
+    });
+    if (!trackRes.ok) throw new Error(`Track fetch failed: ${trackRes.status}`);
+    const track = await trackRes.json();
+    const transcodings: any[] = track?.media?.transcodings || [];
+    const trackAuth: string = track?.track_authorization || "";
+    // Prefer progressive (MP3) for widest browser compat; fall back to HLS mp3 then any HLS
+    const progressive = transcodings.find((t: any) => t.format?.protocol === "progressive" && t.format?.mime_type?.includes("mpeg"));
+    const hlsMp3 = transcodings.find((t: any) => t.format?.protocol === "hls" && t.format?.mime_type?.includes("mpeg"));
+    const anyHls = transcodings.find((t: any) => t.format?.protocol === "hls");
+    const chosen = progressive || hlsMp3 || anyHls;
+    if (!chosen) throw new Error("No stream transcoding available");
+    let streamUrl = `${chosen.url}?client_id=${cid}`;
+    if (trackAuth) streamUrl += `&track_authorization=${encodeURIComponent(trackAuth)}`;
+    const streamRes = await fetch(streamUrl, {
+      headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36" },
+    });
+    if (!streamRes.ok) throw new Error(`Stream resolve failed: ${streamRes.status}`);
+    const streamData = await streamRes.json();
+    if (!streamData.url) throw new Error("No stream URL returned");
+    return { url: streamData.url, contentType: chosen.format?.mime_type || "audio/mpeg" };
+  }
+
   app.get("/api/music/stream/:trackId", async (req, res) => {
     try {
-      const cid = await getScClientId();
-      const trackId = req.params.trackId;
-      const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${cid}`, {
-        headers: { "User-Agent": "Mozilla/5.0" },
+      const { url: audioUrl, contentType } = await resolveScStreamUrl(req.params.trackId);
+      // Pipe audio through our server so CORS/content-blockers can't interfere
+      const audioRes = await fetch(audioUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Referer": "https://soundcloud.com/",
+          "Origin": "https://soundcloud.com",
+        },
       });
-      const track = await trackRes.json();
-      const transcodings: any[] = track?.media?.transcodings || [];
-      const progressive = transcodings.find((t: any) => t.format?.protocol === "progressive");
-      if (!progressive) return res.status(404).json({ message: "No stream available" });
-      const streamRes = await fetch(`${progressive.url}?client_id=${cid}`, { headers: { "User-Agent": "Mozilla/5.0" } });
-      const streamData = await streamRes.json();
-      if (!streamData.url) return res.status(404).json({ message: "No stream URL" });
-      res.redirect(streamData.url);
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
+      if (!audioRes.ok || !audioRes.body) return res.status(502).json({ message: "Audio fetch failed" });
+      const cl = audioRes.headers.get("content-length");
+      if (cl) res.setHeader("Content-Length", cl);
+      res.setHeader("Content-Type", contentType.includes("mpegurl") ? "audio/mpeg" : contentType);
+      res.setHeader("Accept-Ranges", "bytes");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      const reader = (audioRes.body as any).getReader();
+      const pump = async () => {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) { res.end(); break; }
+          if (!res.write(Buffer.from(value))) await new Promise(r => res.once("drain", r));
+        }
+      };
+      await pump();
+    } catch (e: any) { if (!res.headersSent) res.status(500).json({ message: e.message }); }
   });
 
   app.get("/api/music/download/:trackId", async (req, res) => {
     try {
-      const cid = await getScClientId();
-      const trackId = req.params.trackId;
       const title = ((req.query.title as string) || "track").replace(/[^a-z0-9\s-]/gi, "_");
-      const trackRes = await fetch(`https://api-v2.soundcloud.com/tracks/${trackId}?client_id=${cid}`, {
-        headers: { "User-Agent": "Mozilla/5.0" },
+      const { url: audioUrl } = await resolveScStreamUrl(req.params.trackId);
+      const audioRes = await fetch(audioUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          "Referer": "https://soundcloud.com/",
+        },
       });
-      const track = await trackRes.json();
-      const transcodings: any[] = track?.media?.transcodings || [];
-      const progressive = transcodings.find((t: any) => t.format?.protocol === "progressive");
-      if (!progressive) return res.status(404).json({ message: "Download not available for this track" });
-      const streamRes = await fetch(`${progressive.url}?client_id=${cid}`, { headers: { "User-Agent": "Mozilla/5.0" } });
-      const streamData = await streamRes.json();
-      if (!streamData.url) return res.status(404).json({ message: "No stream URL" });
-      const audioRes = await fetch(streamData.url);
       if (!audioRes.ok || !audioRes.body) return res.status(500).json({ message: "Failed to fetch audio" });
       res.setHeader("Content-Disposition", `attachment; filename="${title}.mp3"`);
       res.setHeader("Content-Type", "audio/mpeg");
@@ -3652,11 +3684,32 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
         while (true) {
           const { done, value } = await reader.read();
           if (done) { res.end(); break; }
-          res.write(Buffer.from(value));
+          if (!res.write(Buffer.from(value))) await new Promise(r => res.once("drain", r));
         }
       };
       await pump();
-    } catch (e: any) { res.status(500).json({ message: e.message }); }
+    } catch (e: any) { if (!res.headersSent) res.status(500).json({ message: e.message }); }
+  });
+
+  // Proxy SoundCloud artwork images so they load even when sndcdn.com is blocked
+  app.get("/api/music/artwork", async (req, res) => {
+    const urlParam = req.query.url as string;
+    if (!urlParam) return res.status(400).send("Missing url");
+    let targetUrl: string;
+    try { targetUrl = decodeURIComponent(urlParam); } catch { return res.status(400).send("Bad url"); }
+    if (!targetUrl.startsWith("https://") && !targetUrl.startsWith("http://")) return res.status(400).send("Invalid url");
+    try {
+      const imgRes = await fetch(targetUrl, {
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://soundcloud.com/" },
+      });
+      if (!imgRes.ok) return res.status(imgRes.status).send("Image fetch failed");
+      const ct = imgRes.headers.get("content-type") || "image/jpeg";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      const buf = await imgRes.arrayBuffer();
+      res.send(Buffer.from(buf));
+    } catch (e: any) { res.status(502).send("Proxy error: " + e.message); }
   });
 
   // ─── Change Log ───────────────────────────────────────────────────────────
@@ -4006,6 +4059,23 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     } catch (e: any) {
       res.status(500).json({ message: e.message });
     }
+  });
+
+  // Proxy myinstants images so they load even when blocked
+  app.get("/api/soundboard/image", async (req, res) => {
+    const url = String(req.query.url || "");
+    if (!url.startsWith("https://") && !url.startsWith("http://")) return res.status(400).send("Invalid URL");
+    try {
+      const upstream = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0", "Referer": "https://www.myinstants.com/" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!upstream.ok) return res.status(502).send("Image fetch failed");
+      res.setHeader("Content-Type", upstream.headers.get("content-type") || "image/jpeg");
+      res.setHeader("Cache-Control", "public, max-age=86400");
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.send(Buffer.from(await upstream.arrayBuffer()));
+    } catch (e: any) { res.status(502).send("Proxy error"); }
   });
 
   // Proxy audio so CORS doesn't block browser playback
