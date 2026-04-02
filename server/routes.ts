@@ -667,6 +667,59 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ unlocked: false, attemptsLeft: Math.max(0, WALL_MAX_ATTEMPTS - (session.wallAttempts ?? 0)) });
   });
 
+  // ─── VPN Toggle ──────────────────────────────────────────────────────────
+  // In-memory per-session VPN state (does not need to persist across restarts)
+  const vpnSessions = new Map<string, boolean>();
+
+  async function getVpnIp(useProxy: boolean): Promise<string> {
+    const proxyUrl = process.env.PROXY_URL;
+    try {
+      let res: Response;
+      if (useProxy && proxyUrl) {
+        // Route through the configured upstream proxy
+        const { HttpsProxyAgent } = await import("https-proxy-agent");
+        const agent = new HttpsProxyAgent(proxyUrl);
+        res = await fetch("https://api.ipify.org?format=json", {
+          signal: AbortSignal.timeout(8000),
+          // @ts-ignore node-fetch compatible
+          agent,
+        });
+      } else {
+        res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(8000) });
+      }
+      const data = await res.json();
+      return data.ip || "Unknown";
+    } catch {
+      return "Unavailable";
+    }
+  }
+
+  app.get("/api/vpn/status", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
+    const enabled = vpnSessions.get(token) ?? false;
+    const ip = await getVpnIp(enabled);
+    const hasProxy = !!process.env.PROXY_URL;
+    res.json({ enabled, ip, hasProxy });
+  });
+
+  app.post("/api/vpn/toggle", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
+    const current = vpnSessions.get(token) ?? false;
+    const next = !current;
+    vpnSessions.set(token, next);
+    const ip = await getVpnIp(next);
+    const hasProxy = !!process.env.PROXY_URL;
+    res.json({ enabled: next, ip, hasProxy });
+  });
+
   // ─── Gatekeep OS (server-side verification) ──────────────────────────────
   const GATEKEEP_PASS = "WeAreGATEKEEPING777good7luck999";
   const GATEKEEP_MAX_ATTEMPTS = 15;

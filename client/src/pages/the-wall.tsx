@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ExternalLink, Shield } from "lucide-react";
+import { ExternalLink, Shield, Wifi, WifiOff, Loader2, Globe, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -38,6 +38,166 @@ function DemonText({ text, className }: { text: string; className?: string }) {
     return () => clearInterval(id);
   }, [text]);
   return <span className={`demon-text ${className ?? ""}`} data-text={text}>{display}</span>;
+}
+
+function VpnSection() {
+  const [loading, setLoading] = useState(true);
+  const [toggling, setToggling] = useState(false);
+  const [enabled, setEnabled] = useState(false);
+  const [ip, setIp] = useState<string | null>(null);
+  const [hasProxy, setHasProxy] = useState(false);
+
+  const fetchStatus = useCallback(async () => {
+    const token = getSessionToken();
+    if (!token) return;
+    try {
+      const res = await fetch("/api/vpn/status", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setEnabled(data.enabled);
+      setIp(data.ip);
+      setHasProxy(data.hasProxy);
+    } catch {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchStatus(); }, [fetchStatus]);
+
+  const toggle = useCallback(async () => {
+    const token = getSessionToken();
+    if (!token || toggling) return;
+    setToggling(true);
+    setIp(null);
+    try {
+      const res = await fetch("/api/vpn/toggle", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      setEnabled(data.enabled);
+      setIp(data.ip);
+      setHasProxy(data.hasProxy);
+    } catch {}
+    setToggling(false);
+  }, [toggling]);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+      <Card className="bg-white/[0.03] border-white/10 overflow-hidden relative">
+        <div className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${enabled ? "bg-gradient-to-br from-green-900/15 to-transparent" : "bg-gradient-to-br from-red-950/10 to-transparent"}`} />
+        {enabled && (
+          <div className="absolute inset-0 pointer-events-none">
+            <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-green-500/5 to-transparent" />
+          </div>
+        )}
+        <CardHeader>
+          <div className="flex items-center gap-4">
+            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-all duration-500 ${
+              enabled
+                ? "bg-green-900/30 border-green-600/50 shadow-[0_0_20px_rgba(34,197,94,0.3)]"
+                : "bg-red-950/20 border-red-900/30"
+            }`}>
+              {loading ? (
+                <Loader2 className="w-7 h-7 text-white/30 animate-spin" />
+              ) : enabled ? (
+                <Wifi className="w-7 h-7 text-green-400" />
+              ) : (
+                <WifiOff className="w-7 h-7 text-red-500/60" />
+              )}
+            </div>
+            <div>
+              <CardTitle className="text-3xl text-white font-display tracking-widest flex items-center gap-3">
+                VPN
+                {!loading && (
+                  <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded tracking-widest border ${
+                    enabled
+                      ? "text-green-400 bg-green-900/30 border-green-700/40"
+                      : "text-red-500/70 bg-red-950/20 border-red-900/30"
+                  }`}>
+                    {enabled ? "● ACTIVE" : "● OFF"}
+                  </span>
+                )}
+              </CardTitle>
+              <CardDescription className="text-muted-foreground">
+                Route proxy traffic through a secure IP — protects against IP bans on proxied content
+              </CardDescription>
+            </div>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-6 pb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3 flex items-center gap-3">
+              <Globe className="w-4 h-4 text-white/30 flex-shrink-0" />
+              <div className="min-w-0">
+                <p className="text-[10px] text-white/30 font-mono uppercase tracking-widest mb-0.5">Server IP</p>
+                {loading || (toggling && !ip) ? (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-3 h-3 animate-spin text-white/30" />
+                    <span className="text-white/20 font-mono text-xs">resolving…</span>
+                  </div>
+                ) : (
+                  <p className={`font-mono text-sm font-bold tracking-wider ${enabled ? "text-green-400" : "text-white/60"}`}>
+                    {ip || "—"}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3 flex items-center gap-3">
+              <Lock className="w-4 h-4 text-white/30 flex-shrink-0" />
+              <div>
+                <p className="text-[10px] text-white/30 font-mono uppercase tracking-widest mb-0.5">Upstream Proxy</p>
+                <p className={`font-mono text-xs font-semibold ${hasProxy ? "text-green-400" : "text-red-500/60"}`}>
+                  {hasProxy ? "Configured ✓" : "Not configured"}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <button
+            data-testid="button-vpn-toggle"
+            onClick={toggle}
+            disabled={loading || toggling}
+            className={`w-full h-16 rounded-2xl font-black text-xl tracking-widest border transition-all duration-500 flex items-center justify-center gap-3 relative overflow-hidden ${
+              enabled
+                ? "bg-green-900/40 border-green-600/50 text-green-300 hover:bg-green-900/60 shadow-[0_0_30px_rgba(34,197,94,0.25)] hover:shadow-[0_0_40px_rgba(34,197,94,0.4)]"
+                : "bg-red-950/30 border-red-900/40 text-red-400/80 hover:bg-red-950/50 hover:border-red-800/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
+            } disabled:opacity-50 disabled:cursor-not-allowed`}
+          >
+            {toggling ? (
+              <>
+                <Loader2 className="w-5 h-5 animate-spin" />
+                <GlitchText text={enabled ? "DEACTIVATING…" : "ACTIVATING…"} intensity={0.12} interval={60} />
+              </>
+            ) : enabled ? (
+              <>
+                <Wifi className="w-5 h-5" />
+                <GlitchText text="VPN: ON — CLICK TO DISABLE" intensity={0.04} interval={200} />
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-5 h-5" />
+                <GlitchText text="VPN: OFF — CLICK TO ENABLE" intensity={0.04} interval={200} />
+              </>
+            )}
+          </button>
+
+          {!hasProxy && (
+            <p className="text-white/20 font-mono text-[10px] text-center leading-relaxed">
+              Set a <span className="text-white/40">PROXY_URL</span> secret to route traffic through a different IP.<br />
+              Without it, VPN mode still shows this server's address.
+            </p>
+          )}
+          <p className="text-white/15 font-mono text-[10px] text-center">
+            VPN affects proxy & media traffic routed through HORIZON's server · does not affect direct browser connections
+          </p>
+        </CardContent>
+      </Card>
+    </motion.div>
+  );
 }
 
 type Stage = "loading" | "gate" | "denied" | "success_flash" | "unlocked" | "locked_out";
@@ -390,7 +550,9 @@ export default function TheWall() {
                 </Card>
               </motion.div>
 
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="text-center py-10">
+              <VpnSection />
+
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-center py-10">
                 <p className="sub-glitch text-base md:text-lg text-white/40 italic tracking-widest" data-text="The wall will bring more stuff soon...">
                   <GlitchText text="The wall will bring more stuff soon..." intensity={0.04} interval={150} className="font-cormorant italic" />
                 </p>
