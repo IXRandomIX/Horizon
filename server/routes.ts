@@ -667,31 +667,86 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ unlocked: false, attemptsLeft: Math.max(0, WALL_MAX_ATTEMPTS - (session.wallAttempts ?? 0)) });
   });
 
-  // ─── VPN Toggle ──────────────────────────────────────────────────────────
-  // In-memory per-session VPN state (does not need to persist across restarts)
-  const vpnSessions = new Map<string, boolean>();
+  // ─── VPN Toggle with rotating proxy pool ─────────────────────────────────
+  const COUNTRY_META: Record<string, { name: string; flag: string; cities: string[] }> = {
+    US: { name: "United States", flag: "🇺🇸", cities: ["Los Angeles", "New York", "Chicago", "Dallas", "Miami"] },
+    DE: { name: "Germany",       flag: "🇩🇪", cities: ["Berlin", "Frankfurt", "Munich", "Hamburg"] },
+    RU: { name: "Russia",        flag: "🇷🇺", cities: ["Moscow", "Saint Petersburg", "Novosibirsk"] },
+    JP: { name: "Japan",         flag: "🇯🇵", cities: ["Tokyo", "Osaka", "Yokohama"] },
+    CH: { name: "Switzerland",   flag: "🇨🇭", cities: ["Zurich", "Geneva", "Bern"] },
+    NL: { name: "Netherlands",   flag: "🇳🇱", cities: ["Amsterdam", "Rotterdam", "The Hague"] },
+    GB: { name: "United Kingdom",flag: "🇬🇧", cities: ["London", "Manchester", "Birmingham"] },
+    FR: { name: "France",        flag: "🇫🇷", cities: ["Paris", "Lyon", "Marseille"] },
+    CA: { name: "Canada",        flag: "🇨🇦", cities: ["Toronto", "Vancouver", "Montreal"] },
+    SG: { name: "Singapore",     flag: "🇸🇬", cities: ["Singapore"] },
+  };
+  const TARGET_COUNTRIES = Object.keys(COUNTRY_META).join(",");
 
-  async function getVpnIp(useProxy: boolean): Promise<string> {
-    const proxyUrl = process.env.PROXY_URL;
+  interface ProxyInfo {
+    proxyUrl: string;
+    ip: string;
+    port: string;
+    countryCode: string;
+    country: string;
+    city: string;
+    flag: string;
+    verifiedIp: string;
+  }
+
+  interface VpnState { enabled: boolean; proxy: ProxyInfo | null; }
+  const vpnSessions = new Map<string, VpnState>();
+
+  let proxyPoolCache: any[] = [];
+  let proxyPoolExpiry = 0;
+
+  async function refreshProxyPool(): Promise<any[]> {
+    if (Date.now() < proxyPoolExpiry && proxyPoolCache.length > 0) return proxyPoolCache;
     try {
-      let res: Response;
-      if (useProxy && proxyUrl) {
-        // Route through the configured upstream proxy
-        const { HttpsProxyAgent } = await import("https-proxy-agent");
-        const agent = new HttpsProxyAgent(proxyUrl);
-        res = await fetch("https://api.ipify.org?format=json", {
-          signal: AbortSignal.timeout(8000),
-          // @ts-ignore node-fetch compatible
-          agent,
-        });
-      } else {
-        res = await fetch("https://api.ipify.org?format=json", { signal: AbortSignal.timeout(8000) });
+      const url = `https://proxylist.geonode.com/api/proxy-list?limit=200&page=1&sort_by=lastChecked&sort_type=desc&filterUpTime=70&country=${TARGET_COUNTRIES}&protocols=http,https`;
+      const r = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "Mozilla/5.0" } });
+      if (!r.ok) throw new Error("proxy list fetch failed");
+      const j = await r.json();
+      const entries: any[] = j.data || [];
+      if (entries.length > 0) {
+        proxyPoolCache = entries;
+        proxyPoolExpiry = Date.now() + 25 * 60 * 1000; // 25 min cache
       }
-      const data = await res.json();
-      return data.ip || "Unknown";
-    } catch {
-      return "Unavailable";
+    } catch { /* keep stale cache */ }
+    return proxyPoolCache;
+  }
+
+  async function tryProxy(entry: any): Promise<ProxyInfo | null> {
+    const protocol = (entry.protocols?.[0] || "http").toLowerCase();
+    const proxyUrl = `${protocol}://${entry.ip}:${entry.port}`;
+    try {
+      const { HttpsProxyAgent } = await import("https-proxy-agent");
+      const agent = new HttpsProxyAgent(proxyUrl);
+      const r = await fetch("https://api.ipify.org?format=json", {
+        // @ts-ignore
+        agent,
+        signal: AbortSignal.timeout(6000),
+        headers: { "User-Agent": "Mozilla/5.0" },
+      });
+      if (!r.ok) return null;
+      const data = await r.json();
+      const verifiedIp: string = data.ip || entry.ip;
+      const cc: string = (entry.country || "US").toUpperCase();
+      const meta = COUNTRY_META[cc] || { name: cc, flag: "🌐", cities: ["Unknown"] };
+      const storedCity: string = entry.city && entry.city.length > 1 ? entry.city : meta.cities[Math.floor(Math.random() * meta.cities.length)];
+      return { proxyUrl, ip: entry.ip, port: String(entry.port), countryCode: cc, country: meta.name, city: storedCity, flag: meta.flag, verifiedIp };
+    } catch { return null; }
+  }
+
+  async function pickWorkingProxy(maxAttempts = 8): Promise<ProxyInfo | null> {
+    const pool = await refreshProxyPool();
+    if (pool.length === 0) return null;
+    // Shuffle a slice so we don't always try the same proxies
+    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, maxAttempts * 3);
+    for (let i = 0; i < Math.min(maxAttempts, shuffled.length); i++) {
+      const result = await tryProxy(shuffled[i]);
+      if (result) return result;
     }
+    return null;
   }
 
   app.get("/api/vpn/status", async (req, res) => {
@@ -700,10 +755,8 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const token = auth.slice(7);
     const session = await storage.getSession(token);
     if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
-    const enabled = vpnSessions.get(token) ?? false;
-    const ip = await getVpnIp(enabled);
-    const hasProxy = !!process.env.PROXY_URL;
-    res.json({ enabled, ip, hasProxy });
+    const state = vpnSessions.get(token) ?? { enabled: false, proxy: null };
+    res.json({ enabled: state.enabled, proxy: state.proxy });
   });
 
   app.post("/api/vpn/toggle", async (req, res) => {
@@ -712,12 +765,31 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     const token = auth.slice(7);
     const session = await storage.getSession(token);
     if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
-    const current = vpnSessions.get(token) ?? false;
-    const next = !current;
-    vpnSessions.set(token, next);
-    const ip = await getVpnIp(next);
-    const hasProxy = !!process.env.PROXY_URL;
-    res.json({ enabled: next, ip, hasProxy });
+    const current = vpnSessions.get(token) ?? { enabled: false, proxy: null };
+    if (!current.enabled) {
+      // Turning ON: pick a working proxy
+      const proxy = await pickWorkingProxy();
+      const newState: VpnState = { enabled: true, proxy };
+      vpnSessions.set(token, newState);
+      return res.json({ enabled: true, proxy });
+    } else {
+      // Turning OFF
+      vpnSessions.set(token, { enabled: false, proxy: null });
+      return res.json({ enabled: false, proxy: null });
+    }
+  });
+
+  app.post("/api/vpn/change-location", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
+    const current = vpnSessions.get(token) ?? { enabled: false, proxy: null };
+    if (!current.enabled) return res.status(400).json({ message: "VPN not active" });
+    const proxy = await pickWorkingProxy();
+    vpnSessions.set(token, { enabled: true, proxy });
+    res.json({ enabled: true, proxy });
   });
 
   // ─── Gatekeep OS (server-side verification) ──────────────────────────────

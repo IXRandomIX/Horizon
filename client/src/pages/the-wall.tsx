@@ -1,12 +1,10 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { ExternalLink, Shield, Wifi, WifiOff, Loader2, Globe, Lock } from "lucide-react";
+import { Shield, Wifi, WifiOff, Loader2, Globe, RefreshCw, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getSessionToken } from "@/context/auth";
-
-const LINK_CREATOR_SRC = "https://domain-linker--zacharygoulden.replit.app";
 
 function formatTimeLeft(ms: number) {
   const days = Math.floor(ms / (1000 * 60 * 60 * 24));
@@ -40,25 +38,28 @@ function DemonText({ text, className }: { text: string; className?: string }) {
   return <span className={`demon-text ${className ?? ""}`} data-text={text}>{display}</span>;
 }
 
+interface ProxyInfo {
+  proxyUrl: string; ip: string; port: string;
+  countryCode: string; country: string; city: string;
+  flag: string; verifiedIp: string;
+}
+
 function VpnSection() {
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [changing, setChanging] = useState(false);
   const [enabled, setEnabled] = useState(false);
-  const [ip, setIp] = useState<string | null>(null);
-  const [hasProxy, setHasProxy] = useState(false);
+  const [proxy, setProxy] = useState<ProxyInfo | null>(null);
 
   const fetchStatus = useCallback(async () => {
     const token = getSessionToken();
-    if (!token) return;
+    if (!token) { setLoading(false); return; }
     try {
-      const res = await fetch("/api/vpn/status", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) return;
+      const res = await fetch("/api/vpn/status", { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) { setLoading(false); return; }
       const data = await res.json();
       setEnabled(data.enabled);
-      setIp(data.ip);
-      setHasProxy(data.hasProxy);
+      setProxy(data.proxy ?? null);
     } catch {}
     setLoading(false);
   }, []);
@@ -67,25 +68,37 @@ function VpnSection() {
 
   const toggle = useCallback(async () => {
     const token = getSessionToken();
-    if (!token || toggling) return;
+    if (!token || toggling || changing) return;
     setToggling(true);
-    setIp(null);
+    setProxy(null);
     try {
-      const res = await fetch("/api/vpn/toggle", {
-        method: "POST",
-        headers: { Authorization: `Bearer ${token}` },
-      });
+      const res = await fetch("/api/vpn/toggle", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
       if (!res.ok) return;
       const data = await res.json();
       setEnabled(data.enabled);
-      setIp(data.ip);
-      setHasProxy(data.hasProxy);
+      setProxy(data.proxy ?? null);
     } catch {}
     setToggling(false);
-  }, [toggling]);
+  }, [toggling, changing]);
+
+  const changeLocation = useCallback(async () => {
+    const token = getSessionToken();
+    if (!token || toggling || changing || !enabled) return;
+    setChanging(true);
+    setProxy(null);
+    try {
+      const res = await fetch("/api/vpn/change-location", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) return;
+      const data = await res.json();
+      setProxy(data.proxy ?? null);
+    } catch {}
+    setChanging(false);
+  }, [toggling, changing, enabled]);
+
+  const busy = toggling || changing;
 
   return (
-    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
       <Card className="bg-white/[0.03] border-white/10 overflow-hidden relative">
         <div className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${enabled ? "bg-gradient-to-br from-green-900/15 to-transparent" : "bg-gradient-to-br from-red-950/10 to-transparent"}`} />
         {enabled && (
@@ -93,6 +106,7 @@ function VpnSection() {
             <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-green-500/5 to-transparent" />
           </div>
         )}
+
         <CardHeader>
           <div className="flex items-center gap-4">
             <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-all duration-500 ${
@@ -122,46 +136,73 @@ function VpnSection() {
                 )}
               </CardTitle>
               <CardDescription className="text-muted-foreground">
-                Route proxy traffic through a secure IP — protects against IP bans on proxied content
+                Route server traffic through a rotating international IP — bypass IP bans on proxied content
               </CardDescription>
             </div>
           </div>
         </CardHeader>
 
-        <CardContent className="space-y-6 pb-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3 flex items-center gap-3">
-              <Globe className="w-4 h-4 text-white/30 flex-shrink-0" />
-              <div className="min-w-0">
-                <p className="text-[10px] text-white/30 font-mono uppercase tracking-widest mb-0.5">Server IP</p>
-                {loading || (toggling && !ip) ? (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-3 h-3 animate-spin text-white/30" />
-                    <span className="text-white/20 font-mono text-xs">resolving…</span>
+        <CardContent className="space-y-5 pb-6">
+          {/* Location display */}
+          {enabled && (
+            <div className="rounded-2xl border border-green-800/30 bg-black/40 overflow-hidden">
+              {busy && !proxy ? (
+                <div className="flex items-center gap-3 px-5 py-5">
+                  <Loader2 className="w-5 h-5 animate-spin text-green-500/60" />
+                  <div className="space-y-1.5">
+                    <div className="h-3 w-32 bg-white/10 rounded animate-pulse" />
+                    <div className="h-2.5 w-48 bg-white/5 rounded animate-pulse" />
                   </div>
-                ) : (
-                  <p className={`font-mono text-sm font-bold tracking-wider ${enabled ? "text-green-400" : "text-white/60"}`}>
-                    {ip || "—"}
-                  </p>
-                )}
-              </div>
+                </div>
+              ) : proxy ? (
+                <div className="flex items-center gap-4 px-5 py-4">
+                  <span className="text-4xl flex-shrink-0">{proxy.flag}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-bold text-base flex items-center gap-2">
+                      <MapPin className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
+                      {proxy.city}, {proxy.country}
+                    </p>
+                    <p className="text-green-400 font-mono text-sm tracking-widest mt-0.5">{proxy.verifiedIp}</p>
+                    <p className="text-white/20 font-mono text-[10px] mt-1 uppercase tracking-widest">
+                      via {proxy.ip}:{proxy.port} · {proxy.countryCode}
+                    </p>
+                  </div>
+                  <button
+                    data-testid="button-vpn-change-location"
+                    onClick={changeLocation}
+                    disabled={busy}
+                    title="Switch to a different location"
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-green-400/70 hover:text-green-300 bg-green-900/20 hover:bg-green-900/40 border border-green-800/30 transition-all disabled:opacity-40"
+                  >
+                    {changing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                    <span className="hidden sm:inline">New Location</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 px-5 py-4 text-red-400/60 text-xs font-mono">
+                  <Globe className="w-4 h-4" />
+                  No working proxy found — all tested proxies timed out. Try toggling again.
+                </div>
+              )}
             </div>
-            <div className="rounded-xl border border-white/8 bg-black/30 px-4 py-3 flex items-center gap-3">
-              <Lock className="w-4 h-4 text-white/30 flex-shrink-0" />
-              <div>
-                <p className="text-[10px] text-white/30 font-mono uppercase tracking-widest mb-0.5">Upstream Proxy</p>
-                <p className={`font-mono text-xs font-semibold ${hasProxy ? "text-green-400" : "text-red-500/60"}`}>
-                  {hasProxy ? "Configured ✓" : "Not configured"}
-                </p>
-              </div>
-            </div>
-          </div>
+          )}
 
+          {!enabled && !loading && (
+            <div className="rounded-2xl border border-white/8 bg-black/20 px-5 py-4 flex items-center gap-3">
+              <Globe className="w-4 h-4 text-white/20 flex-shrink-0" />
+              <div>
+                <p className="text-white/30 text-xs font-mono uppercase tracking-widest">Current Route</p>
+                <p className="text-white/50 text-sm font-mono mt-0.5">Direct · Your real server location</p>
+              </div>
+            </div>
+          )}
+
+          {/* Main toggle */}
           <button
             data-testid="button-vpn-toggle"
             onClick={toggle}
-            disabled={loading || toggling}
-            className={`w-full h-16 rounded-2xl font-black text-xl tracking-widest border transition-all duration-500 flex items-center justify-center gap-3 relative overflow-hidden ${
+            disabled={loading || busy}
+            className={`w-full h-16 rounded-2xl font-black text-xl tracking-widest border transition-all duration-500 flex items-center justify-center gap-3 ${
               enabled
                 ? "bg-green-900/40 border-green-600/50 text-green-300 hover:bg-green-900/60 shadow-[0_0_30px_rgba(34,197,94,0.25)] hover:shadow-[0_0_40px_rgba(34,197,94,0.4)]"
                 : "bg-red-950/30 border-red-900/40 text-red-400/80 hover:bg-red-950/50 hover:border-red-800/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
@@ -170,7 +211,7 @@ function VpnSection() {
             {toggling ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                <GlitchText text={enabled ? "DEACTIVATING…" : "ACTIVATING…"} intensity={0.12} interval={60} />
+                <GlitchText text={enabled ? "SEARCHING PROXIES…" : "DEACTIVATING…"} intensity={0.12} interval={60} />
               </>
             ) : enabled ? (
               <>
@@ -185,14 +226,8 @@ function VpnSection() {
             )}
           </button>
 
-          {!hasProxy && (
-            <p className="text-white/20 font-mono text-[10px] text-center leading-relaxed">
-              Set a <span className="text-white/40">PROXY_URL</span> secret to route traffic through a different IP.<br />
-              Without it, VPN mode still shows this server's address.
-            </p>
-          )}
-          <p className="text-white/15 font-mono text-[10px] text-center">
-            VPN affects proxy & media traffic routed through HORIZON's server · does not affect direct browser connections
+          <p className="text-white/15 font-mono text-[10px] text-center leading-relaxed">
+            Selects a live proxy from 🇺🇸 🇩🇪 🇷🇺 🇯🇵 🇨🇭 🇳🇱 🇬🇧 🇫🇷 🇨🇦 🇸🇬 · affects server-routed traffic only
           </p>
         </CardContent>
       </Card>
@@ -520,35 +555,6 @@ export default function TheWall() {
                 <div className="w-32 h-1 mx-auto bg-gradient-to-r from-purple-900 via-purple-500 to-purple-900 rounded-full shadow-[0_0_20px_rgba(168,85,247,0.5)] mb-4" />
                 <p className="text-purple-400/60 font-mono text-xs uppercase tracking-[0.3em]">Access Granted — Welcome, Gatekeeper</p>
               </div>
-
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-                <Card className="bg-white/[0.03] border-white/10 overflow-hidden">
-                  <div className="absolute inset-0 bg-gradient-to-br from-purple-900/10 to-transparent pointer-events-none" />
-                  <CardHeader>
-                    <div className="flex items-center gap-4">
-                      <div className="w-14 h-14 rounded-2xl bg-purple-900/20 flex items-center justify-center border border-purple-700/30">
-                        <ExternalLink className="w-8 h-8 text-purple-400" />
-                      </div>
-                      <div>
-                        <CardTitle className="text-3xl text-white font-display tracking-widest">Link Creator</CardTitle>
-                        <CardDescription className="text-lg text-muted-foreground">Create and manage custom domain links</CardDescription>
-                      </div>
-                    </div>
-                  </CardHeader>
-                  <CardContent className="pt-2 pb-0">
-                    <div className="rounded-2xl overflow-hidden border border-white/10" style={{ height: "640px" }}>
-                      <iframe
-                        src={LINK_CREATOR_SRC}
-                        className="w-full h-full"
-                        sandbox="allow-scripts allow-forms allow-same-origin allow-popups"
-                        referrerPolicy="no-referrer"
-                        title="Link Creator"
-                        data-testid="iframe-link-creator-wall"
-                      />
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
 
               <VpnSection />
 
