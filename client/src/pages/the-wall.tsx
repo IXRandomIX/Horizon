@@ -1,9 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Shield, Wifi, WifiOff, Loader2, Globe, RefreshCw, MapPin } from "lucide-react";
+import { Shield, Loader2, Send, RotateCcw, Sparkles, Bot } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getSessionToken } from "@/context/auth";
 
 function formatTimeLeft(ms: number) {
@@ -38,199 +37,162 @@ function DemonText({ text, className }: { text: string; className?: string }) {
   return <span className={`demon-text ${className ?? ""}`} data-text={text}>{display}</span>;
 }
 
-interface ProxyInfo {
-  proxyUrl: string; ip: string; port: string;
-  countryCode: string; country: string; city: string;
-  flag: string; verifiedIp: string;
+interface ChatMessage {
+  role: "user" | "tyrone";
+  text: string;
 }
 
-function VpnSection() {
-  const [loading, setLoading] = useState(true);
-  const [toggling, setToggling] = useState(false);
-  const [changing, setChanging] = useState(false);
-  const [enabled, setEnabled] = useState(false);
-  const [proxy, setProxy] = useState<ProxyInfo | null>(null);
+function TyroneSection() {
+  const [messages, setMessages] = useState<ChatMessage[]>([
+    { role: "tyrone", text: "Hey. I'm Tyrone — Horizon's Premium AI. You made it past The Wall, so you clearly have taste. What do you need?" }
+  ]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [resetting, setResetting] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  const fetchStatus = useCallback(async () => {
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
+
+  const sendMessage = useCallback(async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    const text = input.trim();
+    if (!text || loading) return;
     const token = getSessionToken();
-    if (!token) { setLoading(false); return; }
+    if (!token) return;
+
+    setMessages(prev => [...prev, { role: "user", text }]);
+    setInput("");
+    setLoading(true);
+
     try {
-      const res = await fetch("/api/vpn/status", { headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) { setLoading(false); return; }
+      const res = await fetch("/api/tyrone/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token}` },
+        body: JSON.stringify({ message: text }),
+      });
       const data = await res.json();
-      setEnabled(data.enabled);
-      setProxy(data.proxy ?? null);
-    } catch {}
+      if (res.ok) {
+        setMessages(prev => [...prev, { role: "tyrone", text: data.reply }]);
+      } else {
+        setMessages(prev => [...prev, { role: "tyrone", text: data.message || "Something went wrong. Try again." }]);
+      }
+    } catch {
+      setMessages(prev => [...prev, { role: "tyrone", text: "I seem to be offline right now. Try again in a moment." }]);
+    }
     setLoading(false);
-  }, []);
+    inputRef.current?.focus();
+  }, [input, loading]);
 
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
-
-  const toggle = useCallback(async () => {
+  const resetChat = useCallback(async () => {
     const token = getSessionToken();
-    if (!token || toggling || changing) return;
-    setToggling(true);
-    setProxy(null);
+    if (!token || resetting) return;
+    setResetting(true);
     try {
-      const res = await fetch("/api/vpn/toggle", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) return;
-      const data = await res.json();
-      setEnabled(data.enabled);
-      setProxy(data.proxy ?? null);
+      await fetch("/api/tyrone/reset", { method: "POST", headers: { "Authorization": `Bearer ${token}` } });
     } catch {}
-    setToggling(false);
-  }, [toggling, changing]);
-
-  const changeLocation = useCallback(async () => {
-    const token = getSessionToken();
-    if (!token || toggling || changing || !enabled) return;
-    setChanging(true);
-    setProxy(null);
-    try {
-      const res = await fetch("/api/vpn/change-location", { method: "POST", headers: { Authorization: `Bearer ${token}` } });
-      if (!res.ok) return;
-      const data = await res.json();
-      setProxy(data.proxy ?? null);
-    } catch {}
-    setChanging(false);
-  }, [toggling, changing, enabled]);
-
-  const busy = toggling || changing;
+    setMessages([{ role: "tyrone", text: "Fresh start. What's on your mind?" }]);
+    setResetting(false);
+  }, [resetting]);
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
-      <Card className="bg-white/[0.03] border-white/10 overflow-hidden relative">
-        <div className={`absolute inset-0 pointer-events-none transition-all duration-1000 ${enabled ? "bg-gradient-to-br from-green-900/15 to-transparent" : "bg-gradient-to-br from-red-950/10 to-transparent"}`} />
-        {enabled && (
-          <div className="absolute inset-0 pointer-events-none">
-            <div className="absolute inset-0 animate-pulse bg-gradient-to-r from-transparent via-green-500/5 to-transparent" />
-          </div>
-        )}
+      <div className="bg-white/[0.03] border border-white/10 rounded-3xl overflow-hidden relative">
+        <div className="absolute inset-0 pointer-events-none bg-gradient-to-br from-purple-900/10 via-transparent to-blue-900/5" />
 
-        <CardHeader>
+        <div className="relative flex items-center justify-between px-6 py-5 border-b border-white/8">
           <div className="flex items-center gap-4">
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center border transition-all duration-500 ${
-              enabled
-                ? "bg-green-900/30 border-green-600/50 shadow-[0_0_20px_rgba(34,197,94,0.3)]"
-                : "bg-red-950/20 border-red-900/30"
-            }`}>
-              {loading ? (
-                <Loader2 className="w-7 h-7 text-white/30 animate-spin" />
-              ) : enabled ? (
-                <Wifi className="w-7 h-7 text-green-400" />
-              ) : (
-                <WifiOff className="w-7 h-7 text-red-500/60" />
-              )}
+            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600/40 to-blue-600/30 border border-purple-500/30 flex items-center justify-center shadow-[0_0_20px_rgba(168,85,247,0.3)]">
+              <Bot className="w-6 h-6 text-purple-300" />
             </div>
             <div>
-              <CardTitle className="text-3xl text-white font-display tracking-widest flex items-center gap-3">
-                VPN
-                {!loading && (
-                  <span className={`text-xs font-mono font-bold px-2 py-0.5 rounded tracking-widest border ${
-                    enabled
-                      ? "text-green-400 bg-green-900/30 border-green-700/40"
-                      : "text-red-500/70 bg-red-950/20 border-red-900/30"
-                  }`}>
-                    {enabled ? "● ACTIVE" : "● OFF"}
-                  </span>
-                )}
-              </CardTitle>
-              <CardDescription className="text-muted-foreground">
-                Route server traffic through a rotating international IP — bypass IP bans on proxied content
-              </CardDescription>
+              <div className="flex items-center gap-2">
+                <h2 className="text-white font-display text-xl tracking-widest uppercase">Tyrone</h2>
+                <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-purple-900/40 border border-purple-700/40 text-purple-300 text-[10px] font-bold tracking-widest uppercase">
+                  <Sparkles className="w-2.5 h-2.5" />
+                  Horizon Premium AI
+                </span>
+              </div>
+              <p className="text-white/30 text-xs font-mono tracking-widest mt-0.5">Exclusive to Wall residents</p>
             </div>
           </div>
-        </CardHeader>
-
-        <CardContent className="space-y-5 pb-6">
-          {/* Location display */}
-          {enabled && (
-            <div className="rounded-2xl border border-green-800/30 bg-black/40 overflow-hidden">
-              {busy && !proxy ? (
-                <div className="flex items-center gap-3 px-5 py-5">
-                  <Loader2 className="w-5 h-5 animate-spin text-green-500/60" />
-                  <div className="space-y-1.5">
-                    <div className="h-3 w-32 bg-white/10 rounded animate-pulse" />
-                    <div className="h-2.5 w-48 bg-white/5 rounded animate-pulse" />
-                  </div>
-                </div>
-              ) : proxy ? (
-                <div className="flex items-center gap-4 px-5 py-4">
-                  <span className="text-4xl flex-shrink-0">{proxy.flag}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-bold text-base flex items-center gap-2">
-                      <MapPin className="w-3.5 h-3.5 text-green-400 flex-shrink-0" />
-                      {proxy.city}, {proxy.country}
-                    </p>
-                    <p className="text-green-400 font-mono text-sm tracking-widest mt-0.5">{proxy.verifiedIp}</p>
-                    <p className="text-white/20 font-mono text-[10px] mt-1 uppercase tracking-widest">
-                      via {proxy.ip}:{proxy.port} · {proxy.countryCode}
-                    </p>
-                  </div>
-                  <button
-                    data-testid="button-vpn-change-location"
-                    onClick={changeLocation}
-                    disabled={busy}
-                    title="Switch to a different location"
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-green-400/70 hover:text-green-300 bg-green-900/20 hover:bg-green-900/40 border border-green-800/30 transition-all disabled:opacity-40"
-                  >
-                    {changing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">New Location</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-3 px-5 py-4 text-red-400/60 text-xs font-mono">
-                  <Globe className="w-4 h-4" />
-                  No working proxy found — all tested proxies timed out. Try toggling again.
-                </div>
-              )}
-            </div>
-          )}
-
-          {!enabled && !loading && (
-            <div className="rounded-2xl border border-white/8 bg-black/20 px-5 py-4 flex items-center gap-3">
-              <Globe className="w-4 h-4 text-white/20 flex-shrink-0" />
-              <div>
-                <p className="text-white/30 text-xs font-mono uppercase tracking-widest">Current Route</p>
-                <p className="text-white/50 text-sm font-mono mt-0.5">Direct · Your real server location</p>
-              </div>
-            </div>
-          )}
-
-          {/* Main toggle */}
           <button
-            data-testid="button-vpn-toggle"
-            onClick={toggle}
-            disabled={loading || busy}
-            className={`w-full h-16 rounded-2xl font-black text-xl tracking-widest border transition-all duration-500 flex items-center justify-center gap-3 ${
-              enabled
-                ? "bg-green-900/40 border-green-600/50 text-green-300 hover:bg-green-900/60 shadow-[0_0_30px_rgba(34,197,94,0.25)] hover:shadow-[0_0_40px_rgba(34,197,94,0.4)]"
-                : "bg-red-950/30 border-red-900/40 text-red-400/80 hover:bg-red-950/50 hover:border-red-800/50 shadow-[0_0_20px_rgba(239,68,68,0.1)]"
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
+            data-testid="button-tyrone-reset"
+            onClick={resetChat}
+            disabled={resetting}
+            title="New conversation"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold text-white/30 hover:text-white/60 bg-white/5 hover:bg-white/10 border border-white/10 transition-all disabled:opacity-40"
           >
-            {toggling ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <GlitchText text={enabled ? "SEARCHING PROXIES…" : "DEACTIVATING…"} intensity={0.12} interval={60} />
-              </>
-            ) : enabled ? (
-              <>
-                <Wifi className="w-5 h-5" />
-                <GlitchText text="VPN: ON — CLICK TO DISABLE" intensity={0.04} interval={200} />
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-5 h-5" />
-                <GlitchText text="VPN: OFF — CLICK TO ENABLE" intensity={0.04} interval={200} />
-              </>
-            )}
+            {resetting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
+            <span className="hidden sm:inline">New Chat</span>
           </button>
+        </div>
 
-          <p className="text-white/15 font-mono text-[10px] text-center leading-relaxed">
-            Selects a live proxy from 🇺🇸 🇩🇪 🇷🇺 🇯🇵 🇨🇭 🇳🇱 🇬🇧 🇫🇷 🇨🇦 🇸🇬 · affects server-routed traffic only
-          </p>
-        </CardContent>
-      </Card>
+        <div className="relative h-[420px] overflow-y-auto px-6 py-5 space-y-4 custom-scrollbar">
+          <AnimatePresence initial={false}>
+            {messages.map((msg, i) => (
+              <motion.div
+                key={i}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className={`flex gap-3 ${msg.role === "user" ? "flex-row-reverse" : "flex-row"}`}
+              >
+                {msg.role === "tyrone" && (
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-600/40 to-blue-600/30 border border-purple-500/30 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Bot className="w-4 h-4 text-purple-300" />
+                  </div>
+                )}
+                <div className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed whitespace-pre-wrap ${
+                  msg.role === "user"
+                    ? "bg-primary/20 border border-primary/30 text-white rounded-tr-sm"
+                    : "bg-white/5 border border-white/8 text-white/85 rounded-tl-sm"
+                }`}>
+                  {msg.text}
+                </div>
+              </motion.div>
+            ))}
+            {loading && (
+              <motion.div key="loading" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex gap-3">
+                <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-purple-600/40 to-blue-600/30 border border-purple-500/30 flex items-center justify-center flex-shrink-0">
+                  <Bot className="w-4 h-4 text-purple-300" />
+                </div>
+                <div className="bg-white/5 border border-white/8 rounded-2xl rounded-tl-sm px-4 py-3 flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-purple-400/60 animate-bounce" style={{ animationDelay: "300ms" }} />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+          <div ref={bottomRef} />
+        </div>
+
+        <div className="relative px-6 py-4 border-t border-white/8">
+          <form onSubmit={sendMessage} className="flex gap-3">
+            <Input
+              ref={inputRef}
+              data-testid="input-tyrone-message"
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              placeholder="Ask Tyrone anything..."
+              disabled={loading}
+              className="flex-1 bg-black/50 border-white/10 h-11 text-white placeholder:text-white/20 focus:border-purple-500/50 rounded-xl"
+              onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(); } }}
+            />
+            <Button
+              data-testid="button-tyrone-send"
+              type="submit"
+              disabled={loading || !input.trim()}
+              className="h-11 w-11 p-0 bg-primary hover:bg-primary/90 rounded-xl flex-shrink-0 disabled:opacity-40"
+            >
+              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            </Button>
+          </form>
+        </div>
+      </div>
     </motion.div>
   );
 }
@@ -534,8 +496,8 @@ export default function TheWall() {
                   />
                   <Button
                     type="submit"
-                    className="w-full h-14 rounded-2xl font-bold text-lg bg-purple-900/60 hover:bg-purple-800/80 border border-purple-700/40 text-white shadow-[0_0_20px_rgba(168,85,247,0.15)] hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all"
                     data-testid="button-wall-submit"
+                    className="w-full h-14 rounded-2xl font-display text-base tracking-widest uppercase bg-purple-900/40 border border-purple-700/40 text-purple-300 hover:bg-purple-900/60 hover:border-purple-600/50 hover:shadow-[0_0_30px_rgba(168,85,247,0.3)] transition-all duration-300"
                   >
                     <GlitchText text="ENTER THE WALL" intensity={0.04} interval={200} />
                   </Button>
@@ -556,7 +518,7 @@ export default function TheWall() {
                 <p className="text-purple-400/60 font-mono text-xs uppercase tracking-[0.3em]">Access Granted — Welcome, Gatekeeper</p>
               </div>
 
-              <VpnSection />
+              <TyroneSection />
 
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.8 }} className="text-center py-10">
                 <p className="sub-glitch text-base md:text-lg text-white/40 italic tracking-widest" data-text="The wall will bring more stuff soon...">

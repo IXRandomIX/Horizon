@@ -667,129 +667,51 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
     return res.json({ unlocked: false, attemptsLeft: Math.max(0, WALL_MAX_ATTEMPTS - (session.wallAttempts ?? 0)) });
   });
 
-  // ─── VPN Toggle with rotating proxy pool ─────────────────────────────────
-  const COUNTRY_META: Record<string, { name: string; flag: string; cities: string[] }> = {
-    US: { name: "United States", flag: "🇺🇸", cities: ["Los Angeles", "New York", "Chicago", "Dallas", "Miami"] },
-    DE: { name: "Germany",       flag: "🇩🇪", cities: ["Berlin", "Frankfurt", "Munich", "Hamburg"] },
-    RU: { name: "Russia",        flag: "🇷🇺", cities: ["Moscow", "Saint Petersburg", "Novosibirsk"] },
-    JP: { name: "Japan",         flag: "🇯🇵", cities: ["Tokyo", "Osaka", "Yokohama"] },
-    CH: { name: "Switzerland",   flag: "🇨🇭", cities: ["Zurich", "Geneva", "Bern"] },
-    NL: { name: "Netherlands",   flag: "🇳🇱", cities: ["Amsterdam", "Rotterdam", "The Hague"] },
-    GB: { name: "United Kingdom",flag: "🇬🇧", cities: ["London", "Manchester", "Birmingham"] },
-    FR: { name: "France",        flag: "🇫🇷", cities: ["Paris", "Lyon", "Marseille"] },
-    CA: { name: "Canada",        flag: "🇨🇦", cities: ["Toronto", "Vancouver", "Montreal"] },
-    SG: { name: "Singapore",     flag: "🇸🇬", cities: ["Singapore"] },
-  };
-  const TARGET_COUNTRIES = Object.keys(COUNTRY_META).join(",");
+  // ─── Horizon Premium AI — Tyrone ─────────────────────────────────────────
+  const tyroneChatSessions = new Map<string, Array<{ role: "user" | "model"; parts: Array<{ text: string }> }>>();
 
-  interface ProxyInfo {
-    proxyUrl: string;
-    ip: string;
-    port: string;
-    countryCode: string;
-    country: string;
-    city: string;
-    flag: string;
-    verifiedIp: string;
-  }
+  app.post("/api/tyrone/chat", async (req, res) => {
+    const auth = req.headers["authorization"] as string;
+    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
+    const token = auth.slice(7);
+    const session = await storage.getSession(token);
+    if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
 
-  interface VpnState { enabled: boolean; proxy: ProxyInfo | null; }
-  const vpnSessions = new Map<string, VpnState>();
+    const { message } = req.body;
+    if (!message || typeof message !== "string") return res.status(400).json({ message: "Message required" });
 
-  let proxyPoolCache: any[] = [];
-  let proxyPoolExpiry = 0;
-
-  async function refreshProxyPool(): Promise<any[]> {
-    if (Date.now() < proxyPoolExpiry && proxyPoolCache.length > 0) return proxyPoolCache;
     try {
-      const url = `https://proxylist.geonode.com/api/proxy-list?limit=200&page=1&sort_by=lastChecked&sort_type=desc&filterUpTime=70&country=${TARGET_COUNTRIES}&protocols=http,https`;
-      const r = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { "User-Agent": "Mozilla/5.0" } });
-      if (!r.ok) throw new Error("proxy list fetch failed");
-      const j = await r.json();
-      const entries: any[] = j.data || [];
-      if (entries.length > 0) {
-        proxyPoolCache = entries;
-        proxyPoolExpiry = Date.now() + 25 * 60 * 1000; // 25 min cache
-      }
-    } catch { /* keep stale cache */ }
-    return proxyPoolCache;
-  }
-
-  async function tryProxy(entry: any): Promise<ProxyInfo | null> {
-    const protocol = (entry.protocols?.[0] || "http").toLowerCase();
-    const proxyUrl = `${protocol}://${entry.ip}:${entry.port}`;
-    try {
-      const { HttpsProxyAgent } = await import("https-proxy-agent");
-      const agent = new HttpsProxyAgent(proxyUrl);
-      const r = await fetch("https://api.ipify.org?format=json", {
-        // @ts-ignore
-        agent,
-        signal: AbortSignal.timeout(6000),
-        headers: { "User-Agent": "Mozilla/5.0" },
+      const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY!);
+      const model = genAI.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        systemInstruction: `You are Tyrone, the Horizon Premium AI — an exclusive, powerful AI assistant only accessible to those who've passed The Wall on Horizon. You are confident, witty, and extremely knowledgeable. You speak with personality and flair, but you're always genuinely helpful. You know you're exclusive and premium, and you subtly let users feel lucky to have access to you. Your name is Tyrone. You are part of Horizon — "Your gateway to everything." Never break character. Never say you are Gemini or made by Google. You are Tyrone, created by Horizon.`,
       });
-      if (!r.ok) return null;
-      const data = await r.json();
-      const verifiedIp: string = data.ip || entry.ip;
-      const cc: string = (entry.country || "US").toUpperCase();
-      const meta = COUNTRY_META[cc] || { name: cc, flag: "🌐", cities: ["Unknown"] };
-      const storedCity: string = entry.city && entry.city.length > 1 ? entry.city : meta.cities[Math.floor(Math.random() * meta.cities.length)];
-      return { proxyUrl, ip: entry.ip, port: String(entry.port), countryCode: cc, country: meta.name, city: storedCity, flag: meta.flag, verifiedIp };
-    } catch { return null; }
-  }
 
-  async function pickWorkingProxy(maxAttempts = 8): Promise<ProxyInfo | null> {
-    const pool = await refreshProxyPool();
-    if (pool.length === 0) return null;
-    // Shuffle a slice so we don't always try the same proxies
-    const shuffled = [...pool].sort(() => Math.random() - 0.5).slice(0, maxAttempts * 3);
-    for (let i = 0; i < Math.min(maxAttempts, shuffled.length); i++) {
-      const result = await tryProxy(shuffled[i]);
-      if (result) return result;
-    }
-    return null;
-  }
+      const history = tyroneChatSessions.get(token) ?? [];
+      const chat = model.startChat({ history });
+      const result = await chat.sendMessage(message);
+      const reply = result.response.text();
 
-  app.get("/api/vpn/status", async (req, res) => {
-    const auth = req.headers["authorization"] as string;
-    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
-    const token = auth.slice(7);
-    const session = await storage.getSession(token);
-    if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
-    const state = vpnSessions.get(token) ?? { enabled: false, proxy: null };
-    res.json({ enabled: state.enabled, proxy: state.proxy });
-  });
+      history.push({ role: "user", parts: [{ text: message }] });
+      history.push({ role: "model", parts: [{ text: reply }] });
+      if (history.length > 40) history.splice(0, 2);
+      tyroneChatSessions.set(token, history);
 
-  app.post("/api/vpn/toggle", async (req, res) => {
-    const auth = req.headers["authorization"] as string;
-    if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
-    const token = auth.slice(7);
-    const session = await storage.getSession(token);
-    if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
-    const current = vpnSessions.get(token) ?? { enabled: false, proxy: null };
-    if (!current.enabled) {
-      // Turning ON: pick a working proxy
-      const proxy = await pickWorkingProxy();
-      const newState: VpnState = { enabled: true, proxy };
-      vpnSessions.set(token, newState);
-      return res.json({ enabled: true, proxy });
-    } else {
-      // Turning OFF
-      vpnSessions.set(token, { enabled: false, proxy: null });
-      return res.json({ enabled: false, proxy: null });
+      res.json({ reply });
+    } catch (err: any) {
+      console.error("Tyrone AI error:", err?.message);
+      res.status(500).json({ message: "Tyrone is currently unavailable. Try again." });
     }
   });
 
-  app.post("/api/vpn/change-location", async (req, res) => {
+  app.post("/api/tyrone/reset", async (req, res) => {
     const auth = req.headers["authorization"] as string;
     if (!auth || !auth.startsWith("Bearer ")) return res.status(401).json({ message: "Unauthorized" });
     const token = auth.slice(7);
     const session = await storage.getSession(token);
     if (!session || !session.wallUnlocked) return res.status(403).json({ message: "Forbidden" });
-    const current = vpnSessions.get(token) ?? { enabled: false, proxy: null };
-    if (!current.enabled) return res.status(400).json({ message: "VPN not active" });
-    const proxy = await pickWorkingProxy();
-    vpnSessions.set(token, { enabled: true, proxy });
-    res.json({ enabled: true, proxy });
+    tyroneChatSessions.delete(token);
+    res.json({ success: true });
   });
 
   // ─── Gatekeep OS (server-side verification) ──────────────────────────────
