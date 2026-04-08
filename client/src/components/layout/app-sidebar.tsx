@@ -100,7 +100,7 @@ export function AppSidebar() {
     { name: "Proxy Browser", path: "/browser", icon: Globe },
     { name: "Proxies", path: "/proxies", icon: ShieldCheck },
     { name: "Media / Tools", path: "/tools", icon: Wrench },
-    { name: "Gatekeep OS", path: "/gatekeep-os", icon: Lock },
+    { name: "The Launcher", path: "/gatekeep-os", icon: Lock },
     { name: "THE WALL", path: "/the-wall", icon: BrickWall, wall: true },
   ];
 
