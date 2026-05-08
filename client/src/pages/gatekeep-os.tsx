@@ -297,7 +297,7 @@ export default function GatekeepOS() {
       <div className="flex flex-col h-full bg-black animate-in fade-in duration-700 relative">
         <div className="flex-1 w-full relative">
           <iframe
-            src="https://proxy-madness--securlyedu.replit.app/"
+            src="https://the-launcher--nkchknc.replit.app/"
             className="w-full h-full border-0"
             allow="fullscreen; clipboard-read; clipboard-write"
           />
