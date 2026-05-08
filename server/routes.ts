@@ -183,7 +183,7 @@ async function applyRankRoles(username: string): Promise<void> {
 
 export async function registerRoutes(httpServer: Server, app: Express): Promise<Server> {
   // ─── Scramjet Proxy Setup ─────────────────────────────────────────────────
-  const scramjetDistPath = path.join(process.cwd(), "node_modules/@mercuryworkshop/scramjet/dist");
+  const scramjetDistPath = path.join(process.cwd(), "client/public/scramjet");
   const libcurlDistPath  = path.join(process.cwd(), "client/public/libcurl");
   const baremuxDistPath  = path.join(process.cwd(), "node_modules/@mercuryworkshop/bare-mux/dist");
   const scramjetPublicPath = path.join(process.cwd(), "client/public/scramjet");
