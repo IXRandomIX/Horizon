@@ -27,7 +27,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use((_req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
-    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com;"
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.replit.app https://*.replit.dev https://*.repl.co; child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.replit.app https://*.replit.dev https://*.repl.co;"
   );
   res.removeHeader("X-Frame-Options");
   next();
