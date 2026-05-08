@@ -209,6 +209,29 @@ export async function registerRoutes(httpServer: Server, app: Express): Promise<
   app.use("/libcurl",  express.static(libcurlDistPath));
   app.use("/baremux",  express.static(baremuxDistPath));
 
+  // ── Can-embed check: detects if a URL blocks iframing ───────────────────────
+  app.get("/api/can-embed", async (req: any, res: any) => {
+    const url = req.query.url as string;
+    if (!url) return res.json({ canEmbed: false });
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 6000);
+      const response = await fetch(url, {
+        method: "HEAD",
+        signal: controller.signal,
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; Horizon/1.0)" },
+      });
+      clearTimeout(timer);
+      const xfo = (response.headers.get("x-frame-options") || "").toUpperCase().trim();
+      const csp = response.headers.get("content-security-policy") || "";
+      const blockedByXFO = xfo === "DENY" || xfo === "SAMEORIGIN";
+      const blockedByCSP = csp.includes("frame-ancestors") && !csp.includes("frame-ancestors *");
+      res.json({ canEmbed: !blockedByXFO && !blockedByCSP });
+    } catch {
+      res.json({ canEmbed: false });
+    }
+  });
+
   // ── Server-side HTTP proxy for Scramjet (works in dev AND production) ───────
   // Bypasses the need for Wisp WebSocket entirely; makes real HTTP requests
   // from the server and streams the response back to the client.

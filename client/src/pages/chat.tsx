@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { WebviewFrame } from "@/components/webview-frame";
 import type React from "react";
 import { Send, Hash, Settings, User, LogOut, Shield, Trash2, Plus, MessageSquare, Sparkles, Eye, MoreVertical, Reply, Edit2, Smile, X, Image as ImageIcon, Monitor, ExternalLink, Ban, Clock, Bot, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -1274,7 +1275,7 @@ export default function Chat() {
               <X className="w-4 h-4" />
             </Button>
           </div>
-          <iframe src={webviewUrl} className="flex-1 w-full border-0" title="Proxy Webview" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals" />
+          <WebviewFrame src={webviewUrl} className="flex-1 w-full border-0" title="Proxy Webview" sandbox="allow-same-origin allow-scripts allow-forms allow-popups allow-modals" />
         </div>
       )}
       {/* Ban Overlay */}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { WebviewFrame } from "@/components/webview-frame";
 import { Lock, ShieldAlert, Terminal } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -296,9 +297,8 @@ export default function GatekeepOS() {
     return (
       <div className="flex flex-col h-full bg-black animate-in fade-in duration-700 relative">
         <div className="flex-1 w-full relative">
-          <iframe
+          <WebviewFrame
             src="https://the-launcher--nkchknc.replit.app/"
-            className="w-full h-full border-0"
             allow="fullscreen; clipboard-read; clipboard-write"
           />
         </div>

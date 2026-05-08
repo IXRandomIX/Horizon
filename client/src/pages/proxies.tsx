@@ -1,4 +1,5 @@
 import { Globe, Shield, Plus, Trash2, X, Maximize2 } from "lucide-react";
+import { WebviewFrame } from "@/components/webview-frame";
 import { usePageXP } from "@/hooks/use-xp-track";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
@@ -218,10 +219,9 @@ export default function Proxies() {
                 </Button>
               </div>
             </div>
-            <div className="flex-1 bg-white">
-              <iframe 
-                src={activeProxyUrl} 
-                className="w-full h-full border-none"
+            <div className="flex-1 bg-black">
+              <WebviewFrame
+                src={activeProxyUrl}
                 allow="fullscreen"
               />
             </div>
