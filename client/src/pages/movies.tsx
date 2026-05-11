@@ -95,12 +95,17 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const [src, setSrc] = useState(`https://toustream.xyz/tou/movies/${movie.tmdb}`);
-  const [errored, setErrored] = useState(false);
+  const SOURCES = [
+    `https://player.videasy.net/movie/${movie.tmdb}?color=a855f7&nextEpisode=true&episodeSelector=true`,
+    `https://www.vidking.net/embed/movie/${movie.tmdb}?color=a855f7&autoPlay=true`,
+    `https://vidsrc.to/embed/movie/${movie.tmdb}`,
+  ];
+
+  const [srcIdx, setSrcIdx] = useState(0);
+  const src = SOURCES[srcIdx];
 
   useEffect(() => {
-    setSrc(`https://toustream.xyz/tou/movies/${movie.tmdb}`);
-    setErrored(false);
+    setSrcIdx(0);
   }, [movie.tmdb]);
 
   useEffect(() => {
@@ -109,11 +114,10 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  const errored = srcIdx > 0;
+
   const tryFallback = () => {
-    if (!errored) {
-      setErrored(true);
-      setSrc(`https://player.videasy.net/movie/${movie.tmdb}?color=a855f7&nextEpisode=true`);
-    }
+    if (srcIdx < SOURCES.length - 1) setSrcIdx(i => i + 1);
   };
 
   return (
