@@ -2,59 +2,58 @@ import { useState, useEffect, useCallback } from "react";
 import { usePageXP } from "@/hooks/use-xp-track";
 import { X, Search, Play } from "lucide-react";
 
-const BASE = "https://biology.geography.drama.studying.math.mindboggle.us/images/episodes/";
-const PLAYER = "https://biology.geography.drama.studying.math.mindboggle.us/bill-nye-old.html";
+const IMG = "https://biology.geography.drama.studying.math.mindboggle.us/images/episodes/";
 
 const MOVIES = [
-  { id: 1,  title: "Zootopia 2",                               img: "zootopia-2.jpg" },
-  { id: 2,  title: "Shrek",                                    img: "shrek.jpeg" },
-  { id: 3,  title: "Shrek 2",                                  img: "shrek-2.jpeg" },
-  { id: 4,  title: "Shrek 3",                                  img: "shrek-3.jpeg" },
-  { id: 5,  title: "Shrek 4",                                  img: "shrek-4.jpeg" },
-  { id: 6,  title: "Interstellar",                             img: "interstellar.jpeg" },
-  { id: 7,  title: "John Wick",                                img: "john-wick.jpeg" },
-  { id: 8,  title: "John Wick 2",                              img: "john-wick-2.jpeg" },
-  { id: 9,  title: "John Wick 3",                              img: "john-wick-3.jpeg" },
-  { id: 10, title: "John Wick 4",                              img: "john-wick-4.webp" },
-  { id: 11, title: "Home Team",                                img: "home-team.jpeg" },
-  { id: 12, title: "Twisters",                                 img: "twisters.jpeg" },
-  { id: 13, title: "The Simpsons Movie",                       img: "the-simpsons-movie.jpg" },
-  { id: 14, title: "Whiplash",                                 img: "whiplash.jpeg" },
-  { id: 15, title: "The Karate Kid",                           img: "the-karate-kid.jpg" },
-  { id: 16, title: "The Karate Kid 2",                         img: "the-karate-kid-2.webp" },
-  { id: 17, title: "The Lego Batman Movie",                    img: "the-lego-batman-movie.jpg" },
-  { id: 18, title: "Sonic the Hedgehog",                       img: "sonic-the-hedgehog.jpg" },
-  { id: 19, title: "Sonic the Hedgehog 2",                     img: "sonic-the-hedgehog-2.jpg" },
-  { id: 20, title: "Harry Potter: Sorcerer's Stone",           img: "harry-potter-1.jpg" },
-  { id: 21, title: "Harry Potter: Chamber of Secrets",        img: "harry-potter-2.jpg" },
-  { id: 22, title: "Harry Potter: Prisoner of Azkaban",       img: "harry-potter-3.avif" },
-  { id: 23, title: "Harry Potter: Goblet of Fire",            img: "harry-potter-4.avif" },
-  { id: 24, title: "Harry Potter: Order of the Phoenix",      img: "harry-potter-5.jpg" },
-  { id: 25, title: "Harry Potter: Half-Blood Prince",         img: "harry-potter-6.jpg" },
-  { id: 26, title: "Harry Potter: Deathly Hallows Part 1",    img: "harry-potter-7-1.jpg" },
-  { id: 27, title: "Harry Potter: Deathly Hallows Part 2",    img: "harry-potter-7.jpg" },
-  { id: 28, title: "Indiana Jones: Last Crusade",             img: "indiana-jones-last-crusade.webp" },
-  { id: 29, title: "Indiana Jones: Crystal Skull",            img: "indiana-jones-crystal-skull.png" },
-  { id: 30, title: "Indiana Jones: Temple of Doom",           img: "indiana-jones-temple-of-doom.jpg" },
-  { id: 31, title: "Indiana Jones: Raiders of the Lost Ark",  img: "indiana-jones-lost-arc.jpg" },
-  { id: 32, title: "Happy Gilmore",                           img: "happy-gilmore.jpg" },
-  { id: 33, title: "Happy Gilmore 2",                         img: "happy-gilmore-2.webp" },
-  { id: 34, title: "The Matrix",                              img: "the-matrix.webp" },
-  { id: 35, title: "The Outsiders",                           img: "the-outsiders.webp" },
-  { id: 36, title: "War of the Worlds",                       img: "war-of-the-worlds.jpeg" },
-  { id: 37, title: "Oppenheimer",                             img: "oppenheimer.jpg" },
-  { id: 38, title: "IT",                                      img: "it.jpg" },
-  { id: 39, title: "Back to the Future",                      img: "back-to-the-future.jpg" },
-  { id: 40, title: "Matilda",                                 img: "matilda.jpg" },
-  { id: 41, title: "The Sandlot",                             img: "the-sandlot.jpeg" },
-  { id: 42, title: "Star Wars: Attack of the Clones",         img: "star-wars-clones-attack.webp" },
-  { id: 43, title: "Star Wars: Revenge of the Sith",          img: "star-wars-revenge-sith.jpg" },
-  { id: 44, title: "Star Wars: The Phantom Menace",           img: "star-wars-phantom-menace.jpg" },
-  { id: 45, title: "Star Wars: Return of the Jedi",           img: "star-wars-return-jedi.jpg" },
-  { id: 46, title: "Star Wars: The Empire Strikes Back",      img: "star-wars-empire-back.jpg" },
-  { id: 47, title: "Star Wars: A New Hope",                   img: "star-wars-new-hope.jpg" },
-  { id: 48, title: "Five Nights at Freddy's",                 img: "fnaf.webp" },
-  { id: 49, title: "Five Nights at Freddy's 2",               img: "five-nights-at-freddys.jpg" },
+  { tmdb: 1084242, title: "Zootopia 2",                              img: "zootopia-2.jpg" },
+  { tmdb: 808,     title: "Shrek",                                   img: "shrek.jpeg" },
+  { tmdb: 809,     title: "Shrek 2",                                 img: "shrek-2.jpeg" },
+  { tmdb: 810,     title: "Shrek 3",                                 img: "shrek-3.jpeg" },
+  { tmdb: 10192,   title: "Shrek 4",                                 img: "shrek-4.jpeg" },
+  { tmdb: 157336,  title: "Interstellar",                            img: "interstellar.jpeg" },
+  { tmdb: 245891,  title: "John Wick",                               img: "john-wick.jpeg" },
+  { tmdb: 324552,  title: "John Wick 2",                             img: "john-wick-2.jpeg" },
+  { tmdb: 458156,  title: "John Wick 3",                             img: "john-wick-3.jpeg" },
+  { tmdb: 603692,  title: "John Wick 4",                             img: "john-wick-4.webp" },
+  { tmdb: 817648,  title: "Home Team",                               img: "home-team.jpeg" },
+  { tmdb: 718821,  title: "Twisters",                                img: "twisters.jpeg" },
+  { tmdb: 35,      title: "The Simpsons Movie",                      img: "the-simpsons-movie.jpg" },
+  { tmdb: 244786,  title: "Whiplash",                                img: "whiplash.jpeg" },
+  { tmdb: 1885,    title: "The Karate Kid",                          img: "the-karate-kid.jpg" },
+  { tmdb: 8856,    title: "The Karate Kid 2",                        img: "the-karate-kid-2.webp" },
+  { tmdb: 324849,  title: "The Lego Batman Movie",                   img: "the-lego-batman-movie.jpg" },
+  { tmdb: 454626,  title: "Sonic the Hedgehog",                      img: "sonic-the-hedgehog.jpg" },
+  { tmdb: 675353,  title: "Sonic the Hedgehog 2",                    img: "sonic-the-hedgehog-2.jpg" },
+  { tmdb: 671,     title: "Harry Potter: Sorcerer's Stone",          img: "harry-potter-1.jpg" },
+  { tmdb: 672,     title: "Harry Potter: Chamber of Secrets",        img: "harry-potter-2.jpg" },
+  { tmdb: 673,     title: "Harry Potter: Prisoner of Azkaban",       img: "harry-potter-3.avif" },
+  { tmdb: 674,     title: "Harry Potter: Goblet of Fire",            img: "harry-potter-4.avif" },
+  { tmdb: 675,     title: "Harry Potter: Order of the Phoenix",      img: "harry-potter-5.jpg" },
+  { tmdb: 767,     title: "Harry Potter: Half-Blood Prince",         img: "harry-potter-6.jpg" },
+  { tmdb: 12444,   title: "Harry Potter: Deathly Hallows Part 1",    img: "harry-potter-7-1.jpg" },
+  { tmdb: 12445,   title: "Harry Potter: Deathly Hallows Part 2",    img: "harry-potter-7.jpg" },
+  { tmdb: 89,      title: "Indiana Jones: Last Crusade",             img: "indiana-jones-last-crusade.webp" },
+  { tmdb: 217,     title: "Indiana Jones: Crystal Skull",            img: "indiana-jones-crystal-skull.png" },
+  { tmdb: 87,      title: "Indiana Jones: Temple of Doom",           img: "indiana-jones-temple-of-doom.jpg" },
+  { tmdb: 85,      title: "Indiana Jones: Raiders of the Lost Ark",  img: "indiana-jones-lost-arc.jpg" },
+  { tmdb: 9614,    title: "Happy Gilmore",                           img: "happy-gilmore.jpg" },
+  { tmdb: 1263256, title: "Happy Gilmore 2",                         img: "happy-gilmore-2.webp" },
+  { tmdb: 603,     title: "The Matrix",                              img: "the-matrix.webp" },
+  { tmdb: 227,     title: "The Outsiders",                           img: "the-outsiders.webp" },
+  { tmdb: 74,      title: "War of the Worlds",                       img: "war-of-the-worlds.jpeg" },
+  { tmdb: 872585,  title: "Oppenheimer",                             img: "oppenheimer.jpg" },
+  { tmdb: 346364,  title: "IT",                                      img: "it.jpg" },
+  { tmdb: 105,     title: "Back to the Future",                      img: "back-to-the-future.jpg" },
+  { tmdb: 10830,   title: "Matilda",                                 img: "matilda.jpg" },
+  { tmdb: 11528,   title: "The Sandlot",                             img: "the-sandlot.jpeg" },
+  { tmdb: 1894,    title: "Star Wars: Attack of the Clones",         img: "star-wars-clones-attack.webp" },
+  { tmdb: 1895,    title: "Star Wars: Revenge of the Sith",          img: "star-wars-revenge-sith.jpg" },
+  { tmdb: 1893,    title: "Star Wars: The Phantom Menace",           img: "star-wars-phantom-menace.jpg" },
+  { tmdb: 1892,    title: "Star Wars: Return of the Jedi",           img: "star-wars-return-jedi.jpg" },
+  { tmdb: 1891,    title: "Star Wars: The Empire Strikes Back",      img: "star-wars-empire-back.jpg" },
+  { tmdb: 11,      title: "Star Wars: A New Hope",                   img: "star-wars-new-hope.jpg" },
+  { tmdb: 507089,  title: "Five Nights at Freddy's",                 img: "fnaf.webp" },
+  { tmdb: 1228246, title: "Five Nights at Freddy's 2",               img: "five-nights-at-freddys.jpg" },
 ];
 
 type Movie = typeof MOVIES[0];
@@ -65,10 +64,10 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
       className="group relative overflow-hidden rounded-lg cursor-pointer select-none bg-zinc-900"
       style={{ flex: "0 0 160px", width: 160, aspectRatio: "2/3" }}
       onClick={onPlay}
-      data-testid={`movie-card-${movie.id}`}
+      data-testid={`movie-card-${movie.tmdb}`}
     >
       <img
-        src={BASE + movie.img}
+        src={IMG + movie.img}
         alt={movie.title}
         className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.06]"
         loading="lazy"
@@ -96,13 +95,26 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+  const [src, setSrc] = useState(`https://toustream.xyz/tou/movies/${movie.tmdb}`);
+  const [errored, setErrored] = useState(false);
+
+  useEffect(() => {
+    setSrc(`https://toustream.xyz/tou/movies/${movie.tmdb}`);
+    setErrored(false);
+  }, [movie.tmdb]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const playerUrl = `${PLAYER}?id=${movie.id}`;
+  const tryFallback = () => {
+    if (!errored) {
+      setErrored(true);
+      setSrc(`https://player.videasy.net/movie/${movie.tmdb}?color=a855f7&nextEpisode=true`);
+    }
+  };
 
   return (
     <div
@@ -114,6 +126,9 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
 
       <div className="flex items-center justify-between px-4 h-11 bg-zinc-900 border-b border-zinc-800 shrink-0">
         <h3 className="text-white font-semibold text-sm truncate">{movie.title}</h3>
+        {errored && (
+          <span className="text-yellow-400 text-xs mr-auto ml-3">Using fallback source</span>
+        )}
         <button
           onClick={onClose}
           className="text-zinc-400 hover:text-white transition-colors ml-4 shrink-0 p-1"
@@ -124,12 +139,15 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
       </div>
 
       <iframe
-        src={playerUrl}
+        key={src}
+        src={src}
         className="flex-1 w-full border-0 bg-black"
         allowFullScreen
         allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
         title={movie.title}
+        onError={tryFallback}
         data-testid="video-player-iframe"
+        referrerPolicy="no-referrer"
       />
     </div>
   );
@@ -171,7 +189,7 @@ export default function MoviesPage() {
         ) : (
           <div className="flex flex-wrap gap-4" data-testid="movies-grid">
             {filtered.map(movie => (
-              <MovieCard key={movie.id} movie={movie} onPlay={() => setPlaying(movie)} />
+              <MovieCard key={movie.tmdb} movie={movie} onPlay={() => setPlaying(movie)} />
             ))}
           </div>
         )}
