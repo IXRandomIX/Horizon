@@ -2123,6 +2123,23 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
     return res.json();
   }
 
+  // Poster lookup by title (cached in memory)
+  const posterCache = new Map<string, string>();
+  app.get("/api/movies/poster", async (req, res) => {
+    const title = (req.query.title as string || "").trim();
+    if (!title) return res.status(400).json({ poster: null });
+    if (posterCache.has(title)) return res.json({ poster: posterCache.get(title) });
+    try {
+      const data = await tmdbFetch(`/search/movie?api_key=${TMDB_KEY}&query=${encodeURIComponent(title)}&include_adult=false`);
+      const result = data.results?.[0];
+      const poster = result?.poster_path ? `https://image.tmdb.org/t/p/w500${result.poster_path}` : null;
+      posterCache.set(title, poster ?? "");
+      res.json({ poster });
+    } catch {
+      res.json({ poster: null });
+    }
+  });
+
   app.get("/api/movies/trending", async (_req, res) => {
     try {
       const [movies, tv] = await Promise.all([
