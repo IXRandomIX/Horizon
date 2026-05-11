@@ -95,30 +95,13 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const SOURCES = [
-    `https://player.videasy.net/movie/${movie.tmdb}?color=a855f7&nextEpisode=true&episodeSelector=true`,
-    `https://www.vidking.net/embed/movie/${movie.tmdb}?color=a855f7&autoPlay=true`,
-    `https://vidsrc.to/embed/movie/${movie.tmdb}`,
-  ];
-
-  const [srcIdx, setSrcIdx] = useState(0);
-  const src = SOURCES[srcIdx];
-
-  useEffect(() => {
-    setSrcIdx(0);
-  }, [movie.tmdb]);
+  const src = `/api/movie-player/${movie.tmdb}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
-
-  const errored = srcIdx > 0;
-
-  const tryFallback = () => {
-    if (srcIdx < SOURCES.length - 1) setSrcIdx(i => i + 1);
-  };
 
   return (
     <div
@@ -130,9 +113,6 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
 
       <div className="flex items-center justify-between px-4 h-11 bg-zinc-900 border-b border-zinc-800 shrink-0">
         <h3 className="text-white font-semibold text-sm truncate">{movie.title}</h3>
-        {errored && (
-          <span className="text-yellow-400 text-xs mr-auto ml-3">Using fallback source</span>
-        )}
         <button
           onClick={onClose}
           className="text-zinc-400 hover:text-white transition-colors ml-4 shrink-0 p-1"
@@ -143,15 +123,12 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
       </div>
 
       <iframe
-        key={src}
         src={src}
         className="flex-1 w-full border-0 bg-black"
         allowFullScreen
         allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
         title={movie.title}
-        onError={tryFallback}
         data-testid="video-player-iframe"
-        referrerPolicy="no-referrer"
       />
     </div>
   );

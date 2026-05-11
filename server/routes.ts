@@ -2123,6 +2123,61 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
     return res.json();
   }
 
+  // ── Movie player proxy ─────────────────────────────────────────────────────
+  // Fetches the embed player HTML server-side, strips X-Frame-Options and
+  // frame-ancestors CSP so the iframe can always load from our own domain.
+  const PLAYER_SOURCES = [
+    (id: number) => `https://player.videasy.net/movie/${id}?color=a855f7&nextEpisode=true`,
+    (id: number) => `https://vidsrc.to/embed/movie/${id}`,
+    (id: number) => `https://www.vidking.net/embed/movie/${id}?color=a855f7&autoPlay=true`,
+  ];
+  const PLAYER_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+  app.get("/api/movie-player/:tmdbId", async (req, res) => {
+    const tmdbId = parseInt(req.params.tmdbId as string, 10);
+    if (!tmdbId || isNaN(tmdbId)) return res.status(400).send("Invalid TMDB ID");
+
+    for (const buildUrl of PLAYER_SOURCES) {
+      const url = buildUrl(tmdbId);
+      const origin = new URL(url).origin;
+      try {
+        const upstream = await fetch(url, {
+          headers: {
+            "User-Agent": PLAYER_BROWSER_UA,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+            "Referer": origin + "/",
+          },
+          redirect: "follow",
+        });
+
+        if (!upstream.ok) continue;
+
+        const ct = upstream.headers.get("content-type") || "text/html";
+        let body = await upstream.text();
+
+        // Rewrite absolute-path URLs to the upstream origin so sub-resources load
+        body = body
+          .replace(/(href|src)="\//g, `$1="${origin}/`)
+          .replace(/url\(\//g, `url(${origin}/`);
+
+        // Inject a <base> tag so any remaining relative paths resolve correctly
+        body = body.replace("<head>", `<head><base href="${origin}/">`);
+
+        res.setHeader("Content-Type", ct);
+        res.setHeader("X-Source-Url", url);
+        // Explicitly remove any framing restrictions
+        res.removeHeader("X-Frame-Options");
+        res.removeHeader("Content-Security-Policy");
+        return res.send(body);
+      } catch {
+        // try next source
+      }
+    }
+
+    res.status(502).send("All player sources failed");
+  });
+
   // Poster lookup by title (cached in memory)
   const posterCache = new Map<string, string>();
   app.get("/api/movies/poster", async (req, res) => {
