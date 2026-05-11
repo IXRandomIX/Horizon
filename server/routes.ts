@@ -2133,21 +2133,108 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
   ];
   const PLAYER_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-  function rewritePlayerHtml(body: string, origin: string): string {
-    // 1. Inject <base> so browser resolves leftover relative paths in HTML
-    body = body.replace("<head>", `<head><base href="${origin}/">`);
-    // 2. Rewrite HTML attribute absolute-path URLs  href="/ src="/ action="/
-    body = body.replace(/(href|src|action)="\//g, `$1="${origin}/`);
-    body = body.replace(/(href|src|action)='\//g, `$1='${origin}/`);
-    // 3. Rewrite CSS url(/) references
-    body = body.replace(/url\(\//g, `url(${origin}/`);
-    // 4. Rewrite JS backtick strings that start with /tou/ (the only dynamic
-    //    fetch paths toustream uses — e.g. `/tou/get-source/movie/`)
-    body = body.replace(/`\/tou\//g, `\`${origin}/tou/`);
-    // 5. Rewrite fetch(`/tou/... template literals (already covered by 4,
-    //    but also handles fetch('/tou/... single-quote variants)
-    body = body.replace(/fetch\('\/tou\//g, `fetch('${origin}/tou/`);
-    body = body.replace(/fetch\("\/tou\//g, `fetch("${origin}/tou/`);
+  // ── Toustream static asset + API proxy ────────────────────────────────────
+  // Proxies any /tou/* path from toustream.xyz through our server.
+  // This ensures CSS, JS and API calls all come from our own origin,
+  // avoiding any cross-origin or CORS restriction in the iframe.
+  const TS_ORIGIN = "https://toustream.xyz";
+
+  async function touProxyHandler(req: any, res: any) {
+    const subpath = (req.path || "").replace(/^\//, "");
+    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
+    const upstream = `${TS_ORIGIN}/${subpath}${qs}`;
+    try {
+      const r = await fetch(upstream, {
+        headers: {
+          "User-Agent": PLAYER_BROWSER_UA,
+          "Referer": `${TS_ORIGIN}/`,
+          "Origin": TS_ORIGIN,
+        },
+        redirect: "follow",
+      });
+      const ct = r.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.removeHeader("X-Frame-Options");
+      res.removeHeader("Content-Security-Policy");
+
+      const isText = ct.includes("text") || ct.includes("json") || ct.includes("javascript") || ct.includes("m3u8");
+      if (isText) {
+        let body = await r.text();
+        // Rewrite any relative /tou/ paths in JSON, m3u8, and JS to go through our proxy
+        body = body.replace(/\/tou\//g, "/api/ts-proxy/tou/");
+        // Rewrite absolute toustream.xyz URLs to our proxy too
+        body = body.replace(new RegExp(`${TS_ORIGIN}/tou/`, "g"), "/api/ts-proxy/tou/");
+        return res.send(body);
+      }
+      // Binary (hls.js, images, video segments)
+      const buf = Buffer.from(await r.arrayBuffer());
+      return res.send(buf);
+    } catch (e: any) {
+      return res.status(502).send("Asset proxy error: " + e.message);
+    }
+  }
+
+  app.use("/api/ts-proxy", touProxyHandler);
+
+  // Also intercept any /tou/* paths that the player JS resolves relative to our origin.
+  // Express strips "/tou" from req.path, so we re-prepend it for the upstream URL.
+  app.use("/tou", async (req: any, res: any) => {
+    const subpath = "tou" + (req.path || "");
+    const qs = (req.url || "").includes("?") ? (req.url as string).slice((req.url as string).indexOf("?")) : "";
+    const upstream = `${TS_ORIGIN}/${subpath}${qs}`;
+    try {
+      const r = await fetch(upstream, {
+        headers: {
+          "User-Agent": PLAYER_BROWSER_UA,
+          "Referer": `${TS_ORIGIN}/`,
+          "Origin": TS_ORIGIN,
+        },
+        redirect: "follow",
+      });
+      const ct = r.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.removeHeader("X-Frame-Options");
+      res.removeHeader("Content-Security-Policy");
+      const isText = ct.includes("text") || ct.includes("json") || ct.includes("javascript") || ct.includes("m3u8");
+      if (isText) {
+        let body = await r.text();
+        body = body.replace(/\/tou\//g, "/api/ts-proxy/tou/");
+        body = body.replace(new RegExp(`${TS_ORIGIN}/tou/`, "g"), "/api/ts-proxy/tou/");
+        return res.send(body);
+      }
+      return res.send(Buffer.from(await r.arrayBuffer()));
+    } catch (e: any) {
+      return res.status(502).send("Tou proxy error: " + e.message);
+    }
+  });
+
+  function rewritePlayerHtml(body: string, _origin: string): string {
+    // Route ALL toustream resources through our own /api/ts-proxy/ endpoint.
+    // This avoids every cross-origin restriction (CORS, CSP, X-Frame-Options).
+    const PROXY = "/api/ts-proxy";
+    const ORIGIN = "https://toustream.xyz";
+
+    // 1. Rewrite already-absolute toustream.xyz URLs  (href/src attributes)
+    body = body.replace(new RegExp(`(href|src|action)="${ORIGIN}/`, "g"), `$1="${PROXY}/`);
+    body = body.replace(new RegExp(`(href|src|action)='${ORIGIN}/`, "g"), `$1='${PROXY}/`);
+
+    // 2. Rewrite root-relative HTML attribute paths  href="/ src="/
+    body = body.replace(/(href|src|action)="\//g, `$1="${PROXY}/`);
+    body = body.replace(/(href|src|action)='\//g, `$1='${PROXY}/`);
+
+    // 3. Inject <base> for any remaining relative paths  (should be none after above)
+    body = body.replace("<head>", `<head><base href="${ORIGIN}/">`);
+
+    // 4. Rewrite toustream JS backtick literal API paths  `/tou/get-source/...`
+    body = body.replace(/`\/tou\//g, `\`${PROXY}/tou/`);
+
+    // 5. Rewrite explicit absolute toustream URLs inside JS strings/template literals
+    body = body.replace(new RegExp(`'${ORIGIN}/tou/`, "g"), `'${PROXY}/tou/`);
+    body = body.replace(new RegExp(`"${ORIGIN}/tou/`, "g"), `"${PROXY}/tou/`);
+    body = body.replace(new RegExp(`\`${ORIGIN}/tou/`, "g"), `\`${PROXY}/tou/`);
+
     return body;
   }
 
