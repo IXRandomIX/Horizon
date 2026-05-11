@@ -27,7 +27,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use((_req, res, next) => {
   res.setHeader(
     "Content-Security-Policy",
-    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.replit.app https://*.replit.dev https://*.repl.co; child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.replit.app https://*.replit.dev https://*.repl.co;"
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.replit.app https://*.replit.dev https://*.repl.co https://biology.geography.drama.studying.math.mindboggle.us https://canvas.instructure.com; child-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://*.replit.app https://*.replit.dev https://*.repl.co https://biology.geography.drama.studying.math.mindboggle.us https://canvas.instructure.com; media-src 'self' https://canvas.instructure.com blob:;"
   );
   res.removeHeader("X-Frame-Options");
   next();

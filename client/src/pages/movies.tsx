@@ -1,67 +1,65 @@
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usePageXP } from "@/hooks/use-xp-track";
 import { X, Search, Play } from "lucide-react";
 
 const BASE = "https://biology.geography.drama.studying.math.mindboggle.us/images/episodes/";
+const PLAYER = "https://biology.geography.drama.studying.math.mindboggle.us/bill-nye-old.html";
 
 const MOVIES = [
-  { id: 1,  title: "Zootopia 2",                                          img: "zootopia-2.jpg",                  url: "https://canvas.instructure.com/files/6936~44365493/download?download_frd=1&verifier=zYUDHBZwJ6nWmMAE6Z9tWoRuOZXXxC0Bq7l4O0YM" },
-  { id: 2,  title: "Shrek",                                               img: "shrek.jpeg",                      url: "https://canvas.instructure.com/files/6936~44388897/download?download_frd=1&verifier=MvARGOnKCU9C3F6vuOs0CyBPVl32ej8xBQlRgXYO" },
-  { id: 3,  title: "Shrek 2",                                             img: "shrek-2.jpeg",                    url: "https://canvas.instructure.com/files/6936~44386173/download?download_frd=1&verifier=Cetd6XyRZAMqQm3wiYOyy3n0VN988WH5TYZukCya" },
-  { id: 4,  title: "Shrek 3",                                             img: "shrek-3.jpeg",                    url: "https://canvas.instructure.com/files/6936~44386174/download?download_frd=1&verifier=lc5GxcD0IHQ6oVXvQ3hUzFXdIjZZ5IkupKFJthQD" },
-  { id: 5,  title: "Shrek 4",                                             img: "shrek-4.jpeg",                    url: "https://canvas.instructure.com/files/6936~44386170/download?download_frd=1&verifier=VWT81usNqEg8v91f11lUOW8LMnxKiAkaeHis9ifY" },
-  { id: 6,  title: "Interstellar",                                        img: "interstellar.jpeg",               url: "https://canvas.instructure.com/files/6936~44391184/download?download_frd=1&verifier=CotCKyrd0BnrkgNF5HiMkHKhsepoOKYZipYDnayT" },
-  { id: 7,  title: "John Wick",                                           img: "john-wick.jpeg",                  url: "https://canvas.instructure.com/files/6936~44391317/download?download_frd=1&verifier=FWozOuc8kCEe78MngfnRsSfC4vFGtLGwu8O9RJXr" },
-  { id: 8,  title: "John Wick 2",                                         img: "john-wick-2.jpeg",                url: "https://canvas.instructure.com/files/6936~44398495/download?download_frd=1&verifier=i5gwc1H1Ocm1TGG4936yFwwBg9tOUf7i77sAQrMI" },
-  { id: 9,  title: "John Wick 3",                                         img: "john-wick-3.jpeg",                url: "https://canvas.instructure.com/files/6936~44398539/download?download_frd=1&verifier=NdOAheaQ9nRTeF4rbhsqElKWHE4vtulDQi4HrvO7" },
-  { id: 10, title: "John Wick 4",                                         img: "john-wick-4.webp",                url: "https://canvas.instructure.com/files/6936~44398585/download?download_frd=1&verifier=HvVhS52Eul4svdnW7q5ThUMRqbXdouFv0QIetRON" },
-  { id: 11, title: "Home Team",                                           img: "home-team.jpeg",                  url: "https://canvas.instructure.com/files/6936~44406952/download?download_frd=1&verifier=9R8UucBusdUScWblBBYVXRWCiKp1NkR1Z0lZbAts" },
-  { id: 12, title: "Twisters",                                            img: "twisters.jpeg",                   url: "https://canvas.instructure.com/files/6936~44410719/download?download_frd=1&verifier=8gC2u2XyahBGqEPnyhAfj8z521Wo3viFmInLRv9Q" },
-  { id: 13, title: "The Simpsons Movie",                                  img: "the-simpsons-movie.jpg",          url: "https://canvas.instructure.com/files/334517367/download?download_frd=1&verifier=IVwwgUzBRSJEm61EL6yZqQ532bfpjoi1Vv1yiosp" },
-  { id: 14, title: "Whiplash",                                            img: "whiplash.jpeg",                   url: "https://canvas.instructure.com/files/335024839/download?download_frd=1&verifier=HECuTstyDHNDwITL0y83P1PgP7863K0qKGZMf9SM" },
-  { id: 15, title: "The Karate Kid",                                      img: "the-karate-kid.jpg",              url: "https://canvas.instructure.com/files/336194149/download?download_frd=1&verifier=ZScQUPRsFl4DlIX8tyy1D193d555HZ4bePWgLHZ5" },
-  { id: 16, title: "The Karate Kid 2",                                    img: "the-karate-kid-2.webp",           url: "https://canvas.instructure.com/files/336194061/download?download_frd=1&verifier=ebUrjSmADnsu6TSxtlQ33rkbnLgi1phgNkO40psh" },
-  { id: 17, title: "The Lego Batman Movie",                               img: "the-lego-batman-movie.jpg",       url: "https://canvas.instructure.com/files/336195933/download?download_frd=1&verifier=W40hzK5JFGnsi6qMwi7YbrUVMQVwaRB54pKvwL9K" },
-  { id: 18, title: "Sonic the Hedgehog",                                  img: "sonic-the-hedgehog.jpg",          url: "https://canvas.instructure.com/files/336194121/download?download_frd=1&verifier=KKOI6nHYBTY0S9RWG7vt7ntCBkqPw7khc4TCgz8I" },
-  { id: 19, title: "Sonic the Hedgehog 2",                                img: "sonic-the-hedgehog-2.jpg",        url: "https://canvas.instructure.com/files/336194499/download?download_frd=1&verifier=Z57akm29JNwS5UiY2ggZGZcqBTMlxvs2ldlPbPZL" },
-  { id: 20, title: "Harry Potter: Sorcerer's Stone",                      img: "harry-potter-1.jpg",              url: "https://canvas.instructure.com/files/336353613/download?download_frd=1&verifier=gLeLZUinsDCE9CxspkF4AS4Axl2rpqELE8HhGhra" },
-  { id: 21, title: "Harry Potter: Chamber of Secrets",                   img: "harry-potter-2.jpg",              url: "https://canvas.instructure.com/files/336353615/download?download_frd=1&verifier=IOgxEpzL2ZrdZZqAHoJyplkQGKc6JXyQ7j27pGDk" },
-  { id: 22, title: "Harry Potter: Prisoner of Azkaban",                  img: "harry-potter-3.avif",             url: "https://canvas.instructure.com/files/336353683/download?download_frd=1&verifier=QaEWVI4az1wQM9AYBkHAjay6LILK0lZsvqRetrGr" },
-  { id: 23, title: "Harry Potter: Goblet of Fire",                       img: "harry-potter-4.avif",             url: "https://canvas.instructure.com/files/336353649/download?download_frd=1&verifier=HNv5BvVNevSKZgHKmY5oSc8NOhBT7Wt3VYDPBmhA" },
-  { id: 24, title: "Harry Potter: Order of the Phoenix",                 img: "harry-potter-5.jpg",              url: "https://canvas.instructure.com/files/336353445/download?download_frd=1&verifier=NQ9Gy3gLnR3g1aXhIkcDJ3fniaxa0gtEo6EKXC2k" },
-  { id: 25, title: "Harry Potter: Half-Blood Prince",                    img: "harry-potter-6.jpg",              url: "https://canvas.instructure.com/files/336353239/download?download_frd=1&verifier=tPmOncG5hPAik92zu2lzoi2lIImp7hvn8TWzVNEW" },
-  { id: 26, title: "Harry Potter: Deathly Hallows Part 1",               img: "harry-potter-7-1.jpg",            url: "https://canvas.instructure.com/files/336353041/download?download_frd=1&verifier=4TCIqO16sCHtagTSZwiYOxyVlQcvCtGvsbMSQOqt" },
-  { id: 27, title: "Harry Potter: Deathly Hallows Part 2",               img: "harry-potter-7.jpg",              url: "https://canvas.instructure.com/files/336353283/download?download_frd=1&verifier=Hacx1TMvAlNRB3xX1eiZadjew3wY9U4kOuDQOv4C" },
-  { id: 28, title: "Indiana Jones: Last Crusade",                        img: "indiana-jones-last-crusade.webp", url: "https://canvas.instructure.com/files/336353597/download?download_frd=1&verifier=urHOBw6RBWmsa2ft7Tmd8zZdkTpqlyJoUzoD6Ic1" },
-  { id: 29, title: "Indiana Jones: Crystal Skull",                       img: "indiana-jones-crystal-skull.png", url: "https://canvas.instructure.com/files/336353571/download?download_frd=1&verifier=CamVNBreTvagVWhuDJv1enoCuuzv5wSMQn3dmLpt" },
-  { id: 30, title: "Indiana Jones: Temple of Doom",                      img: "indiana-jones-temple-of-doom.jpg",url: "https://canvas.instructure.com/files/336353519/download?download_frd=1&verifier=JFRbW4QtKk6nCkSe3883kQRNwR78J5K8533sIJ5y" },
-  { id: 31, title: "Indiana Jones: Raiders of the Lost Ark",             img: "indiana-jones-lost-arc.jpg",      url: "https://canvas.instructure.com/files/336353503/download?download_frd=1&verifier=DrjJn6HI0Q8NnxMoDiQ2hHlELsWVQ4zpx6Q7fOjT" },
-  { id: 32, title: "Happy Gilmore",                                       img: "happy-gilmore.jpg",               url: "https://canvas.instructure.com/files/336353391/download?download_frd=1&verifier=FKZTQs2gmy3U6JJ369W2WRg4f7PCKBK5DHbnx8Qj" },
-  { id: 33, title: "Happy Gilmore 2",                                     img: "happy-gilmore-2.webp",            url: "https://canvas.instructure.com/files/336353515/download?download_frd=1&verifier=E6ciOBxCD8PudDUNHkOi3m091XdxOvRE6KmjjPTU" },
-  { id: 34, title: "The Matrix",                                          img: "the-matrix.webp",                 url: "https://canvas.instructure.com/files/336353499/download?download_frd=1&verifier=zNIbcrC2mihTdVgnjVOJtvRITwxmOsJcpHhf67pe" },
-  { id: 35, title: "The Outsiders",                                       img: "the-outsiders.webp",              url: "https://canvas.instructure.com/files/336353497/download?download_frd=1&verifier=NcTIh7B6UhbuyNNdpXxHrfnDslvJpkLb8kZI5FND" },
-  { id: 36, title: "War of the Worlds",                                   img: "war-of-the-worlds.jpeg",          url: "https://canvas.instructure.com/files/336353479/download?download_frd=1&verifier=MAj5gRjOjc5xWxcqcAAJNGBpboitXghLAcbvJAf" },
-  { id: 37, title: "Oppenheimer",                                         img: "oppenheimer.jpg",                 url: "https://canvas.instructure.com/files/336353463/download?download_frd=1&verifier=Vn7XeHD3kRxjMmDWdQFYQJ8BUzdzx5eceBjlAqTl" },
-  { id: 38, title: "IT",                                                  img: "it.jpg",                          url: "https://canvas.instructure.com/files/336353379/download?download_frd=1&verifier=nmFpqJHeqiYC70TLWEnFJ9vSC5ADyS4VSyxHy3Vq" },
-  { id: 39, title: "Back to the Future",                                  img: "back-to-the-future.jpg",          url: "https://canvas.instructure.com/files/336353265/download?download_frd=1&verifier=Ug4mZFbdfCKrIOubhAE0Eg7ONX6PsTazNVq75ngi" },
-  { id: 40, title: "Matilda",                                             img: "matilda.jpg",                     url: "https://canvas.instructure.com/files/336353241/download?download_frd=1&verifier=4nk4nqhHnOk35I5F7dPuHWhQHmIEbUoE4E5IrjJ2" },
-  { id: 41, title: "The Sandlot",                                         img: "the-sandlot.jpeg",                url: "https://canvas.instructure.com/files/336353237/download?download_frd=1&verifier=yGXfogI6tboVcwkgVCwhoX7SzUJV3r8ghL9CaS1E" },
-  { id: 42, title: "Star Wars: Attack of the Clones",                    img: "star-wars-clones-attack.webp",    url: "https://canvas.instructure.com/files/336352899/download?download_frd=1&verifier=Z7iqV6r6yPAQypgDWHOIkUVz6rWFCUohSO8A7Qt4" },
-  { id: 43, title: "Star Wars: Revenge of the Sith",                     img: "star-wars-revenge-sith.jpg",      url: "https://canvas.instructure.com/files/336352875/download?download_frd=1&verifier=Fahq55ry2P7XMmehEpRTjp8h97NPKagpCUT28r4r" },
-  { id: 44, title: "Star Wars: The Phantom Menace",                      img: "star-wars-phantom-menace.jpg",    url: "https://canvas.instructure.com/files/336352825/download?download_frd=1&verifier=b1bJAoNkb8NP1J45THGjPlSih4o1yhf1aYKI5mHb" },
-  { id: 45, title: "Star Wars: Return of the Jedi",                      img: "star-wars-return-jedi.jpg",       url: "https://canvas.instructure.com/files/336352817/download?download_frd=1&verifier=5UezjAI6rKIGJNgBYV9Mkc7U3Vm2mBcROFBrCraw" },
-  { id: 46, title: "Star Wars: The Empire Strikes Back",                 img: "star-wars-empire-back.jpg",       url: "https://canvas.instructure.com/files/336352733/download?download_frd=1&verifier=ctgKhgCm4ITalwwJcXChsqmB0yWT9qYtwjd1gaFR" },
-  { id: 47, title: "Star Wars: A New Hope",                              img: "star-wars-new-hope.jpg",          url: "https://canvas.instructure.com/files/336352727/download?download_frd=1&verifier=I2M0f8KebVxnJ7DvVbrd6oSCsTGQuw7s4h1Zl57d" },
-  { id: 48, title: "Five Nights at Freddy's",                            img: "fnaf.webp",                       url: "https://canvas.instructure.com/files/336352731/download?download_frd=1&verifier=qbeQ45Zu6vZMqN4BtOH15cR8xXAVjUs4965fnFfd" },
-  { id: 49, title: "Five Nights at Freddy's 2",                          img: "five-nights-at-freddys.jpg",      url: "https://canvas.instructure.com/files/336352561/download?download_frd=1&verifier=6K5a2Hsiig6WD8udJ84jWEJ8FF0ZghMoZEILa91R" },
+  { id: 1,  title: "Zootopia 2",                               img: "zootopia-2.jpg" },
+  { id: 2,  title: "Shrek",                                    img: "shrek.jpeg" },
+  { id: 3,  title: "Shrek 2",                                  img: "shrek-2.jpeg" },
+  { id: 4,  title: "Shrek 3",                                  img: "shrek-3.jpeg" },
+  { id: 5,  title: "Shrek 4",                                  img: "shrek-4.jpeg" },
+  { id: 6,  title: "Interstellar",                             img: "interstellar.jpeg" },
+  { id: 7,  title: "John Wick",                                img: "john-wick.jpeg" },
+  { id: 8,  title: "John Wick 2",                              img: "john-wick-2.jpeg" },
+  { id: 9,  title: "John Wick 3",                              img: "john-wick-3.jpeg" },
+  { id: 10, title: "John Wick 4",                              img: "john-wick-4.webp" },
+  { id: 11, title: "Home Team",                                img: "home-team.jpeg" },
+  { id: 12, title: "Twisters",                                 img: "twisters.jpeg" },
+  { id: 13, title: "The Simpsons Movie",                       img: "the-simpsons-movie.jpg" },
+  { id: 14, title: "Whiplash",                                 img: "whiplash.jpeg" },
+  { id: 15, title: "The Karate Kid",                           img: "the-karate-kid.jpg" },
+  { id: 16, title: "The Karate Kid 2",                         img: "the-karate-kid-2.webp" },
+  { id: 17, title: "The Lego Batman Movie",                    img: "the-lego-batman-movie.jpg" },
+  { id: 18, title: "Sonic the Hedgehog",                       img: "sonic-the-hedgehog.jpg" },
+  { id: 19, title: "Sonic the Hedgehog 2",                     img: "sonic-the-hedgehog-2.jpg" },
+  { id: 20, title: "Harry Potter: Sorcerer's Stone",           img: "harry-potter-1.jpg" },
+  { id: 21, title: "Harry Potter: Chamber of Secrets",        img: "harry-potter-2.jpg" },
+  { id: 22, title: "Harry Potter: Prisoner of Azkaban",       img: "harry-potter-3.avif" },
+  { id: 23, title: "Harry Potter: Goblet of Fire",            img: "harry-potter-4.avif" },
+  { id: 24, title: "Harry Potter: Order of the Phoenix",      img: "harry-potter-5.jpg" },
+  { id: 25, title: "Harry Potter: Half-Blood Prince",         img: "harry-potter-6.jpg" },
+  { id: 26, title: "Harry Potter: Deathly Hallows Part 1",    img: "harry-potter-7-1.jpg" },
+  { id: 27, title: "Harry Potter: Deathly Hallows Part 2",    img: "harry-potter-7.jpg" },
+  { id: 28, title: "Indiana Jones: Last Crusade",             img: "indiana-jones-last-crusade.webp" },
+  { id: 29, title: "Indiana Jones: Crystal Skull",            img: "indiana-jones-crystal-skull.png" },
+  { id: 30, title: "Indiana Jones: Temple of Doom",           img: "indiana-jones-temple-of-doom.jpg" },
+  { id: 31, title: "Indiana Jones: Raiders of the Lost Ark",  img: "indiana-jones-lost-arc.jpg" },
+  { id: 32, title: "Happy Gilmore",                           img: "happy-gilmore.jpg" },
+  { id: 33, title: "Happy Gilmore 2",                         img: "happy-gilmore-2.webp" },
+  { id: 34, title: "The Matrix",                              img: "the-matrix.webp" },
+  { id: 35, title: "The Outsiders",                           img: "the-outsiders.webp" },
+  { id: 36, title: "War of the Worlds",                       img: "war-of-the-worlds.jpeg" },
+  { id: 37, title: "Oppenheimer",                             img: "oppenheimer.jpg" },
+  { id: 38, title: "IT",                                      img: "it.jpg" },
+  { id: 39, title: "Back to the Future",                      img: "back-to-the-future.jpg" },
+  { id: 40, title: "Matilda",                                 img: "matilda.jpg" },
+  { id: 41, title: "The Sandlot",                             img: "the-sandlot.jpeg" },
+  { id: 42, title: "Star Wars: Attack of the Clones",         img: "star-wars-clones-attack.webp" },
+  { id: 43, title: "Star Wars: Revenge of the Sith",          img: "star-wars-revenge-sith.jpg" },
+  { id: 44, title: "Star Wars: The Phantom Menace",           img: "star-wars-phantom-menace.jpg" },
+  { id: 45, title: "Star Wars: Return of the Jedi",           img: "star-wars-return-jedi.jpg" },
+  { id: 46, title: "Star Wars: The Empire Strikes Back",      img: "star-wars-empire-back.jpg" },
+  { id: 47, title: "Star Wars: A New Hope",                   img: "star-wars-new-hope.jpg" },
+  { id: 48, title: "Five Nights at Freddy's",                 img: "fnaf.webp" },
+  { id: 49, title: "Five Nights at Freddy's 2",               img: "five-nights-at-freddys.jpg" },
 ];
 
 type Movie = typeof MOVIES[0];
 
 function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
-  const savedTime = parseFloat(localStorage.getItem(`movie_time_${movie.id}`) || "0");
-  const hasProgress = savedTime > 30;
-
   return (
     <div
       className="group relative overflow-hidden rounded-lg cursor-pointer select-none bg-zinc-900"
@@ -77,10 +75,8 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
         onError={e => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
       />
 
-      {/* dark gradient on hover */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/25 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
 
-      {/* title slides up */}
       <p
         className="absolute left-0 right-0 bottom-0 text-white text-[11px] font-semibold px-2 pb-2 pt-5 text-center
                    translate-y-3 opacity-0 group-hover:translate-y-0 group-hover:opacity-100
@@ -90,12 +86,6 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
         {movie.title}
       </p>
 
-      {/* resume dot */}
-      {hasProgress && (
-        <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-purple-400 shadow-sm" />
-      )}
-
-      {/* play icon centre */}
       <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none">
         <div className="bg-black/60 rounded-full p-3">
           <Play className="w-5 h-5 text-white fill-white" />
@@ -106,41 +96,13 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  useEffect(() => {
-    const saved = parseFloat(localStorage.getItem(`movie_time_${movie.id}`) || "0");
-    const video = videoRef.current;
-    if (!video) return;
-
-    const onMeta = () => {
-      if (saved > 30 && saved < video.duration - 60) {
-        video.currentTime = saved;
-      }
-    };
-    video.addEventListener("loadedmetadata", onMeta);
-
-    intervalRef.current = setInterval(() => {
-      if (!video || !video.duration) return;
-      if (video.currentTime + 120 < video.duration) {
-        localStorage.setItem(`movie_time_${movie.id}`, String(video.currentTime));
-      } else {
-        localStorage.removeItem(`movie_time_${movie.id}`);
-      }
-    }, 3000);
-
-    return () => {
-      video.removeEventListener("loadedmetadata", onMeta);
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [movie.id]);
-
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  const playerUrl = `${PLAYER}?id=${movie.id}`;
 
   return (
     <div
@@ -161,16 +123,14 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         </button>
       </div>
 
-      <video
-        ref={videoRef}
-        className="flex-1 w-full bg-black"
-        controls
-        autoPlay
-        data-testid="video-player-element"
-      >
-        <source src={movie.url} type="video/mp4" />
-        Your browser does not support video playback.
-      </video>
+      <iframe
+        src={playerUrl}
+        className="flex-1 w-full border-0 bg-black"
+        allowFullScreen
+        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+        title={movie.title}
+        data-testid="video-player-iframe"
+      />
     </div>
   );
 }
