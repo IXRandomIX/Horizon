@@ -2198,12 +2198,100 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
     }
   });
 
+  // Universal relay — proxies ANY external URL through our server.
+  // Used by the fetch/XHR interceptor injected into the Viper player HTML
+  // so HLS.js segment requests, subtitle fetches, and API calls never hit a blocked domain.
+  app.options("/api/ts-relay", (_req, res) => {
+    res.setHeader("Access-Control-Allow-Origin", "*");
+    res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "*");
+    res.sendStatus(204);
+  });
+
+  app.get("/api/ts-relay", async (req: any, res: any) => {
+    const url = req.query.url as string;
+    if (!url) return res.status(400).send("Missing url param");
+    try {
+      const r = await fetch(url, {
+        headers: {
+          "User-Agent": PLAYER_BROWSER_UA,
+          "Referer": "https://toustream.xyz/",
+          "Origin": "https://toustream.xyz",
+          "Accept": "*/*",
+          "Accept-Language": "en-US,en;q=0.9",
+          ...(req.headers["range"] ? { "Range": req.headers["range"] as string } : {}),
+        },
+        redirect: "follow",
+      });
+      const ct = r.headers.get("content-type") || "application/octet-stream";
+      res.setHeader("Content-Type", ct);
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Access-Control-Allow-Headers", "*");
+      res.removeHeader("X-Frame-Options");
+      res.removeHeader("Content-Security-Policy");
+      if (r.headers.get("content-range")) res.setHeader("Content-Range", r.headers.get("content-range")!);
+      res.status(r.status);
+
+      // HLS manifest — rewrite all segment/playlist URLs to go through this relay too
+      const isM3u8 = ct.includes("mpegurl") || ct.includes("m3u8") || url.includes(".m3u8") || url.includes("m3u8");
+      if (isM3u8) {
+        let body = await r.text();
+        const selfBase = "/api/ts-relay?url=";
+        body = body.split("\n").map(line => {
+          const t = line.trim();
+          if (t.startsWith("#") || t === "") return line;
+          if (t.startsWith("https://") || t.startsWith("http://")) {
+            return selfBase + encodeURIComponent(t);
+          } else if (t.startsWith("/")) {
+            try { return selfBase + encodeURIComponent(new URL(url).origin + t); } catch { return line; }
+          } else {
+            try { return selfBase + encodeURIComponent(url.substring(0, url.lastIndexOf("/") + 1) + t); } catch { return line; }
+          }
+        }).join("\n");
+        return res.send(body);
+      }
+
+      // Everything else — stream buffer back
+      const buf = Buffer.from(await r.arrayBuffer());
+      return res.send(buf);
+    } catch (e: any) {
+      return res.status(502).send("Relay error: " + e.message);
+    }
+  });
+
+  // Interceptor script injected into every proxied player page.
+  // Routes ALL external fetch/XHR calls (including HLS.js segment requests) through /api/ts-relay
+  // so the browser never contacts a blocked domain directly.
+  const PLAYER_INTERCEPTOR = `<script>
+(function(){
+  var R='/api/ts-relay?url=';
+  function _rw(u){
+    try{var s=String(u||'');if(s.indexOf('http://')===0||s.indexOf('https://')===0)return R+encodeURIComponent(s);}catch(e){}
+    return u;
+  }
+  var _f=window.fetch;
+  window.fetch=function(input,init){
+    if(typeof input==='string'){input=_rw(input);}
+    else if(input&&typeof input==='object'&&input.url){input=new Request(_rw(input.url),input);}
+    return _f.call(this,input,init);
+  };
+  var _o=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(){
+    var a=[].slice.call(arguments);a[1]=_rw(a[1]);return _o.apply(this,a);
+  };
+})();
+</script>`;
+
   function rewritePlayerHtml(body: string, _origin: string): string {
     // Route ALL Viper FilmStream (toustream) resources through our own /api/ts-proxy/ endpoint.
     // This avoids every cross-origin restriction (CORS, CSP, X-Frame-Options).
     const PROXY = "/api/ts-proxy";
     const ORIGIN = "https://toustream.movietrunk.com";
     const ORIGIN_ALT = "https://toustream.xyz";
+
+    // 0. Inject fetch/XHR interceptor as the very first thing in <head>
+    //    This ensures HLS.js and all player API calls route through our relay
+    body = body.replace("<head>", `<head>${PLAYER_INTERCEPTOR}`);
 
     // 1. Rewrite already-absolute toustream URLs (href/src attributes) — both domains
     body = body.replace(new RegExp(`(href|src|action)="${ORIGIN}/`, "g"), `$1="${PROXY}/`);
