@@ -2357,7 +2357,45 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
     res.status(502).send("All player sources failed");
   });
 
-  // ── Viper Player page — self-hosted embed using viper.min.js ─────────────
+  // ── Viper Player page — serves a clean HTML5 video player ───────────────
+  // Accepts ?url=<encoded canvas URL> for direct MP4 playback,
+  // or /:tmdbId for legacy TMDB proxy playback.
+  app.get("/api/movies/viper-page", (req: any, res: any) => {
+    const videoUrl = (req.query.url as string || "").trim();
+    if (!videoUrl || !videoUrl.startsWith("http")) {
+      return res.status(400).send("Invalid video URL");
+    }
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Viper Player</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #viper-player { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="viper-player"></div>
+  <script src="/viper.min.js"></script>
+  <script>
+    var player = new Viper('viper-player', {
+      source: ${JSON.stringify(videoUrl)},
+      autoplay: true
+    });
+  </script>
+</body>
+</html>`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.removeHeader("X-Frame-Options");
+    res.removeHeader("Content-Security-Policy");
+    res.send(html);
+  });
+
   app.get("/api/movies/viper-page/:tmdbId", (req: any, res: any) => {
     const tmdbId = parseInt(req.params.tmdbId as string, 10);
     if (!tmdbId || isNaN(tmdbId)) return res.status(400).send("Invalid TMDB ID");
