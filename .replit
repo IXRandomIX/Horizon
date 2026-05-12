@@ -39,6 +39,9 @@ task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
 
+[workflows.workflow.metadata]
+outputType = "webview"
+
 [userenv]
 
 [userenv.shared]
@@ -46,3 +49,4 @@ waitForPort = 5000
 [agent]
 stack = "FULLSTACK_JS"
 expertMode = true
+integrations = ["javascript_gemini_ai_integrations:2.0.0"]
