@@ -95,7 +95,7 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const playerSrc = `/api/movie-player/${movie.tmdb}`;
+  const playerSrc = `/api/movies/viper-page/${movie.tmdb}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };

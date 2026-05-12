@@ -2357,6 +2357,41 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
     res.status(502).send("All player sources failed");
   });
 
+  // ── Viper Player page — self-hosted embed using viper.min.js ─────────────
+  app.get("/api/movies/viper-page/:tmdbId", (req: any, res: any) => {
+    const tmdbId = parseInt(req.params.tmdbId as string, 10);
+    if (!tmdbId || isNaN(tmdbId)) return res.status(400).send("Invalid TMDB ID");
+
+    const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Viper Player</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+    #viper-player { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div id="viper-player"></div>
+  <script src="/viper.min.js"></script>
+  <script>
+    var player = new Viper('viper-player', {
+      source: '${tmdbId}',
+      autoplay: true
+    });
+  </script>
+</body>
+</html>`;
+
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.removeHeader("X-Frame-Options");
+    res.removeHeader("Content-Security-Policy");
+    res.send(html);
+  });
+
   // Poster lookup by title (cached in memory)
   const posterCache = new Map<string, string>();
   app.get("/api/movies/poster", async (req, res) => {
