@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { usePageXP } from "@/hooks/use-xp-track";
-import { X, Search, Play } from "lucide-react";
+import { Search, Play } from "lucide-react";
 
 const IMG = "https://biology.geography.drama.studying.math.mindboggle.us/images/episodes/";
 
@@ -94,71 +94,8 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
   );
 }
 
-// Interceptor injected into the fetched player HTML.
-// Routes all fetch/XHR calls (HLS.js segments, source API, subtitles)
-// through api.allorigins.win/raw which adds CORS headers without altering the content.
-const CORS_RAW = "https://api.allorigins.win/raw?url=";
-const RELAY_INTERCEPTOR = `<script>
-(function(){
-  var P='${CORS_RAW}';
-  function rw(u){
-    var s=String(u||'');
-    if(s.indexOf('http://')===0||s.indexOf('https://')===0) return P+encodeURIComponent(s);
-    return u;
-  }
-  var _f=window.fetch;
-  window.fetch=function(input,init){
-    if(typeof input==='string') input=rw(input);
-    else if(input&&input.url) input=new Request(rw(input.url),input);
-    return _f.call(this,input,init);
-  };
-  var _o=XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open=function(){
-    var a=[].slice.call(arguments);a[1]=rw(a[1]);return _o.apply(this,a);
-  };
-})();
-<\/script>`;
-
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const targetUrl = `https://toustream.xyz/tou/movies/${movie.tmdb}`;
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const blobRef = useRef<string | null>(null);
-
-  // Fetch the Viper player HTML through cors.io, patch it, load as blob
-  useEffect(() => {
-    let cancelled = false;
-    setError(null);
-    setBlobUrl(null);
-
-    (async () => {
-      try {
-        const res = await fetch(`https://cors.io/?url=${encodeURIComponent(targetUrl)}`);
-        if (!res.ok) throw new Error(`cors.io ${res.status}`);
-        const json = await res.json();
-        let html: string = json.body ?? json.contents ?? json;
-        if (typeof html !== "string") throw new Error("Unexpected response format");
-
-        // Inject base tag so all relative paths (CSS, JS, images) resolve to toustream.xyz
-        const baseTag = `<base href="https://toustream.xyz/">`;
-        // Inject relay interceptor so HLS.js & API calls get CORS headers via allorigins
-        html = html.replace("<head>", `<head>${baseTag}${RELAY_INTERCEPTOR}`);
-
-        const blob = new Blob([html], { type: "text/html" });
-        const url = URL.createObjectURL(blob);
-        if (cancelled) { URL.revokeObjectURL(url); return; }
-        blobRef.current = url;
-        setBlobUrl(url);
-      } catch (e: any) {
-        if (!cancelled) setError(e.message ?? "Failed to load player");
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-      if (blobRef.current) { URL.revokeObjectURL(blobRef.current); blobRef.current = null; }
-    };
-  }, [targetUrl]);
+  const playerSrc = `/api/movie-player/${movie.tmdb}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -204,23 +141,14 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
           </button>
         </div>
 
-        {error ? (
-          <div className="flex-1 flex items-center justify-center text-white/40 text-sm">{error}</div>
-        ) : !blobUrl ? (
-          <div className="flex-1 flex items-center justify-center">
-            <div className="w-8 h-8 border-2 border-white/20 border-t-white/80 rounded-full animate-spin" />
-          </div>
-        ) : (
-          <iframe
-            src={blobUrl}
-            className="flex-1 w-full border-0 bg-black"
-            allowFullScreen
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-            sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
-            title={movie.title}
-            data-testid="video-player-iframe"
-          />
-        )}
+        <iframe
+          src={playerSrc}
+          className="flex-1 w-full border-0 bg-black"
+          allowFullScreen
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          title={movie.title}
+          data-testid="video-player-iframe"
+        />
       </div>
     </div>
   );
