@@ -142,12 +142,14 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         </div>
 
         <iframe
+          is="x-frame-bypass"
           src={src}
           className="flex-1 w-full border-0 bg-black"
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
           title={movie.title}
           data-testid="video-player-iframe"
+          {...{ is: "x-frame-bypass" } as any}
         />
       </div>
     </div>
