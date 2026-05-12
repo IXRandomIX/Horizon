@@ -2117,17 +2117,15 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
   // Fetches the embed player HTML server-side, strips X-Frame-Options and
   // frame-ancestors CSP so the iframe can always load from our own domain.
   const PLAYER_SOURCES = [
-    (id: number) => `https://toustream.xyz/tou/movies/${id}`,
-    (id: number) => `https://player.videasy.net/movie/${id}?color=a855f7&nextEpisode=true`,
-    (id: number) => `https://vidsrc.to/embed/movie/${id}`,
+    (id: number) => `https://toustream.movietrunk.com/tou/movies/${id}`,
   ];
   const PLAYER_BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
 
-  // ── Toustream static asset + API proxy ────────────────────────────────────
-  // Proxies any /tou/* path from toustream.xyz through our server.
+  // ── Toustream (Viper FilmStream) static asset + API proxy ─────────────────
+  // Proxies any /tou/* path from toustream.movietrunk.com through our server.
   // This ensures CSS, JS and API calls all come from our own origin,
   // avoiding any cross-origin or CORS restriction in the iframe.
-  const TS_ORIGIN = "https://toustream.xyz";
+  const TS_ORIGIN = "https://toustream.movietrunk.com";
 
   async function touProxyHandler(req: any, res: any) {
     const subpath = (req.path || "").replace(/^\//, "");
@@ -2201,29 +2199,35 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
   });
 
   function rewritePlayerHtml(body: string, _origin: string): string {
-    // Route ALL toustream resources through our own /api/ts-proxy/ endpoint.
+    // Route ALL Viper FilmStream (toustream) resources through our own /api/ts-proxy/ endpoint.
     // This avoids every cross-origin restriction (CORS, CSP, X-Frame-Options).
     const PROXY = "/api/ts-proxy";
-    const ORIGIN = "https://toustream.xyz";
+    const ORIGIN = "https://toustream.movietrunk.com";
+    const ORIGIN_ALT = "https://toustream.xyz";
 
-    // 1. Rewrite already-absolute toustream.xyz URLs  (href/src attributes)
+    // 1. Rewrite already-absolute toustream URLs (href/src attributes) — both domains
     body = body.replace(new RegExp(`(href|src|action)="${ORIGIN}/`, "g"), `$1="${PROXY}/`);
     body = body.replace(new RegExp(`(href|src|action)='${ORIGIN}/`, "g"), `$1='${PROXY}/`);
+    body = body.replace(new RegExp(`(href|src|action)="${ORIGIN_ALT}/`, "g"), `$1="${PROXY}/`);
+    body = body.replace(new RegExp(`(href|src|action)='${ORIGIN_ALT}/`, "g"), `$1='${PROXY}/`);
 
     // 2. Rewrite root-relative HTML attribute paths  href="/ src="/
     body = body.replace(/(href|src|action)="\//g, `$1="${PROXY}/`);
     body = body.replace(/(href|src|action)='\//g, `$1='${PROXY}/`);
 
-    // 3. Inject <base> for any remaining relative paths  (should be none after above)
+    // 3. Inject <base> for any remaining relative paths
     body = body.replace("<head>", `<head><base href="${ORIGIN}/">`);
 
     // 4. Rewrite toustream JS backtick literal API paths  `/tou/get-source/...`
     body = body.replace(/`\/tou\//g, `\`${PROXY}/tou/`);
 
-    // 5. Rewrite explicit absolute toustream URLs inside JS strings/template literals
+    // 5. Rewrite explicit absolute toustream URLs inside JS strings/template literals — both domains
     body = body.replace(new RegExp(`'${ORIGIN}/tou/`, "g"), `'${PROXY}/tou/`);
     body = body.replace(new RegExp(`"${ORIGIN}/tou/`, "g"), `"${PROXY}/tou/`);
     body = body.replace(new RegExp(`\`${ORIGIN}/tou/`, "g"), `\`${PROXY}/tou/`);
+    body = body.replace(new RegExp(`'${ORIGIN_ALT}/tou/`, "g"), `'${PROXY}/tou/`);
+    body = body.replace(new RegExp(`"${ORIGIN_ALT}/tou/`, "g"), `"${PROXY}/tou/`);
+    body = body.replace(new RegExp(`\`${ORIGIN_ALT}/tou/`, "g"), `\`${PROXY}/tou/`);
 
     return body;
   }

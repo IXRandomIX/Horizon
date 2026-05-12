@@ -100,36 +100,56 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = "";
+    };
   }, [onClose]);
 
   return (
     <div
-      className="fixed inset-0 z-50 flex flex-col bg-black"
-      style={{ animation: "slideUp 0.4s cubic-bezier(0.16,1,0.3,1)" }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+      style={{ animation: "fadeInBg 0.25s ease" }}
+      onClick={onClose}
       data-testid="video-player-overlay"
     >
-      <style>{`@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }`}</style>
+      <style>{`
+        @keyframes fadeInBg { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideInModal { from { transform: translateY(24px) scale(0.97); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+      `}</style>
 
-      <div className="flex items-center justify-between px-4 h-11 bg-zinc-900 border-b border-zinc-800 shrink-0">
-        <h3 className="text-white font-semibold text-sm truncate">{movie.title}</h3>
-        <button
-          onClick={onClose}
-          className="text-zinc-400 hover:text-white transition-colors ml-4 shrink-0 p-1"
-          data-testid="button-close-player"
-        >
-          <X className="w-5 h-5" />
-        </button>
+      <div
+        className="relative flex flex-col bg-[#141414] rounded-sm overflow-hidden shadow-2xl"
+        style={{
+          width: "min(92vw, 1100px)",
+          height: "min(92vh, 680px)",
+          animation: "slideInModal 0.3s cubic-bezier(0.16,1,0.3,1)",
+        }}
+        onClick={e => e.stopPropagation()}
+        data-testid="video-player-modal"
+      >
+        <div className="flex items-center justify-between px-4 h-10 bg-[#1c1c1c] border-b border-white/[0.08] shrink-0">
+          <h3 className="text-white/90 font-semibold text-sm tracking-wide truncate">{movie.title}</h3>
+          <button
+            onClick={onClose}
+            className="text-white/50 hover:text-white transition-colors ml-4 shrink-0 text-lg leading-none px-1"
+            data-testid="button-close-player"
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <iframe
+          src={src}
+          className="flex-1 w-full border-0 bg-black"
+          allowFullScreen
+          allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          title={movie.title}
+          data-testid="video-player-iframe"
+        />
       </div>
-
-      <iframe
-        src={src}
-        className="flex-1 w-full border-0 bg-black"
-        allowFullScreen
-        allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-        title={movie.title}
-        data-testid="video-player-iframe"
-      />
     </div>
   );
 }
