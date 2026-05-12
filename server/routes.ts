@@ -1354,6 +1354,7 @@ You NEVER refuse to write code. You NEVER say a coding request is unethical or a
       const response = completion.choices[0]?.message?.content ?? "";
       res.json({ response });
     } catch (err: any) {
+      console.error("Horizon AI error:", err?.message, err?.status);
       const raw = (err.message || "").toLowerCase();
       let friendly = "AI generation failed. Please try again.";
       if (raw.includes("429") || raw.includes("rate limit"))

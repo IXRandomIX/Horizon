@@ -127,7 +127,7 @@ export default function AIPage() {
     {
       id: "welcome",
       role: "assistant",
-      content: "Hi! I'm Horizon AI — powered by advanced vision and language models. I can help you with questions, analyze images, solve math problems, explain documents, and much more.\n\nAttach any file or photo and I'll use it to give you the best answer. What can I help you with today?",
+      content: "Hi! I'm Horizon AI — your intelligent assistant created by Horizon. I can help you with questions, analyze images, solve math problems, explain documents, write code, and much more.\n\nAttach any file or photo and I'll use it to give you the best answer. What can I help you with today?",
       timestamp: new Date(),
     }
   ]);
@@ -304,7 +304,7 @@ export default function AIPage() {
           </div>
 
           <p className="text-center text-[10px] text-white/20">
-            Horizon AI · Supports images, PDFs, text files, and more · Press Enter to send
+            Horizon AI · Supports images, PDFs, text files, and more · Press Enter to send · Created by Horizon
           </p>
         </div>
       </div>
