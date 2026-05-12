@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { usePageXP } from "@/hooks/use-xp-track";
 import { Search, Play } from "lucide-react";
 
@@ -107,9 +108,9 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
     };
   }, [onClose]);
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85"
       style={{ animation: "fadeInBg 0.25s ease" }}
       onClick={onClose}
       data-testid="video-player-overlay"
@@ -150,7 +151,8 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
           data-testid="video-player-iframe"
         />
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
 
