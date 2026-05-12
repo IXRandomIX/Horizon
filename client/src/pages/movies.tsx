@@ -95,7 +95,7 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const src = `/api/movie-player/${movie.tmdb}`;
+  const src = `https://toustream.movietrunk.com/tou/movies/${movie.tmdb}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
