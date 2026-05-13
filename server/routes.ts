@@ -11,9 +11,21 @@ import { google } from "googleapis";
 import OpenAI from "openai";
 
 // Replit AI Integrations — OpenAI-compatible API, no user key required.
-const horizonAI = new OpenAI({
-  apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY,
-  baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+// Lazy-initialized so a missing key at startup doesn't crash the server.
+let _horizonAI: OpenAI | null = null;
+function getHorizonAI(): OpenAI {
+  if (!_horizonAI) {
+    _horizonAI = new OpenAI({
+      apiKey: process.env.AI_INTEGRATIONS_OPENAI_API_KEY ?? "placeholder",
+      baseURL: process.env.AI_INTEGRATIONS_OPENAI_BASE_URL,
+    });
+  }
+  return _horizonAI;
+}
+const horizonAI = new Proxy({} as OpenAI, {
+  get(_target, prop) {
+    return (getHorizonAI() as any)[prop];
+  },
 });
 
 const uploadsDir = path.join(process.cwd(), "uploads");
