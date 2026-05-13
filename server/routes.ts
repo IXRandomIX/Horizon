@@ -4525,5 +4525,62 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     }
   });
 
+  // Movie embed proxy — strips X-Frame-Options and frame-ancestors CSP so
+  // third-party embed pages can load inside the Horizon iframe player.
+  app.get("/api/movie-proxy", async (req, res) => {
+    const targetUrl = String(req.query.url || "").trim();
+    if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
+      return res.status(400).send("Invalid URL");
+    }
+
+    try {
+      const upstream = await fetch(targetUrl, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.5",
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      const contentType = upstream.headers.get("content-type") || "text/html";
+
+      // Forward all headers except the ones that block iframe embedding
+      const BLOCKED_HEADERS = new Set(["x-frame-options", "content-security-policy", "transfer-encoding"]);
+      upstream.headers.forEach((value, key) => {
+        if (!BLOCKED_HEADERS.has(key.toLowerCase())) {
+          res.setHeader(key, value);
+        }
+      });
+
+      // Allow embedding from anywhere
+      res.removeHeader("X-Frame-Options");
+      res.setHeader("Content-Type", contentType);
+
+      if (contentType.includes("text/html")) {
+        let html = await upstream.text();
+
+        // Inject <base> tag so relative URLs resolve against the original origin
+        const origin = new URL(targetUrl).origin;
+        const baseTag = `<base href="${origin}/">`;
+        if (html.includes("<head>")) {
+          html = html.replace("<head>", `<head>${baseTag}`);
+        } else if (html.includes("<HEAD>")) {
+          html = html.replace("<HEAD>", `<HEAD>${baseTag}`);
+        } else {
+          html = baseTag + html;
+        }
+
+        res.send(html);
+      } else {
+        // For non-HTML resources (scripts, styles, etc.) stream through as-is
+        const buf = Buffer.from(await upstream.arrayBuffer());
+        res.send(buf);
+      }
+    } catch (e: any) {
+      res.status(502).send("Proxy error: " + e.message);
+    }
+  });
+
   return httpServer;
 }

@@ -129,7 +129,8 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
   const [server, setServer] = useState(0);
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
-  const playerSrc = SERVERS[server].url(movie.tmdb);
+  const rawSrc = SERVERS[server].url(movie.tmdb);
+  const playerSrc = `/api/movie-proxy?url=${encodeURIComponent(rawSrc)}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -208,12 +209,12 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
           </div>
 
           <a
-            href={playerSrc}
+            href={rawSrc}
             target="_blank"
             rel="noopener noreferrer"
             data-testid="button-open-tab"
             className="flex items-center gap-1 text-[11px] font-medium px-3 py-1 rounded bg-zinc-700/80 hover:bg-zinc-600 text-white transition-colors ml-2 shrink-0"
-            title="Open in new tab if content is blocked"
+            title="Open source directly in a new tab"
           >
             <ExternalLink className="w-3 h-3" />
             Open in Tab
