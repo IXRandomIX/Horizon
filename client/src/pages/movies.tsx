@@ -95,8 +95,16 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
   );
 }
 
+const SERVERS = [
+  { label: "Server 1", url: (id: number) => `https://vidsrc.to/embed/movie/${id}` },
+  { label: "Server 2", url: (id: number) => `https://www.2embed.cc/embed/${id}` },
+  { label: "Server 3", url: (id: number) => `https://player.videasy.net/movie/${id}` },
+  { label: "Server 4", url: (id: number) => `https://www.vidking.net/embed/movie/${id}?autoPlay=true` },
+];
+
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const playerSrc = `https://vidsrc.to/embed/movie/${movie.tmdb}`;
+  const [server, setServer] = useState(0);
+  const playerSrc = SERVERS[server].url(movie.tmdb);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
@@ -124,7 +132,7 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         className="relative flex flex-col bg-[#141414] rounded-sm overflow-hidden shadow-2xl"
         style={{
           width: "min(92vw, 1100px)",
-          height: "min(92vh, 680px)",
+          height: "min(92vh, 700px)",
           animation: "slideInModal 0.3s cubic-bezier(0.16,1,0.3,1)",
         }}
         onClick={e => e.stopPropagation()}
@@ -132,9 +140,25 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
       >
         <div className="flex items-center justify-between px-4 h-10 bg-[#1c1c1c] border-b border-white/[0.08] shrink-0">
           <h3 className="text-white/90 font-semibold text-sm tracking-wide truncate">{movie.title}</h3>
+          <div className="flex items-center gap-1.5 ml-3 shrink-0">
+            {SERVERS.map((s, i) => (
+              <button
+                key={i}
+                onClick={() => setServer(i)}
+                data-testid={`button-server-${i + 1}`}
+                className={`text-[11px] px-2.5 py-0.5 rounded font-medium transition-colors ${
+                  server === i
+                    ? "bg-purple-600 text-white"
+                    : "bg-white/[0.07] text-white/50 hover:text-white hover:bg-white/[0.12]"
+                }`}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
           <button
             onClick={onClose}
-            className="text-white/50 hover:text-white transition-colors ml-4 shrink-0 text-lg leading-none px-1"
+            className="text-white/50 hover:text-white transition-colors ml-3 shrink-0 text-lg leading-none px-1"
             data-testid="button-close-player"
             aria-label="Close"
           >
@@ -143,6 +167,7 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         </div>
 
         <iframe
+          key={playerSrc}
           src={playerSrc}
           className="flex-1 w-full border-0 bg-black"
           allowFullScreen
