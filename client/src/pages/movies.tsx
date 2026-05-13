@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import { usePageXP } from "@/hooks/use-xp-track";
-import { Search, Play } from "lucide-react";
+import { Search, Play, ChevronDown } from "lucide-react";
 
 const IMG = "https://biology.geography.drama.studying.math.mindboggle.us/images/episodes/";
 
@@ -96,14 +96,18 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 const SERVERS = [
-  { label: "Server 1", url: (id: number) => `https://vidsrc.to/embed/movie/${id}` },
-  { label: "Server 2", url: (id: number) => `https://www.2embed.cc/embed/${id}` },
-  { label: "Server 3", url: (id: number) => `https://player.videasy.net/movie/${id}` },
-  { label: "Server 4", url: (id: number) => `https://www.vidking.net/embed/movie/${id}?autoPlay=true` },
+  { label: "Viper",     url: (id: number) => `https://viper.to/embed/movie/${id}` },
+  { label: "Viper (alt)", url: (id: number) => `https://viper.su/embed/movie/${id}` },
+  { label: "VidSrc",   url: (id: number) => `https://vidsrc.to/embed/movie/${id}` },
+  { label: "2Embed",   url: (id: number) => `https://www.2embed.cc/embed/${id}` },
+  { label: "Videasy",  url: (id: number) => `https://player.videasy.net/movie/${id}` },
+  { label: "VidKing",  url: (id: number) => `https://www.vidking.net/embed/movie/${id}?autoPlay=true` },
 ];
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
   const [server, setServer] = useState(0);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   const playerSrc = SERVERS[server].url(movie.tmdb);
 
   useEffect(() => {
@@ -115,6 +119,16 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
       document.body.style.overflow = "";
     };
   }, [onClose]);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    if (dropdownOpen) document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [dropdownOpen]);
 
   return createPortal(
     <div
@@ -139,23 +153,39 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         data-testid="video-player-modal"
       >
         <div className="flex items-center justify-between px-4 h-10 bg-[#1c1c1c] border-b border-white/[0.08] shrink-0">
-          <h3 className="text-white/90 font-semibold text-sm tracking-wide truncate">{movie.title}</h3>
-          <div className="flex items-center gap-1.5 ml-3 shrink-0">
-            {SERVERS.map((s, i) => (
-              <button
-                key={i}
-                onClick={() => setServer(i)}
-                data-testid={`button-server-${i + 1}`}
-                className={`text-[11px] px-2.5 py-0.5 rounded font-medium transition-colors ${
-                  server === i
-                    ? "bg-purple-600 text-white"
-                    : "bg-white/[0.07] text-white/50 hover:text-white hover:bg-white/[0.12]"
-                }`}
-              >
-                {s.label}
-              </button>
-            ))}
+          <h3 className="text-white/90 font-semibold text-sm tracking-wide truncate mr-3">{movie.title}</h3>
+
+          <div className="relative shrink-0" ref={dropdownRef}>
+            <button
+              onClick={() => setDropdownOpen(o => !o)}
+              data-testid="button-sources"
+              className="flex items-center gap-1 text-[11px] font-medium px-3 py-1 rounded bg-purple-600/80 hover:bg-purple-600 text-white transition-colors"
+            >
+              Sources
+              <ChevronDown className={`w-3 h-3 transition-transform ${dropdownOpen ? "rotate-180" : ""}`} />
+            </button>
+
+            {dropdownOpen && (
+              <div className="absolute right-0 top-full mt-1 bg-[#242424] border border-white/10 rounded-md shadow-xl z-10 py-1 min-w-[140px]">
+                <div className="px-3 py-1 text-[10px] text-white/30 uppercase tracking-wider font-semibold">Select Source</div>
+                {SERVERS.map((s, i) => (
+                  <button
+                    key={i}
+                    data-testid={`button-source-${i + 1}`}
+                    onClick={() => { setServer(i); setDropdownOpen(false); }}
+                    className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
+                      server === i
+                        ? "text-purple-400 bg-purple-600/10 font-medium"
+                        : "text-white/70 hover:text-white hover:bg-white/[0.06]"
+                    }`}
+                  >
+                    {server === i && <span className="mr-1.5">▸</span>}{s.label}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
+
           <button
             onClick={onClose}
             className="text-white/50 hover:text-white transition-colors ml-3 shrink-0 text-lg leading-none px-1"
@@ -172,6 +202,7 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
           className="flex-1 w-full border-0 bg-black"
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+          sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
           title={movie.title}
           data-testid="video-player-iframe"
         />
