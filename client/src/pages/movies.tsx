@@ -96,7 +96,7 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const playerSrc = `https://toustream.movietrunk.com/tou/movies/${movie.tmdb}`;
+  const playerSrc = `https://www.vidking.net/embed/movie/${movie.tmdb}?color=e50914&autoPlay=true`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
