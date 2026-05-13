@@ -96,12 +96,31 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 const SERVERS = [
-  { label: "Viper",     url: (id: number) => `https://viper.to/embed/movie/${id}` },
-  { label: "Viper (alt)", url: (id: number) => `https://viper.su/embed/movie/${id}` },
-  { label: "VidSrc",   url: (id: number) => `https://vidsrc.to/embed/movie/${id}` },
-  { label: "2Embed",   url: (id: number) => `https://www.2embed.cc/embed/${id}` },
-  { label: "Videasy",  url: (id: number) => `https://player.videasy.net/movie/${id}` },
-  { label: "VidKing",  url: (id: number) => `https://www.vidking.net/embed/movie/${id}?autoPlay=true` },
+  { label: "Viper",            url: (id: number) => `https://viper.to/embed/movie/${id}` },
+  { label: "Viper (alt)",      url: (id: number) => `https://viper.su/embed/movie/${id}` },
+  { label: "VidSrc.to",        url: (id: number) => `https://vidsrc.to/embed/movie/${id}` },
+  { label: "2Embed",           url: (id: number) => `https://www.2embed.cc/embed/${id}` },
+  { label: "Videasy",          url: (id: number) => `https://player.videasy.net/movie/${id}` },
+  { label: "VidKing",          url: (id: number) => `https://www.vidking.net/embed/movie/${id}?autoPlay=true` },
+  { label: "VidSrc.xyz",       url: (id: number) => `https://vidsrc.xyz/embed/movie/${id}` },
+  { label: "Embed.su",         url: (id: number) => `https://embed.su/embed/movie/${id}` },
+  { label: "VidSrc.me",        url: (id: number) => `https://vidsrc.me/embed/movie?tmdb=${id}` },
+  { label: "AutoEmbed",        url: (id: number) => `https://autoembed.to/movie/tmdb/${id}` },
+  { label: "VidLink",          url: (id: number) => `https://vidlink.pro/movie/${id}` },
+  { label: "VidSrc.cc",        url: (id: number) => `https://vidsrc.cc/embed/movie/${id}` },
+  { label: "Embed.im",         url: (id: number) => `https://embed.im/movie/${id}` },
+  { label: "SuperEmbed",       url: (id: number) => `https://superembed.stream/movie/${id}` },
+  { label: "MovieAPI",         url: (id: number) => `https://moviesapi.club/movie/${id}` },
+  { label: "NontonGo",         url: (id: number) => `https://nontongo.club/embed/movie/${id}` },
+  { label: "Framer",           url: (id: number) => `https://framer.stream/movie/${id}` },
+  { label: "Multiembed",       url: (id: number) => `https://multiembed.cm/movie/${id}` },
+  { label: "SmashyStream",     url: (id: number) => `https://smashystream.xyz/movie/${id}` },
+  { label: "Blackvid",         url: (id: number) => `https://blackvid.space/embed/movie/${id}` },
+  { label: "DrivePlayer",      url: (id: number) => `https://databasegdriveplayer.co/player.php?tmdb=${id}` },
+  { label: "StreamHide",       url: (id: number) => `https://streamhide.to/movie/${id}` },
+  { label: "VidSrc.in",        url: (id: number) => `https://vidsrc.in/embed/movie/${id}` },
+  { label: "Hexupload",        url: (id: number) => `https://hexupload.it/embed/movie/${id}` },
+  { label: "VidCloud",         url: (id: number) => `https://vidcloud.stream/${id}.html` },
 ];
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
