@@ -130,7 +130,7 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const rawSrc = SERVERS[server].url(movie.tmdb);
-  const playerSrc = rawSrc;
+  const playerSrc = `https://api.allorigins.win/raw?url=${encodeURIComponent(rawSrc)}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
