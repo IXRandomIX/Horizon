@@ -235,7 +235,8 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
           className="flex-1 w-full border-0 bg-black"
           allowFullScreen
           allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
-          sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation"
+          sandbox="allow-forms allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation allow-popups allow-popups-to-escape-sandbox"
+          referrerPolicy="no-referrer"
           title={movie.title}
           data-testid="video-player-iframe"
         />
