@@ -185,8 +185,8 @@ function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) 
             </button>
 
             {dropdownOpen && (
-              <div className="absolute right-0 top-full mt-1 bg-[#242424] border border-white/10 rounded-md shadow-xl z-10 py-1 min-w-[140px]">
-                <div className="px-3 py-1 text-[10px] text-white/30 uppercase tracking-wider font-semibold">Select Source</div>
+              <div className="absolute right-0 top-full mt-1 bg-[#242424] border border-white/10 rounded-md shadow-xl z-10 py-1 min-w-[150px] max-h-64 overflow-y-auto">
+                <div className="px-3 py-1 text-[10px] text-white/30 uppercase tracking-wider font-semibold sticky top-0 bg-[#242424]">Select Source</div>
                 {SERVERS.map((s, i) => (
                   <button
                     key={i}
