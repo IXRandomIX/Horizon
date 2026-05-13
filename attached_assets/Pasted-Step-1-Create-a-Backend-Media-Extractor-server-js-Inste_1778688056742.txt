@@ -1,0 +1,44 @@
+Step 1: Create a Backend Media Extractor (server.js)Instead of serving a webpage, your backend will programmatically fetch the source URL, read its HTML code behind the scenes, locate the hidden video file path, and return that file stream directly to your website.Install axios and cheerio (a tool used to read and parse HTML code like jQuery) in your Replit shell:bashnpm install axios cheerio
+Use code with caution.Add this endpoint to your backend server code:javascriptconst express = require('express');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const app = express();
+
+app.get('/api/get-video-source', async (req, res) => {
+    const tmdbId = req.query.id;
+    const serverIndex = req.query.server || 0;
+    
+    // 1. Get the raw URL from your server list logic
+    // (This mimics your SERVERS array logic on the backend)
+    const targetUrl = `example-source.com{tmdbId}`; 
+
+    try {
+        // 2. Fetch the external page content silently on the server
+        const response = await axios.get(targetUrl, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)' }
+        });
+
+        // 3. Parse the HTML code to find the video stream link
+        const $ = cheerio.load(response.data);
+        
+        // Look for common video tag sources or stream variables in the code
+        let videoFileUrl = $('video source').attr('src') || $('video').attr('src');
+
+        // Fallback: If hidden in a script tag, look for common video extensions
+        if (!videoFileUrl) {
+            const scripts = $('script').text();
+            const match = scripts.match(/file:\s*["'](https:\/\/.*?\.mp4|.*?\.m3u8)["']/);
+            if (match) videoFileUrl = match[1];
+        }
+
+        if (!videoFileUrl) {
+            return res.status(404).json({ error: 'Direct video file link not found in source code.' });
+        }
+
+        // 4. Return the raw link directly to your frontend app
+        res.json({ streamUrl: videoFileUrl });
+
+    } catch (error) {
+        res.status(500).json({ error: 'Failed to extract media from source.' });
+    }
+});
