@@ -96,7 +96,7 @@ function MovieCard({ movie, onPlay }: { movie: Movie; onPlay: () => void }) {
 }
 
 function VideoPlayer({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  const playerSrc = `https://www.2embed.cc/embed/${movie.tmdb}`;
+  const playerSrc = `https://vidsrc.to/embed/movie/${movie.tmdb}`;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
