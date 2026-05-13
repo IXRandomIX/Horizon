@@ -4527,6 +4527,8 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
 
   // Movie embed proxy — strips X-Frame-Options and frame-ancestors CSP so
   // third-party embed pages can load inside the Horizon iframe player.
+  // Also injects a URL-rewriting shim so JS fetch/XHR relative paths
+  // resolve against the real embed origin, not the Horizon domain.
   app.get("/api/movie-proxy", async (req, res) => {
     const targetUrl = String(req.query.url || "").trim();
     if (!targetUrl.startsWith("http://") && !targetUrl.startsWith("https://")) {
@@ -4534,11 +4536,15 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
     }
 
     try {
+      const parsedTarget = new URL(targetUrl);
+      const realOrigin = parsedTarget.origin;
+
       const upstream = await fetch(targetUrl, {
         headers: {
           "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
           "Accept-Language": "en-US,en;q=0.5",
+          "Referer": realOrigin + "/",
         },
         signal: AbortSignal.timeout(15000),
       });
@@ -4546,34 +4552,54 @@ var _fo=window.fetch;if(typeof _fo==='function'){window.fetch=function(){
       const contentType = upstream.headers.get("content-type") || "text/html";
 
       // Forward all headers except the ones that block iframe embedding
-      const BLOCKED_HEADERS = new Set(["x-frame-options", "content-security-policy", "transfer-encoding"]);
+      const BLOCKED_HEADERS = new Set(["x-frame-options", "content-security-policy", "transfer-encoding", "content-encoding"]);
       upstream.headers.forEach((value, key) => {
         if (!BLOCKED_HEADERS.has(key.toLowerCase())) {
           res.setHeader(key, value);
         }
       });
 
-      // Allow embedding from anywhere
       res.removeHeader("X-Frame-Options");
       res.setHeader("Content-Type", contentType);
 
       if (contentType.includes("text/html")) {
         let html = await upstream.text();
 
-        // Inject <base> tag so relative URLs resolve against the original origin
-        const origin = new URL(targetUrl).origin;
-        const baseTag = `<base href="${origin}/">`;
-        if (html.includes("<head>")) {
-          html = html.replace("<head>", `<head>${baseTag}`);
-        } else if (html.includes("<HEAD>")) {
-          html = html.replace("<HEAD>", `<HEAD>${baseTag}`);
+        // Rewrite root-relative src/href/action attributes to absolute URLs
+        // so the browser loads assets from the real origin, not from Horizon
+        html = html
+          .replace(/(src|href|action)=(["'])\/(?!\/)/g, `$1=$2${realOrigin}/`)
+          .replace(/(src|href|action)=(["'])\/\//g, `$1=$2https://`);
+
+        // Inject <base> tag (fixes any remaining relative HTML URLs)
+        // and a JS shim that patches fetch + XHR for root-relative paths
+        const shimScript = `
+<script>
+(function(){
+  var O='${realOrigin}';
+  function r(u){
+    if(typeof u!=='string') return u;
+    if(u.startsWith('//')) return 'https:'+u;
+    if(u.startsWith('/')) return O+u;
+    return u;
+  }
+  var F=window.fetch;
+  window.fetch=function(u,o){return F(r(u),o);};
+  var X=XMLHttpRequest.prototype.open;
+  XMLHttpRequest.prototype.open=function(m,u){return X.call(this,m,r(u));};
+})();
+</script>`;
+
+        const baseTag = `<base href="${targetUrl}">`;
+
+        if (/<head>/i.test(html)) {
+          html = html.replace(/<head>/i, `<head>${baseTag}${shimScript}`);
         } else {
-          html = baseTag + html;
+          html = baseTag + shimScript + html;
         }
 
         res.send(html);
       } else {
-        // For non-HTML resources (scripts, styles, etc.) stream through as-is
         const buf = Buffer.from(await upstream.arrayBuffer());
         res.send(buf);
       }
